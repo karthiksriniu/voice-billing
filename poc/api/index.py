@@ -224,7 +224,11 @@ async def auth_check(req: CheckRequest):
         return {"exists": True, "role": "owner", "shop_name": shop.get("name", "")}
     staff = await db.get_staff(db.shop_key(req.mobile))
     if staff:
-        return {"exists": True, "role": staff.get("role", "user"), "shop_name": ""}
+        # Resolve the shop so a worker sees which shop they are signing in to, rather than
+        # a bare passcode box.
+        shop = await db.get_shop(staff["shop_id"]) or {}
+        return {"exists": True, "role": staff.get("role", "user"),
+                "shop_name": shop.get("name", "")}
     return {"exists": False, "role": None, "shop_name": ""}
 
 
