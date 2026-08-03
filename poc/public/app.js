@@ -7,6 +7,14 @@
 const LATCH_MS = 3000;      // hold this long and the button latches, walkie-talkie style
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
+/* While latched, a pause ends the current item rather than the whole recording: say an
+   item, pause, it lands in the list, say the next one. Without this, everything dictated
+   in one breath arrives as a single clip and has to be pulled apart by grammar alone.
+   2s is long enough to survive thinking mid-sentence and short enough to feel immediate. */
+const PAUSE_MS = 2000;
+const SILENCE_RMS = 0.012;  // below this counts as silence on a phone mic in a noisy room
+const MIN_SPEECH_MS = 400;  // don't cut on a pause before anything was actually said
+
 const $ = (id) => document.getElementById(id);
 const screens = ["auth", "main", "payment", "receipt"];
 const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
@@ -15,7 +23,7 @@ const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractio
 const state = {
   token: "", shop: { id: "", name: "", vpa: "" }, role: "user",
   items: [], mode: "billing", bill: null,
-  askingPrice: null, proposal: null,
+  askingPrice: null, proposal: null, queue: [],
   expanded: false, products: [],
 };
 
@@ -220,8 +228,53 @@ function startRec() {
 }
 
 function stopRec() {
+  stopSilenceWatch();
   if (recorder && recorder.state === "recording") recorder.stop();
   latched = false;
+}
+
+/* ---------- pause detection ---------- */
+
+let audioCtx = null, analyser = null, watchTimer = null;
+let lastSoundAt = 0, sawSpeech = false;
+
+function startSilenceWatch() {
+  if (!stream || watchTimer) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!analyser) {
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+    }
+  } catch (err) { return; }        // no Web Audio: latch still works, just without cuts
+
+  const buf = new Float32Array(analyser.fftSize);
+  lastSoundAt = Date.now();
+  sawSpeech = false;
+
+  watchTimer = setInterval(() => {
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    const now = Date.now();
+
+    if (rms > SILENCE_RMS) { lastSoundAt = now; sawSpeech = true; return; }
+    if (!sawSpeech || now - pressedAt < MIN_SPEECH_MS) return;
+    if (now - lastSoundAt < PAUSE_MS) return;
+
+    // A pause: close this item and immediately open the next, without dropping the mic.
+    if (recorder && recorder.state === "recording") {
+      setStatus("சேர்க்கிறேன்… / Adding…");
+      recorder.stop();             // onstop -> handleClip -> startRec() below
+    }
+  }, 150);
+}
+
+function stopSilenceWatch() {
+  clearInterval(watchTimer);
+  watchTimer = null;
 }
 
 async function handleClip() {
@@ -243,7 +296,10 @@ async function handleClip() {
     setStatus("தயார் / Ready");
   } finally {
     busy = false;
-    setTalk("idle");
+    // Still latched means the pause was a break between items, not the end of dictation:
+    // pick straight back up so the next item can be spoken without touching the button.
+    if (latched) { startRec(); startSilenceWatch(); }
+    else setTalk("idle");
   }
 }
 
@@ -259,7 +315,8 @@ talk.addEventListener("pointerup", (e) => {
   if (Date.now() - pressedAt >= LATCH_MS) {
     latched = true;
     setTalk("rec");
-    setStatus("தொடர்ந்து பதிவு / Latched — tap the button to stop");
+    startSilenceWatch();
+    setStatus("சொல்லிட்டே போங்க / Keep going — pause between items, tap to stop");
   } else stopRec();
 });
 talk.addEventListener("pointercancel", () => { if (!latched) stopRec(); });
@@ -290,7 +347,7 @@ function apply(data, roundTripMs) {
     toast(`${skipped} — விலை சொல்லலை / no price given, skipped`, 3200);
   }
 
-  if (data.admin) { proposeChange(data.admin); return; }
+  if (data.admin && data.admin.length) { queueChanges(data.admin); return; }
   if (state.mode === "admin") {
     toast("பொருள், விலை சொல்லுங்க / Say an item name and its price");
     return;
@@ -368,16 +425,37 @@ async function resolvePrice(price) {
 
 /* ---------- admin: catalog ---------- */
 
-async function commitProduct(a) {
+async function commitProduct(a, quiet) {
   const j = await api("/api/catalog", {
     method: "POST",
     body: { shop_id: state.shop.id, id: a.id || "", name: a.name,
             unit: a.unit, unit_price: a.price },
   });
-  if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); return false; }
-  toast(`${a.name} → ${rupees(a.price)}/${a.unit}`);
-  await loadCatalog();          // straight back into the list, no extra tap
+  if (!j.ok) {
+    toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500);
+    return false;
+  }
+  if (!quiet) { toast(`${a.name} → ${rupees(a.price)}/${a.unit}`); await loadCatalog(); }
   return true;
+}
+
+/* A single clip can carry several dictated items. Commit every unambiguous one straight
+   away, then work through the rest one prompt at a time. */
+async function queueChanges(list) {
+  const ask = [];
+  let saved = 0;
+  for (const a of list) {
+    if (a.certain) { if (await commitProduct(a, true)) saved++; }
+    else ask.push(a);
+  }
+  if (saved) { toast(`${saved} சேர்க்கப்பட்டது / added`); await loadCatalog(); }
+  state.queue = ask;
+  nextInQueue();
+}
+
+function nextInQueue() {
+  const a = (state.queue || []).shift();
+  if (a) proposeChange(a); else hidePrompt();
 }
 
 function proposeChange(a) {
@@ -401,8 +479,9 @@ function proposeChange(a) {
       hidePrompt();
       await commitProduct(a);
       state.proposal = null;
+      nextInQueue();
     },
-    onCancel: () => { state.proposal = null; hidePrompt(); },
+    onCancel: () => { state.proposal = null; nextInQueue(); },
   });
 }
 

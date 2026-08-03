@@ -55,7 +55,17 @@
       "Bash(curl -s https://vaakku-poc.vercel.app/api/schema)",
       "Bash(\"/Users/karthiksrinivasan/Claude/Voice Billing System/poc/.venv/bin/python\" -m json.tool)",
       "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api/_lib'\\); import db; print\\('db ok'\\)\")",
-      "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api'\\); import index; print\\('api ok'\\)\")"
+      "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api'\\); import index; print\\('api ok'\\)\")",
+      "Read(//private/tmp/**)",
+      "Bash(say -v Rishi -o adm.wav --data-format=LEI16@8000 \"sugar one kilo 45 rupees\")",
+      "Bash(awk '{print $5\" bytes\"}')",
+      "Bash(say -v Rishi -o s.aiff --data-format=LEI16@8000 \"sugar one kilo 45 rupees\")",
+      "Bash(afconvert -f mp4f -d aac -b 16000 s.aiff s.m4a)",
+      "Bash(awk '{print \"m4a:\", $5, \"bytes\"}')",
+      "Bash(say -v Rishi -o s.aiff \"sugar one kilo 45 rupees\")",
+      "Bash(afconvert -f m4af -d aac s.aiff s.m4a)",
+      "Bash(awk '{print \"m4a bytes:\", $5}')",
+      "Bash(curl -s https://vaakku-poc.vercel.app/app.js)"
     ]
   }
 }

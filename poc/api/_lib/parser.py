@@ -147,15 +147,19 @@ class Lang:
 # the grammar reads as a quantity. Rewrite to the word form, in the order the grammar wants.
 _CURRENCY_RE = re.compile(r"(?:₹|\brs\.?)\s*(\d+(?:\.\d+)?)")
 
+# Item boundary marker. Carries no letters or digits, so it never reaches an item name.
+SEP = "¶"
+
 
 def norm(s: str) -> str:
     """Lowercase, strip punctuation and accents, collapse whitespace."""
     s = unicodedata.normalize("NFKC", s).lower().strip()
     s = _CURRENCY_RE.sub(r"\1 rupees ", s)
     s = re.sub(r"[^\w\s஀-௿.]", " ", s)
-    # Keep decimal points, drop every other dot. ASR ends sentences with one, and a token
-    # of "ரூபாய்." matches no money word — it silently became part of the item name.
-    s = re.sub(r"(?<!\d)\.|\.(?!\d)", " ", s)
+    # Keep decimal points; turn every other dot into an explicit separator. A trailing dot
+    # made "ரூபாய்." match no money word, but simply deleting it also threw away the
+    # sentence boundary — which is the clearest signal that one dictated item has ended.
+    s = re.sub(r"(?<!\d)\.|\.(?!\d)", f" {SEP} ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -257,10 +261,37 @@ class Parser:
         return res
 
     def _split_items(self, text: str) -> list[str]:
-        """Split a multi-item utterance. A new item starts at a number or measure that
-        follows a matched item, which is why splitting happens after normalisation."""
-        parts = re.split(r"\b(?:and|மற்றும்|apparam|அப்புறம்)\b|,", text)
-        return [p for p in parts if p.strip()]
+        """Split a multi-item utterance into one chunk per item.
+
+        Three signals, in order of reliability:
+          1. A sentence boundary from the ASR (SEP), inserted by norm().
+          2. An explicit connector — "and", "மற்றும்", "apparam".
+          3. A price. In dictation an item *ends* at its price ("potato 1 kilo 100 rupees
+             sugar 1 kilo 45 rupees"), so a money word closes the chunk — but only once the
+             chunk already holds an item word. Without that guard this would also split
+             price-led billing, where the money comes first: "ten rupees | coriander".
+        """
+        parts = [p for p in re.split(rf"{SEP}|\b(?:and|மற்றும்|apparam|அப்புறம்)\b|,", text)
+                 if p.strip()]
+
+        out = []
+        for part in parts:
+            chunk, seen_item = [], False
+            for tok in part.split():
+                chunk.append(tok)
+                if tok in self.lang.money and seen_item:
+                    out.append(" ".join(chunk))
+                    chunk, seen_item = [], False
+                    continue
+                if not (self._value(tok) is not None
+                        or tok in self.lang.units
+                        or tok in self.lang.money
+                        or tok in self.lang.fillers
+                        or tok.startswith("§")):
+                    seen_item = True
+            if chunk:
+                out.append(" ".join(chunk))
+        return [c for c in out if c.strip()]
 
     def _parse_one(self, chunk: str, asr_conf: float) -> tuple[LineItem | None, dict | None]:
         """Returns (line item, info). When nothing matched the catalog, `info` carries what

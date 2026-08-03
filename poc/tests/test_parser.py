@@ -128,6 +128,19 @@ UNMATCHED = [
 ]
 
 
+# One clip, several dictated items. This collapsed into a single garbage SKU called
+# "potato sugar kilo coffee" at Rs250/kg, because splitting only looked for "and" and
+# commas — which is why admin dictation appeared to register nothing at all.
+MULTI = [
+    ("potato 1 kilo 100 rupees sugar 1 kilo 45 rupees coffee 250 rupees",
+     [("potato", 100.0), ("sugar", 45.0), ("coffee", 250.0)]),
+    ("பொட்டேட்டோ 1 கிலோ ₹100. சுகர் 1 கிலோ ₹45.",
+     [("பொட்டேட்டோ", 100.0), ("சுகர்", 45.0)]),
+    # Price-led billing must NOT split at the money word: there the price comes first.
+    ("ten rupees coriander", [("coriander", 10.0)]),
+]
+
+
 def run():
     passed = failed = 0
 
@@ -192,6 +205,13 @@ def run():
         check(text, u.get("qty") == qty, f"-> qty {u.get('qty')} (want {qty})")
         check(text, u.get("unit") == unit, f"-> unit {u.get('unit')} (want {unit})")
         check(text, u.get("money") == money, f"-> money {u.get('money')} (want {money})")
+
+    print("multi-item dictation in one clip")
+    from parser import Catalog as _C2
+    bare = Parser(LANG, _C2([]))
+    for text, want in MULTI:
+        got = [(u["name"], u["money"]) for u in bare.parse(text).unmatched]
+        check(text, got == want, f"-> {got} (want {want})")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:

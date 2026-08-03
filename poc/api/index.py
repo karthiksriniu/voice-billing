@@ -126,7 +126,7 @@ def deny(msg: str, code: int = 401):
     return JSONResponse({"ok": False, "error": msg}, status_code=code)
 
 
-def admin_proposal(res) -> dict | None:
+def admin_proposals(res) -> list[dict]:
     """Turn an admin-mode utterance into a proposed catalog change, for the UI to confirm.
 
     The important judgement is existing-vs-new. In billing a fuzzy match is what you want;
@@ -152,27 +152,31 @@ def admin_proposal(res) -> dict | None:
             return False
         return score < 0.70 if action == "create" else score >= 0.98
 
+    # One proposal per dictated item, not just the first — a shopkeeper setting up a
+    # catalog says several in a row, and returning only the leading one silently dropped
+    # the rest.
+    out = []
     for it in res.items:
         if not it.price_led:
             continue
-        spoken_qty = it.spoken_qty
+        q = it.spoken_qty
         if it.match_score >= ADMIN_SAME_ITEM_THRESHOLD:
-            return {"action": "reprice", "id": it.product_id, "name": it.name,
-                    "unit": it.unit, "price": rate(it.amount, spoken_qty),
-                    "was": it.unit_price, "qty": spoken_qty,
-                    "certain": certainty("reprice", it.match_score, spoken_qty)}
-        return {"action": "create", "id": "", "name": it.spoken_name or it.name,
-                "unit": it.unit, "price": rate(it.amount, spoken_qty),
-                "near": it.name, "near_score": it.match_score, "qty": spoken_qty,
-                "certain": certainty("create", it.match_score, spoken_qty)}
+            out.append({"action": "reprice", "id": it.product_id, "name": it.name,
+                        "unit": it.unit, "price": rate(it.amount, q),
+                        "was": it.unit_price, "qty": q,
+                        "certain": certainty("reprice", it.match_score, q)})
+        else:
+            out.append({"action": "create", "id": "", "name": it.spoken_name or it.name,
+                        "unit": it.unit, "price": rate(it.amount, q),
+                        "near": it.name, "near_score": it.match_score, "qty": q,
+                        "certain": certainty("create", it.match_score, q)})
     for u in res.unmatched:
         if u.get("money"):
-            return {"action": "create", "id": "", "name": u["name"],
-                    "unit": u.get("unit") or "piece", "near": "", "near_score": 0.0,
-                    "qty": u.get("qty"),
-                    "price": rate(u["money"], u.get("qty")),
-                    "certain": certainty("create", 0.0, u.get("qty"))}
-    return None
+            out.append({"action": "create", "id": "", "name": u["name"],
+                        "unit": u.get("unit") or "piece", "near": "", "near_score": 0.0,
+                        "qty": u.get("qty"), "price": rate(u["money"], u.get("qty")),
+                        "certain": certainty("create", 0.0, u.get("qty"))})
+    return out
 
 
 def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
@@ -190,7 +194,7 @@ def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
         "took_ms": took_ms,
     }
     if mode == "admin" or res.mode_switch == "admin":
-        payload["admin"] = admin_proposal(res)
+        payload["admin"] = admin_proposals(res)
     return payload
 
 
