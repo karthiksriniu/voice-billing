@@ -180,10 +180,14 @@ class Parser:
     def _read_number(self, toks: list[str], i: int) -> tuple[float | None, int]:
         """Read a possibly-compound number starting at i. Returns (value, next_index).
 
-        Handles the three ways Tamil composes them:
-          irubathi anju -> 20 + 5      (tens then unit)
-          rendu nooru   -> 2 * 100     (multiplier then scale)
-          rendu arai    -> 2 + 0.5     (whole then fraction)
+        Tamil composes numerals multiplicatively then additively, same as English:
+          rendu nooru        -> 2 * 100      (multiplier before a larger scale)
+          nooru pathu        -> 100 + 10     (anything smaller is added)
+          irubathi anju      -> 20 + 5
+          rendu arai         -> 2 + 0.5      (fractions are just smaller)
+
+        The additive arm previously required the follower to be under 10, so hundreds and
+        tens never combined and "nooru pathu rubai" billed as Rs10 instead of Rs110.
         """
         val = self._value(toks[i])
         if val is None:
@@ -193,13 +197,11 @@ class Parser:
             nxt = self._value(toks[j])
             if nxt is None:
                 break
-            if nxt >= 100 and val < nxt:          # rendu nooru = 200
+            if nxt >= 100 and val < nxt:          # rendu nooru = 200 (multiplier)
                 val *= nxt
-            elif val >= 20 and nxt < 10:          # irubathi anju = 25
-                val += nxt
-            elif nxt < 1 and val >= 1:            # rendu arai = 2.5
-                val += nxt
-            else:
+            elif nxt < val:                       # anything smaller is additive:
+                val += nxt                        # nooru pathu = 110, irubathi anju = 25,
+            else:                                 # rendu arai = 2.5
                 break
             j += 1
         return val, j

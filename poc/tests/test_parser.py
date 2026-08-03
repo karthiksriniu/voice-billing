@@ -48,6 +48,8 @@ CASES = [
 
     # compound Tamil numerals
     ("irubathi anju egg",              "EGG001", 25,   "piece", 175),
+    ("nooru pathu egg",                "EGG001", 110,  "piece", 770),
+    ("irunooru aimbathu egg",          "EGG001", 250,  "piece", 1750),
 
     # count / packet led
     ("rendu packet biscuit",           "BIS001", 2,    "packet", 20),
@@ -77,6 +79,7 @@ PRICE_LED = [
     # Verbatim Sarvam output for "ten rupees coriander" spoken in Indian English.
     ("₹10 கோரியாண்டா",                  "COR001", 10),
     ("rs.20 kothamalli",               "COR001", 20),
+    ("nooru pathu rubai tea",          "TEA001", 110),
     ("ஐந்து ரூபாய் biscuit",             "BIS001", 5),
     ("twenty rupees ku kothamalli",    "COR001", 20),
 ]
