@@ -452,6 +452,7 @@ async function resolvePrice(price) {
   });
   if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4500); render(); return; }
   if (item.product_id == null && j.product) item.product_id = j.product.id;
+  mergeProduct(j.product);
   const qty = item.price_led ? +(item.amount / price).toFixed(3) : item.qty;
   addOrUpdate({
     ...item, unit_price: price, qty,
@@ -474,6 +475,7 @@ async function commitProduct(a, quiet) {
     toast(`${t("notSaved")}: ${j.error || ""}`, 4500);
     return false;
   }
+  mergeProduct(j.product);
   if (!quiet) { toast(`${a.name} → ${rupees(a.price)}/${a.unit}`); await loadCatalog(); }
   return true;
 }
@@ -488,8 +490,12 @@ async function queueChanges(list) {
     else ask.push(a);
   }
   if (saved) { toast(`${saved} ${t("added")}`); await loadCatalog(); }
-  state.queue = ask;
-  nextInQueue();
+
+  // Append, never replace. Dictating a run of items used to overwrite the queue, so an
+  // item still waiting to be confirmed was silently dropped the moment the next one was
+  // spoken — while the certain ones went on announcing themselves as added.
+  state.queue = (state.queue || []).concat(ask);
+  if (!state.proposal) nextInQueue();
 }
 
 function nextInQueue() {
@@ -524,11 +530,37 @@ function proposeChange(a) {
   });
 }
 
+/* Dictating with a 500ms pause fires several catalog refreshes at once, and they can come
+   back out of order — an earlier, shorter list landing last would overwrite the newer one
+   and re-render without the item just added, while the toast still said it saved. Only the
+   most recently issued request is allowed to write state. `fresh=1` also bypasses the
+   server-side cache, which is per serverless instance and so not guaranteed to have seen
+   the write. */
+let catalogSeq = 0;
+
+function sortProducts(list) {
+  return list.slice().sort((a, b) =>
+    (b.unit_price > 0) - (a.unit_price > 0) ||
+    String(a.name || "").localeCompare(String(b.name || "")));
+}
+
 async function loadCatalog() {
-  const j = await api(`/api/catalog?shop_id=${encodeURIComponent(state.shop.id)}`);
-  state.products = (j.products || []).slice()
-    .sort((a, b) => (b.unit_price > 0) - (a.unit_price > 0) || a.name.localeCompare(b.name));
+  const seq = ++catalogSeq;
+  const j = await api(
+    `/api/catalog?shop_id=${encodeURIComponent(state.shop.id)}&fresh=1`);
+  if (seq !== catalogSeq) return;                 // a newer refresh already won
+  state.products = sortProducts(j.products || []);
   renderCatalog();
+}
+
+/* The write response is authoritative for the row it just saved, so show it immediately
+   rather than waiting on a refetch that might race or fail. */
+function mergeProduct(row) {
+  if (!row || !row.id) return;
+  const i = state.products.findIndex((p) => p.id === row.id);
+  if (i === -1) state.products.push(row); else state.products[i] = { ...state.products[i], ...row };
+  state.products = sortProducts(state.products);
+  if (state.mode === "admin") renderCatalog();
 }
 
 function renderCatalog() {

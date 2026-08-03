@@ -255,7 +255,12 @@ async def schema_probe():
 
 
 @router.get("/catalog")
-async def catalog(shop_id: str = DEFAULT_SHOP):
+async def catalog(shop_id: str = DEFAULT_SHOP, fresh: int = 0):
+    # The admin list must never show a stale catalog: the cache lives per serverless
+    # instance, so a read can land somewhere that has not seen the write. Catalog reads are
+    # rare (mode switch, after a save), so bypassing it costs nothing that matters.
+    if fresh:
+        db.invalidate(shop_id)
     return {"products": await db.get_products(shop_id)}
 
 
