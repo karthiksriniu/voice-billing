@@ -117,6 +117,17 @@ RATES = [
 ]
 
 
+# Verbatim Sarvam output for admin dictation, against an empty catalog. Both of these
+# produced no proposal at all: the sentence-final full stop left "ரூபாய்." matching no
+# money word (so it landed in the item name), and "ருபீஸ்" was not a known money word.
+UNMATCHED = [
+    ("தேயிலை ஒரு கிலோ ₹400 ரூபாய்.", "தேயிலை",        1.0,   "kg", 400.0),
+    ("காபி 500 கிராம் 300 ருபீஸ்",   "காபி",          500.0, "g",  300.0),
+    ("சுகர் ₹45.",                   "சுகர்",          None,  None, 45.0),
+    ("ஃபில்டர் காஃபி ₹250.",          "ஃபில்டர் காஃபி", None,  None, 250.0),
+]
+
+
 def run():
     passed = failed = 0
 
@@ -170,6 +181,17 @@ def run():
         check(text, it.spoken_qty == want_qty, f"-> spoken_qty {it.spoken_qty} (want {want_qty})")
         rate = round(it.amount / it.spoken_qty, 2) if it.spoken_qty else round(it.amount, 2)
         check(text, abs(rate - want_rate) < 0.01, f"-> rate {rate} (want {want_rate})")
+
+    print("admin dictation into an empty catalog")
+    from parser import Catalog as _C
+    empty = Parser(LANG, _C([]))
+    for text, name, qty, unit, money in UNMATCHED:
+        r = empty.parse(text)
+        u = r.unmatched[0] if r.unmatched else {}
+        check(text, u.get("name") == name, f"-> name {u.get('name')!r} (want {name!r})")
+        check(text, u.get("qty") == qty, f"-> qty {u.get('qty')} (want {qty})")
+        check(text, u.get("unit") == unit, f"-> unit {u.get('unit')} (want {unit})")
+        check(text, u.get("money") == money, f"-> money {u.get('money')} (want {money})")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:

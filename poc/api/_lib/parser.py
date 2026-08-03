@@ -153,6 +153,9 @@ def norm(s: str) -> str:
     s = unicodedata.normalize("NFKC", s).lower().strip()
     s = _CURRENCY_RE.sub(r"\1 rupees ", s)
     s = re.sub(r"[^\w\s஀-௿.]", " ", s)
+    # Keep decimal points, drop every other dot. ASR ends sentences with one, and a token
+    # of "ரூபாய்." matches no money word — it silently became part of the item name.
+    s = re.sub(r"(?<!\d)\.|\.(?!\d)", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
