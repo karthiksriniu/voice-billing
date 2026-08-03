@@ -257,13 +257,29 @@ async def get_shop(shop_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
-async def create_shop(shop_id: str, name: str, vpa: str, passcode_hash: str) -> str:
+async def create_shop(shop_id: str, name: str, vpa: str, passcode_hash: str,
+                      lang: str = "ta") -> str:
+    row = {"id": shop_id, "name": name, "upi_vpa": vpa,
+           "passcode_hash": passcode_hash, "lang": lang}
     if not configured():
-        _local_shops[shop_id] = {"id": shop_id, "name": name, "upi_vpa": vpa,
-                                 "passcode_hash": passcode_hash}
+        _local_shops[shop_id] = row
         return ""
-    return await _post("shops", {"id": shop_id, "name": name, "upi_vpa": vpa,
-                                 "passcode_hash": passcode_hash})
+    return await _post("shops", row)
+
+
+async def delete_product(shop_id: str, product_id: str) -> tuple[bool, str]:
+    invalidate(shop_id)
+    if not configured():
+        _memory["products"] = [p for p in _seed() if p["id"] != product_id]
+        return True, ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.delete(f"{SUPABASE_URL}/rest/v1/products", headers=_headers(),
+                               params={"shop_id": f"eq.{shop_id}", "id": f"eq.{product_id}"})
+        return (r.status_code < 400, "" if r.status_code < 400
+                else f"supabase {r.status_code}: {r.text[:200]}")
+    except Exception as exc:                           # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
 
 
 async def get_staff(mobile: str) -> dict | None:

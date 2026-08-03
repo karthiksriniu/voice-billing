@@ -8,10 +8,13 @@ const LATCH_MS = 3000;      // hold this long and the button latches, walkie-tal
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 /* While latched, a pause ends the current item rather than the whole recording: say an
-   item, pause, it lands in the list, say the next one. Without this, everything dictated
-   in one breath arrives as a single clip and has to be pulled apart by grammar alone.
-   2s is long enough to survive thinking mid-sentence and short enough to feel immediate. */
-const PAUSE_MS = 2000;
+   item, pause, it lands in the list, say the next one.
+
+   500ms sits just above the natural gap between words in connected speech (~150-300ms)
+   and at the low end of what speech systems use to declare end-of-utterance (500-800ms).
+   It feels immediate; the cost is that a shopkeeper who hesitates mid-item gets cut in
+   two. If that shows up in a real shop, raise it rather than lowering it further. */
+const PAUSE_MS = 500;
 const SILENCE_RMS = 0.012;  // below this counts as silence on a phone mic in a noisy room
 const MIN_SPEECH_MS = 400;  // don't cut on a pause before anything was actually said
 
@@ -21,7 +24,7 @@ const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s ===
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 const state = {
-  token: "", shop: { id: "", name: "", vpa: "" }, role: "user",
+  token: "", shop: { id: "", name: "", vpa: "", lang: "en" }, role: "user",
   items: [], mode: "billing", bill: null,
   askingPrice: null, proposal: null, queue: [],
   expanded: false, products: [],
@@ -53,6 +56,27 @@ async function api(path, { method = "GET", body } = {}) {
   return res.json();
 }
 
+/* ---------- language ---------- */
+
+function applyStrings() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
+  $("mobile").placeholder = "98400 12345";
+  $("typeInput").placeholder = state.mode === "admin"
+    ? "potato 1 kilo 100 rupees" : t("emptyBill");
+  $("talkLabel").innerHTML = `${t("holdToSpeak")}`;
+  $("signIn") && ($("signIn").textContent = t("signIn"));
+}
+
+(function buildLangPicker() {
+  const sel = $("langPick");
+  sel.innerHTML = Object.entries(LANGS)
+    .map(([c, l]) => `<option value="${c}">${l.native} — ${l.label}</option>`).join("");
+  sel.value = "en";
+  sel.onchange = () => { setLang(sel.value); applyStrings(); };
+})();
+applyStrings();
+
 /* ---------- health ---------- */
 
 // Held as a promise, not fire-and-forget. Signing in used to read `health` before this
@@ -74,14 +98,14 @@ const digits = (s) => (s || "").replace(/\D/g, "");
 
 $("continueBtn").onclick = async () => {
   const mobile = digits($("mobile").value);
-  if (mobile.length < 10) { toast("10 இலக்க நம்பர் / Enter a 10-digit number"); return; }
+  if (mobile.length < 10) { toast(t("need10")); return; }
   const r = await api("/api/auth/check", { method: "POST", body: { mobile } });
   $("continueBtn").hidden = true;
   $("mobile").disabled = true;
   if (r.exists) {
     $("whoLine").textContent = r.shop_name
-      ? `${r.shop_name} — ${r.role === "owner" ? "முதலாளி / Owner" : "பணியாளர் / Staff"}`
-      : "கடவுஎண் போடுங்க / Enter your passcode";
+      ? `${r.shop_name} — ${r.role === "owner" ? t("owner") : t("staff")}`
+      : t("passcode");
     $("loginBox").hidden = false;
     $("loginCode").focus();
   } else {
@@ -112,12 +136,12 @@ $("loginBtn").onclick = async () => {
 $("signupBtn").onclick = async () => {
   const code = digits($("signupCode").value);
   const vpa = $("vpa").value.trim();
-  if (code.length !== 6) { toast("6 இலக்கம் வேணும் / Passcode must be 6 digits"); return; }
-  if (!vpa.includes("@")) { toast("UPI ID வேணும் / Enter a UPI ID like name@bank"); return; }
+  if (code.length !== 6) { toast(t("need6")); return; }
+  if (!vpa.includes("@")) { toast(t("needUpi")); return; }
   const r = await api("/api/auth/signup", {
     method: "POST",
     body: { mobile: digits($("mobile").value), passcode: code,
-            name: $("shopName").value.trim() || "Shop", vpa },
+            name: $("shopName").value.trim() || "Shop", vpa, lang: $("langPick").value },
   });
   if (!r.ok) { toast(r.error || "Could not create business", 4000); return; }
   enter(r);
@@ -127,7 +151,10 @@ async function enter(session) {
   await healthReady;
   state.token = session.token;
   state.role = session.role;
-  state.shop = { id: session.shop_id, name: session.shop_name || "Shop", vpa: session.vpa || "" };
+  state.shop = { id: session.shop_id, name: session.shop_name || "Shop",
+                 vpa: session.vpa || "", lang: session.lang || "en" };
+  setLang(state.shop.lang);
+  applyStrings();
   try { localStorage.setItem("vaakku", JSON.stringify(session)); } catch (e) { /* private mode */ }
   $("shopLabel").textContent = state.shop.name;
   // Staff bill and nothing else, so the switch simply isn't there for them.
@@ -160,9 +187,8 @@ function setMode(mode) {
   $("totalRow").hidden = true;
   document.querySelectorAll("#modeSwitch button")
     .forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
-  $("typeInput").placeholder = admin ? "potato 1 kilo 100 rupees" : "ரெண்டு கிலோ சர்க்கரை";
-  setStatus(admin ? "பொருள், அளவு, விலை சொல்லுங்க / Say item, size, price"
-                  : "தயார் / Ready");
+  $("typeInput").placeholder = admin ? "potato 1 kilo 100 rupees" : t("emptyBill");
+  setStatus(admin ? t("sayItemPrice") : t("ready"));
   if (admin) { loadCatalog(); loadStaff(); } else render();
 }
 
@@ -176,11 +202,10 @@ function applyAsrAvailability() {
   if (health.asr_configured) return;
   const b = $("asrBanner");
   b.hidden = false;
-  b.innerHTML = "🔇 <b>குரல் இயங்கவில்லை / Voice is off.</b> No speech key is configured, " +
-    "so nothing you say can be recognised. Type below instead.";
+  b.innerHTML = `🔇 ${t("voiceOff")}`;
   $("talk").disabled = true;
   $("talk").classList.add("dead");
-  $("talkLabel").innerHTML = "குரல் இயங்கவில்லை<br><small>Voice unavailable — type below</small>";
+  $("talkLabel").innerHTML = t("voiceUnavailable");
   $("typeForm").hidden = false;
   $("typeToggle").hidden = true;
 }
@@ -192,7 +217,7 @@ async function openMic() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch (err) {
-    setStatus("மைக் அனுமதி இல்லை / Microphone blocked");
+    setStatus(t("voiceUnavailable"));
     toast("Allow microphone access, then reload.", 4000);
   }
 }
@@ -201,12 +226,11 @@ function setTalk(mode) {
   $("talk").className = "talk " + mode;
   const l = $("talkLabel");
   if (mode === "rec") {
-    l.innerHTML = latched ? "பதிவாகுது…<br><small>Recording — tap to stop</small>"
-                          : "பதிவாகுது…<br><small>Recording — release to stop</small>";
+    l.innerHTML = `${t("recording")}<br><small>${latched ? t("tapToStop") : t("releaseToStop")}</small>`;
   } else if (mode === "busy") {
-    l.innerHTML = "கேட்குது…<br><small>Working…</small>";
+    l.innerHTML = t("working");
   } else {
-    l.innerHTML = "பேச அழுத்துங்க<br><small>Hold to speak</small>";
+    l.innerHTML = t("holdToSpeak");
   }
 }
 
@@ -223,7 +247,7 @@ function startRec() {
   recorder.start();
   pressedAt = Date.now();
   setTalk("rec");
-  setStatus("பேசுங்க / Speak");
+  setStatus(t("speak"));
   if (navigator.vibrate) navigator.vibrate(12);
 }
 
@@ -266,7 +290,7 @@ function startSilenceWatch() {
 
     // A pause: close this item and immediately open the next, without dropping the mic.
     if (recorder && recorder.state === "recording") {
-      setStatus("சேர்க்கிறேன்… / Adding…");
+      setStatus(t("adding"));
       recorder.stop();             // onstop -> handleClip -> startRec() below
     }
   }, 150);
@@ -280,7 +304,7 @@ function stopSilenceWatch() {
 async function handleClip() {
   const ms = Date.now() - pressedAt;
   const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-  if (ms < MIN_CLIP_MS || blob.size < 1200) { setTalk("idle"); setStatus("தயார் / Ready"); return; }
+  if (ms < MIN_CLIP_MS || blob.size < 1200) { setTalk("idle"); setStatus(t("ready")); return; }
   busy = true;
   setTalk("busy");
   const t0 = performance.now();
@@ -289,11 +313,12 @@ async function handleClip() {
     fd.append("audio", blob, "clip.webm");
     fd.append("shop_id", state.shop.id);
     fd.append("mode", state.mode);
+    fd.append("lang", state.shop.lang || "ta");
     const res = await fetch("/api/transcribe", { method: "POST", body: fd });
     apply(await res.json(), Math.round(performance.now() - t0));
   } catch (err) {
-    toast("இணைப்பு இல்லை / Network problem");
-    setStatus("தயார் / Ready");
+    toast(t("network"));
+    setStatus(t("ready"));
   } finally {
     busy = false;
     // Still latched means the pause was a break between items, not the end of dictation:
@@ -316,7 +341,7 @@ talk.addEventListener("pointerup", (e) => {
     latched = true;
     setTalk("rec");
     startSilenceWatch();
-    setStatus("சொல்லிட்டே போங்க / Keep going — pause between items, tap to stop");
+    setStatus(t("keepGoing"));
   } else stopRec();
 });
 talk.addEventListener("pointercancel", () => { if (!latched) stopRec(); });
@@ -326,11 +351,11 @@ talk.addEventListener("contextmenu", (e) => e.preventDefault());
 
 function apply(data, roundTripMs) {
   if (data.error) {
-    setStatus("காதுல விழலை / " + data.error);
-    toast("காதுல விழலை / " + data.error, 3500);
+    setStatus(`${t("notHeard")}: ${data.error}`);
+    toast(`${t("notHeard")}: ${data.error}`, 3500);
     return;
   }
-  if (!data.transcript) { setStatus("காதுல விழலை / Didn't catch that"); return; }
+  if (!data.transcript) { setStatus(t("notHeard")); return; }
 
   const timing = data.asr_ms != null
     ? `${roundTripMs} ms (asr ${data.asr_ms}, parse ${data.parse_ms})` : `${roundTripMs} ms`;
@@ -344,28 +369,28 @@ function apply(data, roundTripMs) {
     const skipped = state.askingPrice.name;
     state.askingPrice = null;
     hidePrompt();
-    toast(`${skipped} — விலை சொல்லலை / no price given, skipped`, 3200);
+    toast(`${skipped} — ${t("noPriceSkipped")}`, 3200);
   }
 
   if (data.admin && data.admin.length) { queueChanges(data.admin); return; }
   if (state.mode === "admin") {
-    toast("பொருள், விலை சொல்லுங்க / Say an item name and its price");
+    toast(t("sayItemPrice"));
     return;
   }
   if (data.mode_switch && !data.items.length && !data.command) return;
 
   if (data.command === "cancel_last" && state.items.length) {
-    toast(`நீக்கியாச்சு / Removed ${state.items.pop().name}`);
+    toast(`${t("removed")} ${state.items.pop().name}`);
     render(); return;
   }
-  if (data.command === "clear_all") { state.items = []; render(); toast("பில் காலி / Cleared"); return; }
+  if (data.command === "clear_all") { state.items = []; render(); toast(t("cleared")); return; }
   if (data.command === "total" && state.items.length) { finalize(); return; }
 
   let added = 0, asked = 0;
   for (const it of data.items) {
     if (it.verdict === "reject") continue;
     if (it.needs_price) { askPrice(it); asked++; continue; }
-    state.items.push({ ...it, pending: it.verdict === "confirm" });
+    addOrUpdate({ ...it, pending: it.verdict === "confirm" });
     it.verdict === "confirm" ? asked++ : added++;
   }
 
@@ -382,10 +407,25 @@ function apply(data, roundTripMs) {
 
   if (!added && !asked) {
     toast(data.transcript
-      ? `“${data.transcript}” — புரியலை / couldn't turn that into an item`
-      : "புரியலை / Didn't get an item — try again", 3200);
+      ? `“${data.transcript}” — ${t("couldNotParse")}`
+      : t("notHeard"), 3200);
   }
   render();
+}
+
+/* Saying an item again corrects it rather than billing it twice. A shopkeeper who repeats
+   himself is fixing what he just said — "two kilo sugar… no, three kilo sugar" — and a
+   second line would silently double the customer's bill. */
+function addOrUpdate(line) {
+  const key = (l) => l.combo && l.combo.length
+    ? l.combo.map((c) => c.product_id || c.name).join("+")
+    : (l.product_id || l.name);
+  const i = state.items.findIndex((l) => key(l) === key(line));
+  if (i === -1) { state.items.push(line); return false; }
+  const was = state.items[i].amount;
+  state.items[i] = line;
+  if (was !== line.amount) toast(`${line.name} — ${t("updated")} ${rupees(line.amount)}`);
+  return true;
 }
 
 /* ---------- learning a price (D4) ---------- */
@@ -393,13 +433,12 @@ function apply(data, roundTripMs) {
 function askPrice(item) {
   state.askingPrice = item;
   showPrompt({
-    kind: item.isNew ? "புது பொருள் / New item" : "விலை தெரியலை / Price not known",
-    main: `${item.name} — என்ன விலை?`,
-    note: `Say the price per ${item.unit}. ${
-      item.isNew ? "It will be added to your catalog." : "Remembered from now on."}`,
+    kind: item.isNew ? t("newItem") : t("priceUnknown"),
+    main: `${item.name} — ${t("whatPrice")}`,
+    note: `${t("sayPricePer")} ${item.unit}. ${item.isNew ? t("willBeAdded") : t("remembered")}`,
     onCancel: () => { state.askingPrice = null; hidePrompt(); render(); },
   });
-  setStatus(`${item.name} — என்ன விலை? / What price per ${item.unit}?`);
+  setStatus(`${item.name} — ${t("whatPrice")}`);
 }
 
 async function resolvePrice(price) {
@@ -411,10 +450,10 @@ async function resolvePrice(price) {
     body: { shop_id: state.shop.id, id: item.product_id || "", name: item.name,
             unit: item.unit, unit_price: price },
   });
-  if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); render(); return; }
+  if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4500); render(); return; }
   if (item.product_id == null && j.product) item.product_id = j.product.id;
   const qty = item.price_led ? +(item.amount / price).toFixed(3) : item.qty;
-  state.items.push({
+  addOrUpdate({
     ...item, unit_price: price, qty,
     amount: +(item.price_led ? item.amount : qty * price).toFixed(2),
     needs_price: false, pending: false,
@@ -432,7 +471,7 @@ async function commitProduct(a, quiet) {
             unit: a.unit, unit_price: a.price },
   });
   if (!j.ok) {
-    toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500);
+    toast(`${t("notSaved")}: ${j.error || ""}`, 4500);
     return false;
   }
   if (!quiet) { toast(`${a.name} → ${rupees(a.price)}/${a.unit}`); await loadCatalog(); }
@@ -448,7 +487,7 @@ async function queueChanges(list) {
     if (a.certain) { if (await commitProduct(a, true)) saved++; }
     else ask.push(a);
   }
-  if (saved) { toast(`${saved} சேர்க்கப்பட்டது / added`); await loadCatalog(); }
+  if (saved) { toast(`${saved} ${t("added")}`); await loadCatalog(); }
   state.queue = ask;
   nextInQueue();
 }
@@ -467,7 +506,7 @@ function proposeChange(a) {
   state.proposal = a;
   const isNew = a.action === "create";
   showPrompt({
-    kind: isNew ? "புதிய பொருள் / New item" : "விலை மாற்றம் / Price change",
+    kind: isNew ? t("newItem") : t("priceChange"),
     main: `${a.name} — ${rupees(a.price)}/${a.unit}`,
     note: a.qty && a.qty !== 1
       ? `${a.qty} ${a.unit} for ${rupees(a.price * a.qty)} → ${rupees(a.price)} per ${a.unit}. Right?`
@@ -501,9 +540,30 @@ function renderCatalog() {
       <span class="sku-u">${p.unit}</span>
       <span class="sku-p">${p.unit_price > 0 ? rupees(p.unit_price) : "—"}</span>
       <button class="sku-e" data-edit="${i}" aria-label="Edit">✎</button>
+      <button class="sku-d" data-del="${i}" aria-label="Delete">🗑</button>
     </div>`).join("");
   box.querySelectorAll("[data-edit]").forEach((b) => {
     b.onclick = () => editSku(state.products[+b.dataset.edit]);
+  });
+  box.querySelectorAll("[data-del]").forEach((b) => {
+    b.onclick = () => deleteSku(state.products[+b.dataset.del]);
+  });
+}
+
+function deleteSku(p) {
+  showPrompt({
+    kind: t("deleteTitle"),
+    main: `${p.name} — ${p.unit_price > 0 ? rupees(p.unit_price) : "—"}/${p.unit}`,
+    note: t("clearNote"),
+    warn: true,
+    onOk: async () => {
+      hidePrompt();
+      const j = await api("/api/catalog/delete", { method: "POST", body: { id: p.id } });
+      if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
+      toast(`${p.name} — ${t("removed")}`);
+      loadCatalog();
+    },
+    onCancel: hidePrompt,
   });
 }
 
@@ -514,7 +574,7 @@ function editSku(p) {
   row.innerHTML = `<input class="e-n" value="${p.name}" placeholder="Item">
     <input class="e-u" value="${p.unit}" placeholder="UOM">
     <input class="e-p" type="number" step="0.01" value="${p.unit_price || ""}" placeholder="Price">
-    <button class="mini go">சேமி</button><button class="mini x">✕</button>`;
+    <button class="mini go">${t("save")}</button><button class="mini x">✕</button>`;
   box.prepend(row);
   row.querySelector(".x").onclick = () => row.remove();
   row.querySelector(".go").onclick = async () => {
@@ -524,9 +584,9 @@ function editSku(p) {
               unit: row.querySelector(".e-u").value.trim() || "piece",
               unit_price: parseFloat(row.querySelector(".e-p").value) || 0 },
     });
-    if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || ""), 4000); return; }
+    if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
     row.remove();
-    toast("சேமிச்சாச்சு / Saved");
+    toast(t("saved"));
     loadCatalog();
   };
 }
@@ -534,17 +594,17 @@ function editSku(p) {
 /* ---------- admin: staff ---------- */
 
 $("clearCatalogBtn").onclick = () => {
-  if (!state.products.length) { toast("ஏற்கனவே காலி / Already empty"); return; }
+  if (!state.products.length) { toast(t("alreadyEmpty")); return; }
   showPrompt({
-    kind: "எல்லாம் நீக்கவா? / Clear catalog?",
+    kind: t("clearTitle"),
     main: `${state.products.length} items`,
-    note: "This deletes every SKU for this shop and cannot be undone.",
+    note: t("clearNote"),
     warn: true,
     onOk: async () => {
       hidePrompt();
       const j = await api("/api/catalog", { method: "DELETE" });
-      if (!j.ok) { toast("நீக்க முடியலை / Not cleared: " + (j.error || ""), 4500); return; }
-      toast(`${j.removed} நீக்கப்பட்டது / removed`);
+      if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4500); return; }
+      toast(`${j.removed} ${t("removed")}`);
       loadCatalog();
     },
     onCancel: hidePrompt,
@@ -565,7 +625,7 @@ $("staffForm").onsubmit = async (e) => {
             name: $("staffName").value.trim() },
   });
   if (!j.ok) { toast(j.error || "Could not add", 4000); return; }
-  toast(`${j.mobile} சேர்க்கப்பட்டது / added`);
+  toast(`${j.mobile} ${t("added")}`);
   $("staffForm").reset();
   $("staffForm").hidden = true;
   loadStaff();
@@ -576,7 +636,7 @@ async function loadStaff() {
   const rows = (j.staff || []).filter((s) => s.role !== "owner");
   $("staffList").innerHTML = rows.length
     ? rows.map((s) => `<div class="staffrow"><b>${s.mobile}</b><span>${s.name || "—"}</span></div>`).join("")
-    : `<p class="empty small">பணியாளர் இல்லை / No staff yet.</p>`;
+    : `<p class="empty small">${t("noStaff")}</p>`;
 }
 
 /* ---------- prompt ---------- */
@@ -589,7 +649,7 @@ function showPrompt({ kind, main, note, warn, onOk, onCancel }) {
   box.innerHTML = `<div class="promptbody"><b>${kind}</b>
       <div class="promptmain">${main}</div>
       ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}</div>
-    <div class="promptacts">${onOk ? `<button class="yes" data-ok>சரி</button>` : ""}
+    <div class="promptacts">${onOk ? `<button class="yes" data-ok>${t("yes")}</button>` : ""}
       <button class="del" data-no aria-label="Cancel">✕</button></div>`;
   const ok = box.querySelector("[data-ok]");
   if (ok) ok.onclick = onOk;
@@ -608,9 +668,8 @@ function render() {
   if (!n) {
     $("accHead").hidden = true;
     box.hidden = false;
-    box.innerHTML = `<p class="empty">பொருள் சொல்லுங்க…<br><span class="en">${
-      health.asr_configured ? "Hold the button and say an item."
-                            : "Type an item below — voice is off."}</span></p>`;
+    box.innerHTML = `<p class="empty">${t("emptyBill")}<br><span class="en">${
+      health.asr_configured ? t("emptyHint") : t("emptyHintType")}</span></p>`;
     $("totalRow").hidden = true;
     $("finalize").hidden = true;
     return;
@@ -624,21 +683,29 @@ function render() {
   // lines — but never collapsed over something still unresolved.
   const open = state.expanded || pending.length > 0;
   $("accHead").hidden = false;
-  $("accCount").textContent = `${n} ${n === 1 ? "பொருள் / item" : "பொருள் / items"}`;
+  $("accCount").textContent = `${n} ${n === 1 ? t("item") : t("items")}`;
   $("accLast").textContent = open ? "" : `${last.name} · ${rupees(last.amount)}`;
   $("accTotal").textContent = rupees(total);
   $("accChev").textContent = open ? "⌃" : "⌄";
   $("accHead").classList.toggle("alert", pending.length > 0);
   box.hidden = !open;
 
+  const fmtQty = (n) => (+n).toFixed(n % 1 ? 2 : 0).replace(/\.?0+$/, "") || "0";
   box.innerHTML = state.items.map((it, i) => {
-    const qty = it.price_led ? `${rupees(it.amount)} worth`
-                             : `${(+it.qty).toFixed(it.qty % 1 ? 2 : 0)} ${it.unit}`;
+    // A blend reads as "0.8+0.2 kg" so the shopkeeper can see both parts at a glance,
+    // rather than a single 1 kg that hides what was actually weighed.
+    const qty = it.combo && it.combo.length
+      ? `${it.combo.map((c) => fmtQty(c.qty)).join("+")} ${it.unit}`
+      : it.price_led ? `${rupees(it.amount)} worth`
+                     : `${fmtQty(it.qty)} ${it.unit}`;
     return `<div class="item ${it.pending ? "confirm" : ""}">
       <span class="qty">${qty}</span>
-      <span class="nm">${it.name}${it.pending ? `<span class="ask">இதுதானா? / Is this right?</span>` : ""}</span>
+      <span class="nm">${it.name}${
+        it.combo && it.combo.length
+          ? `<span class="parts">${it.combo.map((c) => `${c.name} ${rupees(c.amount)}`).join(" + ")}</span>`
+          : ""}${it.pending ? `<span class="ask">${t("isThisRight")}</span>` : ""}</span>
       <span class="amt">${rupees(it.amount)}</span>
-      ${it.pending ? `<button class="yes" data-ok="${i}">சரி</button>` : ""}
+      ${it.pending ? `<button class="yes" data-ok="${i}">${t("yes")}</button>` : ""}
       <button class="del" data-del="${i}" aria-label="Remove">✕</button></div>`;
   }).join("");
   box.querySelectorAll("[data-del]").forEach((b) => {
@@ -649,13 +716,13 @@ function render() {
   });
 
   $("runningTotal").innerHTML = pending.length
-    ? `${rupees(total)}<span class="pendingnote">+${pending.length} உறுதி செய்ய</span>`
+    ? `${rupees(total)}<span class="pendingnote">+${pending.length} ${t("toConfirm")}</span>`
     : rupees(total);
   $("totalRow").hidden = false;
   // Only an unresolved line already on the bill blocks finalising. An unanswered price
   // question does not — that item was never added, so there is nothing wrong to bill.
   $("finalize").hidden = pending.length > 0;
-  if (pending.length) setStatus("உறுதி செய்யுங்க / Confirm the highlighted item first");
+  if (pending.length) setStatus(t("confirmFirst"));
 }
 
 /* ---------- typed fallback ---------- */
@@ -663,7 +730,7 @@ function render() {
 $("typeToggle").onclick = () => {
   const f = $("typeForm");
   f.hidden = !f.hidden;
-  $("typeToggle").textContent = f.hidden ? "⌨ தட்டச்சு / Type instead" : "✕ மறை / Hide typing";
+  $("typeToggle").textContent = f.hidden ? `⌨ ${t("typeInstead")}` : `✕ ${t("hideTyping")}`;
   if (!f.hidden) $("typeInput").focus();
 };
 
@@ -676,10 +743,10 @@ $("typeForm").onsubmit = async (e) => {
   try {
     const d = await api("/api/parse", {
       method: "POST",
-      body: { text, shop_id: state.shop.id, mode: state.mode },
+      body: { text, shop_id: state.shop.id, mode: state.mode, lang: state.shop.lang },
     });
     apply(d, Math.round(performance.now() - t0));
-  } catch (err) { toast("இணைப்பு இல்லை / Network problem"); }
+  } catch (err) { toast(t("network")); }
 };
 
 /* ---------- finalise, pay, receipt ---------- */
@@ -700,7 +767,7 @@ async function finalize() {
     $("payRef").textContent = d.ref;
     show("payment");
   } catch (err) {
-    toast("பில் முடியலை / Could not finalise");
+    toast(t("notSaved"));
   } finally { $("finalize").disabled = false; }
 }
 

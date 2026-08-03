@@ -191,7 +191,7 @@ button{font-family:inherit;cursor:pointer;border:none}
 
 /* ---------- admin: SKU table ---------- */
 .tablehead,.skurow{
-  display:grid;grid-template-columns:1fr 62px 82px 34px;gap:8px;align-items:center;
+  display:grid;grid-template-columns:1fr 56px 76px 30px 30px;gap:6px;align-items:center;
 }
 .tablehead{padding:6px 16px;font-size:11px;font-weight:800;letter-spacing:.06em;
            text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line)}
@@ -241,3 +241,15 @@ button{font-family:inherit;cursor:pointer;border:none}
 
 .skuhead{padding:0 16px;margin:12px 0 4px}
 .mini.danger{background:none;border-color:var(--rec);color:var(--rec)}
+
+.sku-d{background:none;color:var(--dim);font-size:15px;padding:4px}
+.sku-d:active{color:var(--rec)}
+.item .parts{display:block;font-size:12.5px;color:var(--dim);font-weight:400;margin-top:2px}
+.field select{
+  width:100%;padding:15px 14px;font-size:18px;border-radius:var(--r);
+  background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),
+    linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+  background-position:calc(100% - 20px) 24px,calc(100% - 14px) 24px;
+  background-size:6px 6px,6px 6px;background-repeat:no-repeat;
+}

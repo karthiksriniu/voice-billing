@@ -46,6 +46,7 @@ class LineItem:
     spoken_name: str = ""      # the item words as heard, before matching — admin needs this
                                # to create a new SKU rather than reprice a near neighbour
     needs_price: bool = False  # in the catalog by name but no price known yet (D4)
+    combo: list[dict] = field(default_factory=list)   # parts of a "A plus B" line
     spoken_qty: float | None = None   # quantity as actually said. A price-led line derives
                                       # qty from the amount and the current price, which
                                       # overwrites it — admin needs the original to work
@@ -76,6 +77,10 @@ class Lang:
         self.fillers = {norm(f) for f in self.data["fillers"]}
         self.rules = self.data["phonetic_rules"]
         self.script = self.data["script"]
+        self._script_chars = (set(self.script["consonants"])
+                              | set(self.script["vowels"])
+                              | set(self.script["vowel_signs"])
+                              | {self.script["virama"]})
 
         self.units = {}
         for canon, spec in self.data["units"].items():
@@ -94,6 +99,7 @@ class Lang:
         self.commands = {
             norm(a): cmd for cmd, al in self.data["commands"].items() for a in al
         }
+        self.join = {norm(a) for a in self.data.get("join", [])}
 
     @staticmethod
     def _reverse(table: dict, cast) -> dict:
@@ -136,7 +142,7 @@ class Lang:
         Soundex and Metaphone are English-only and actively mislead on romanised Tamil, so
         the collapse is an ordered rule list from the language pack instead.
         """
-        out = self.translit(s) if any("஀" <= c <= "௿" for c in s) else s
+        out = self.translit(s) if any(c in self._script_chars for c in s) else s
         for src, dst in self.rules:
             out = out.replace(src, dst)
         return re.sub(r"(.)\1+", r"\1", out)
@@ -155,7 +161,7 @@ def norm(s: str) -> str:
     """Lowercase, strip punctuation and accents, collapse whitespace."""
     s = unicodedata.normalize("NFKC", s).lower().strip()
     s = _CURRENCY_RE.sub(r"\1 rupees ", s)
-    s = re.sub(r"[^\w\s஀-௿.]", " ", s)
+    s = re.sub(r"[^\w\s\u0900-\u0D7F\u200c\u200d.]", " ", s)
     # Keep decimal points; turn every other dot into an explicit separator. A trailing dot
     # made "ரூபாய்." match no money word, but simply deleting it also threw away the
     # sentence boundary — which is the clearest signal that one dictated item has ended.
@@ -243,11 +249,25 @@ class Parser:
 
         # Multi-word measures collapse to a single token before splitting, so "arai kilo"
         # survives as one concept rather than becoming 0.5 followed by kg.
+        # Rewrite to the bare fraction, not to "arai": "one and half kilo" would otherwise
+        # become "one arai kilo", and "arai kilo" is a measure alias meaning 0.5 kg — which
+        # replaced the 1 instead of adding to it.
+        for phrase in ("and a half", "and half", "மற்றும் அரை"):
+            text = text.replace(f" {phrase} ", " 0.5 ")
+
         for phrase in sorted(self.lang.measures, key=len, reverse=True):
             spec = self.lang.measures[phrase]
             text = cut_phrase(text, phrase, f"§{spec['qty']}§{spec['unit']}")
 
         for chunk in self._split_items(text):
+            # "plantation AA 800 gram plus pee berry 200 gram" is one thing the customer is
+            # buying — a blend — so it becomes a single line carrying both parts, not two.
+            if self._has_join(chunk):
+                combined = self._parse_combo(chunk, asr_confidence)
+                if combined:
+                    res.items.append(combined)
+                    continue
+
             item, info = self._parse_one(chunk, asr_confidence)
             if item:
                 res.items.append(item)
@@ -259,6 +279,48 @@ class Parser:
             elif chunk.strip():
                 res.unparsed.append(chunk.strip())
         return res
+
+    def _has_join(self, chunk: str) -> bool:
+        return any(f" {j} " in f" {chunk} " for j in self.lang.join)
+
+    def _parse_combo(self, chunk: str, asr_conf: float) -> LineItem | None:
+        """Parse "A <qty> plus B <qty>" into one line.
+
+        The customer buys a blend; the bill should say so. Amount is the sum of the parts,
+        each priced at its own rate, so 800g of a Rs800/kg bean plus 200g of a Rs1200/kg
+        one totals Rs880 — not an average, which would misprice every blend.
+        """
+        pattern = "|".join(re.escape(j) for j in sorted(self.lang.join, key=len, reverse=True))
+        parts = [p.strip() for p in re.split(rf"\s(?:{pattern})\s", f" {chunk} ") if p.strip()]
+        if len(parts) < 2:
+            return None
+
+        items = []
+        for part in parts:
+            it, _ = self._parse_one(part, asr_conf)
+            if it is None:
+                return None                    # all-or-nothing: a half-parsed blend is worse
+            items.append(it)
+
+        total = round(sum(i.amount for i in items), 2)
+        return LineItem(
+            product_id=None,
+            name=" + ".join(i.name for i in items),
+            qty=round(sum(i.qty for i in items), 3),
+            unit=items[0].unit,
+            unit_price=0.0,
+            amount=total,
+            confidence=round(min(i.confidence for i in items), 3),
+            verdict=("accept" if min(i.confidence for i in items) >= ACCEPT_THRESHOLD
+                     else "confirm" if min(i.confidence for i in items) >= CONFIRM_THRESHOLD
+                     else "reject"),
+            match_score=min(i.match_score for i in items),
+            needs_price=any(i.needs_price for i in items),
+            combo=[{"product_id": i.product_id, "name": i.name, "qty": i.qty,
+                    "unit": i.unit, "unit_price": i.unit_price, "amount": i.amount}
+                   for i in items],
+            raw=chunk.strip(),
+        )
 
     def _split_items(self, text: str) -> list[str]:
         """Split a multi-item utterance into one chunk per item.

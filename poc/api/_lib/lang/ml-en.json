@@ -1,7 +1,7 @@
 {
-  "_comment": "Language pack 1: Tamil + English (Chennai). Data only, no logic — a second language is a sibling file. Every token is listed in both Tamil script and romanised Latin because Sarvam returns Tamil script for Tamil audio and Latin for English, and code-mixed utterances come back mixed.",
-  "code": "ta-en",
-  "name": "Tamil + English",
+  "_comment": "Language pack: ml + English. Numerals, units and money are native; English fallbacks are retained because code-mixing is the norm. NOT yet validated against real ASR output for this language — only ta-en has been tested against Sarvam.",
+  "code": "ml-en",
+  "name": "ML + English",
   "digits": {
     "0": [
       "zero",
@@ -9,71 +9,84 @@
       "poojyam"
     ],
     "1": [
-      "one",
-      "ஒன்று",
-      "ஒன்னு",
-      "onnu",
       "ondru",
+      "one",
+      "onnu",
       "oru",
-      "ஒரு"
+      "ஒன்னு",
+      "ஒன்று",
+      "ஒரு",
+      "ഒന്ന്"
     ],
     "2": [
-      "two",
-      "ரெண்டு",
-      "இரண்டு",
-      "rendu",
+      "erandu",
       "irandu",
-      "erandu"
+      "randu",
+      "rendu",
+      "two",
+      "இரண்டு",
+      "ரெண்டு",
+      "രണ്ട്"
     ],
     "3": [
+      "moondru",
+      "moonu",
       "three",
       "மூணு",
       "மூன்று",
-      "moonu",
-      "moondru"
+      "മൂന്ന്"
     ],
     "4": [
       "four",
-      "நாலு",
-      "நான்கு",
       "naalu",
-      "naangu"
+      "naangu",
+      "நான்கு",
+      "நாலு",
+      "നാല്"
     ],
     "5": [
+      "aindhu",
+      "ainthu",
+      "anchu",
+      "anju",
       "five",
       "அஞ்சு",
       "ஐந்து",
-      "anju",
-      "ainthu",
-      "aindhu"
+      "അഞ്ച്"
     ],
     "6": [
+      "aaru",
       "six",
       "ஆறு",
-      "aaru"
+      "ആറ്"
     ],
     "7": [
-      "seven",
-      "ஏழு",
       "ezhu",
-      "yezhu"
+      "seven",
+      "yezhu",
+      "ஏழு",
+      "ഏഴ്"
     ],
     "8": [
       "eight",
+      "ettu",
       "எட்டு",
-      "ettu"
+      "എട്ട്"
     ],
     "9": [
       "nine",
-      "ஒன்பது",
+      "onbadhu",
       "onbathu",
-      "onbadhu"
+      "onpathu",
+      "ஒன்பது",
+      "ഒൻപത്"
     ],
     "10": [
+      "paththu",
+      "pathu",
       "ten",
       "பத்து",
-      "pathu",
-      "paththu"
+      "പത്ത്"
     ],
     "11": [
       "eleven",
@@ -92,13 +105,14 @@
       "pathinanju"
     ],
     "20": [
+      "irubathi",
+      "irubathu",
+      "irubathy",
+      "irupathu",
       "twenty",
       "இருபது",
-      "irubathu",
-      "irupathu",
       "இருபத்தி",
-      "irubathi",
-      "irubathy"
+      "ഇരുപത്"
     ],
     "25": [
       "twentyfive",
@@ -120,13 +134,15 @@
       "naarpathi"
     ],
     "50": [
+      "aimbathi",
+      "aimbathu",
+      "ambathi",
+      "ambathu",
+      "ampathu",
       "fifty",
       "ஐம்பது",
-      "aimbathu",
-      "ambathu",
       "ஐம்பத்தி",
-      "aimbathi",
-      "ambathi"
+      "അമ്പത്"
     ],
     "60": [
       "sixty",
@@ -158,9 +174,10 @@
     ],
     "100": [
       "hundred",
-      "நூறு",
       "nooru",
-      "நூற்று"
+      "நூறு",
+      "நூற்று",
+      "നൂറ്"
     ],
     "200": [
       "இருநூறு",
@@ -171,24 +188,28 @@
       "ainooru"
     ],
     "1000": [
+      "aayiram",
       "thousand",
       "ஆயிரம்",
-      "aayiram"
+      "ആയിരം"
     ],
     "1.5": [
-      "ஒன்றரை",
-      "ஒன்னரை",
-      "onnarai",
-      "onnara",
       "ondrarai",
-      "oneandahalf"
+      "oneandahalf",
+      "onnara",
+      "onnarai",
+      "ஒன்னரை",
+      "ஒன்றரை",
+      "ഒന്നര"
     ],
     "2.5": [
-      "ரெண்டரை",
-      "இரண்டரை",
+      "irandarai",
+      "randarai",
       "rendarai",
       "renderai",
-      "irandarai"
+      "இரண்டரை",
+      "ரெண்டரை",
+      "രണ്ടര"
     ],
     "3.5": [
       "மூணரை",
@@ -217,10 +238,12 @@
       "கால்வாசி"
     ],
     "0.5": [
-      "அரை",
+      "ara",
       "arai",
       "half",
-      "அரைக்கால்"
+      "அரை",
+      "அரைக்கால்",
+      "അര"
     ],
     "0.75": [
       "முக்கால்",
@@ -245,7 +268,8 @@
         "kilogrms",
         "kilos",
         "கிலோ",
-        "கிலோகிராம்"
+        "கிலோகிராம்",
+        "കിലോ"
       ],
       "base_grams": 1000,
       "divisible": true
@@ -260,7 +284,8 @@
         "grm",
         "grms",
         "kiraam",
-        "கிராம்"
+        "கிராம்",
+        "ഗ്രാം"
       ],
       "base_grams": 1,
       "divisible": true
@@ -273,7 +298,8 @@
         "litres",
         "ltr",
         "lts",
-        "லிட்டர்"
+        "லிட்டர்",
+        "ലിറ്റർ"
       ],
       "divisible": true
     },
@@ -296,7 +322,8 @@
         "pkt",
         "pkts",
         "பாக்கட்",
-        "பாக்கெட்"
+        "பாக்கெட்",
+        "പാക്കറ്റ്"
       ],
       "divisible": false
     },
@@ -313,7 +340,8 @@
         "unit",
         "units",
         "எண்ணிக்கை",
-        "பீஸ்"
+        "பீஸ்",
+        "എണ്ണം"
       ],
       "divisible": false
     },
@@ -365,6 +393,7 @@
   "money": {
     "aliases": [
       "roobai",
+      "roopa",
       "roopai",
       "rs",
       "ruba",
@@ -380,7 +409,8 @@
       "ரூபாஸ்",
       "ரூபீஸ்",
       "ரூப்பாய்",
-      "ரூவா"
+      "ரூவா",
+      "രൂപ"
     ],
     "symbol": "₹"
   },
@@ -404,11 +434,12 @@
   "commands": {
     "cancel_last": [
       "cancel last",
-      "remove last",
-      "கடைசி வேண்டாம்",
       "kadaisi vendaam",
+      "remove last",
+      "vendaam",
+      "கடைசி வேண்டாம்",
       "வேண்டாம்",
-      "vendaam"
+      "വേണ്ട"
     ],
     "clear_all": [
       "clear all",
@@ -417,11 +448,12 @@
       "ellam vendaam"
     ],
     "total": [
-      "total",
-      "மொத்தம்",
       "motham",
+      "total",
       "total podu",
-      "டோட்டல்"
+      "டோட்டல்",
+      "மொத்தம்",
+      "ആകെ"
     ],
     "remove_item": [
       "remove",
@@ -578,58 +610,71 @@
   ],
   "_comment_script": "Tamil script -> Latin, so a word written in either script folds to the same key. Sarvam returns English words transliterated into Tamil ('sugar' -> 'சுகர்'), which matches neither the Latin catalog name nor the Tamil one without this.",
   "script": {
-    "virama": "்",
+    "virama": "്",
     "vowels": {
-      "அ": "a",
-      "ஆ": "aa",
-      "இ": "i",
-      "ஈ": "ii",
-      "உ": "u",
-      "ஊ": "uu",
-      "எ": "e",
-      "ஏ": "ee",
-      "ஐ": "ai",
-      "ஒ": "o",
-      "ஓ": "oo",
-      "ஔ": "au",
-      "ஃ": "h"
+      "അ": "a",
+      "ആ": "aa",
+      "ഇ": "i",
+      "ഈ": "ii",
+      "ഉ": "u",
+      "ഊ": "uu",
+      "എ": "e",
+      "ഏ": "ee",
+      "ഐ": "ai",
+      "ഒ": "o",
+      "ഓ": "oo",
+      "ഔ": "au"
     },
     "vowel_signs": {
-      "ா": "aa",
-      "ி": "i",
-      "ீ": "ii",
-      "ு": "u",
-      "ூ": "uu",
-      "ெ": "e",
-      "ே": "ee",
-      "ை": "ai",
-      "ொ": "o",
-      "ோ": "oo",
-      "ௌ": "au"
+      "ാ": "aa",
+      "ി": "i",
+      "ീ": "ii",
+      "ു": "u",
+      "ൂ": "uu",
+      "െ": "e",
+      "േ": "ee",
+      "ൈ": "ai",
+      "ൊ": "o",
+      "ോ": "oo",
+      "ൌ": "au"
     },
     "consonants": {
-      "க": "k",
-      "ங": "ng",
-      "ச": "s",
-      "ஞ": "nj",
-      "ட": "t",
-      "ண": "n",
-      "த": "t",
-      "ந": "n",
-      "ப": "p",
-      "ம": "m",
-      "ய": "y",
-      "ர": "r",
-      "ல": "l",
-      "வ": "v",
-      "ழ": "l",
-      "ள": "l",
-      "ற": "r",
-      "ன": "n",
-      "ஜ": "j",
-      "ஷ": "sh",
-      "ஸ": "s",
-      "ஹ": "h"
+      "ക": "k",
+      "ഖ": "kh",
+      "ഗ": "g",
+      "ഘ": "gh",
+      "ങ": "ng",
+      "ച": "ch",
+      "ഛ": "chh",
+      "ജ": "j",
+      "ഝ": "jh",
+      "ഞ": "nj",
+      "ട": "t",
+      "ഠ": "th",
+      "ഡ": "d",
+      "ഢ": "dh",
+      "ണ": "n",
+      "ത": "t",
+      "ഥ": "th",
+      "ദ": "d",
+      "ധ": "dh",
+      "ന": "n",
+      "പ": "p",
+      "ഫ": "ph",
+      "ബ": "b",
+      "ഭ": "bh",
+      "മ": "m",
+      "യ": "y",
+      "ര": "r",
+      "ല": "l",
+      "വ": "v",
+      "ശ": "sh",
+      "ഷ": "sh",
+      "സ": "s",
+      "ഹ": "h",
+      "ള": "l",
+      "ഴ": "zh",
+      "റ": "r"
     }
   },
   "_comment_join": "'plus' binds two items into one bill line: a coffee blend sold as 800g of one bean plus 200g of another is one thing the customer buys.",

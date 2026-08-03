@@ -45,7 +45,8 @@ class SarvamASR:
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    async def transcribe(self, audio: bytes, filename: str = "clip.webm") -> Transcription:
+    async def transcribe(self, audio: bytes, filename: str = "clip.webm",
+                         language: str = "") -> Transcription:
         if not self.configured:
             return Transcription("", 0.0, error="SARVAM_API_KEY not set")
         try:
@@ -54,7 +55,8 @@ class SarvamASR:
                     SARVAM_URL,
                     headers={"api-subscription-key": self.api_key},
                     files={"file": (filename, audio, "audio/webm")},
-                    data={"model": SARVAM_MODEL, "language_code": SARVAM_LANG},
+                    data={"model": SARVAM_MODEL,
+                          "language_code": language or SARVAM_LANG},
                 )
             if r.status_code >= 400:
                 return Transcription("", 0.0, error=f"sarvam {r.status_code}: {r.text[:200]}")
@@ -77,7 +79,8 @@ class EchoASR:
     name = "echo"
     configured = True
 
-    async def transcribe(self, audio: bytes, filename: str = "") -> Transcription:
+    async def transcribe(self, audio: bytes, filename: str = "",
+                         language: str = "") -> Transcription:
         return Transcription("", 0.0, error="echo backend takes text, not audio")
 
 

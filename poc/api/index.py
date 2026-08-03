@@ -40,12 +40,34 @@ app.add_middleware(
 # plausible prefix costs nothing and removes the guess.
 router = APIRouter()
 
-LANG = Lang(os.environ.get("LANG_PACK", "ta-en"))
+# One Lang per pack, built once. Which pack a request uses follows the shop's chosen
+# language, so a Kannada shop is parsed with Kannada numerals and units.
+LANGS: dict[str, Lang] = {}
+LANG_FOR = {"en": "ta-en", "ta": "ta-en", "hi": "hi-en",
+            "ml": "ml-en", "te": "te-en", "kn": "kn-en"}
+ASR_FOR = {"en": "en-IN", "ta": "ta-IN", "hi": "hi-IN",
+           "ml": "ml-IN", "te": "te-IN", "kn": "kn-IN"}
+
+
+def lang_for(code: str) -> Lang:
+    pack = LANG_FOR.get(code or "ta", "ta-en")
+    if pack not in LANGS:
+        try:
+            LANGS[pack] = Lang(pack)
+        except Exception:                              # noqa: BLE001 — never break billing
+            LANGS[pack] = LANGS.setdefault("ta-en", Lang("ta-en"))
+    return LANGS[pack]
+
+
+LANG = lang_for("ta")
 DEFAULT_SHOP = os.environ.get("DEFAULT_SHOP_ID", "demo")
 
 
-async def parser_for(shop_id: str) -> Parser:
-    return Parser(LANG, Catalog(await db.get_products(shop_id)))
+async def parser_for(shop_id: str, lang: str = "") -> Parser:
+    if not lang:
+        shop = await db.get_shop(shop_id) or {}
+        lang = shop.get("lang") or "ta"
+    return Parser(lang_for(lang), Catalog(await db.get_products(shop_id)))
 
 
 class ParseRequest(BaseModel):
@@ -53,6 +75,7 @@ class ParseRequest(BaseModel):
     shop_id: str = DEFAULT_SHOP
     asr_confidence: float = 1.0
     mode: str = "billing"
+    lang: str = ""
 
 
 class ShopRequest(BaseModel):
@@ -70,11 +93,16 @@ class SignupRequest(BaseModel):
     passcode: str
     name: str = "Shop"
     vpa: str = ""
+    lang: str = "ta"
 
 
 class LoginRequest(BaseModel):
     mobile: str
     passcode: str
+
+
+class DeleteRequest(BaseModel):
+    id: str
 
 
 class StaffRequest(BaseModel):
@@ -110,7 +138,7 @@ def serialise(item) -> dict:
         "confidence": item.confidence, "verdict": item.verdict,
         "price_led": item.price_led, "raw": item.raw,
         "match_score": item.match_score, "spoken_name": item.spoken_name,
-        "needs_price": item.needs_price,
+        "needs_price": item.needs_price, "combo": item.combo,
     }
 
 
@@ -124,6 +152,14 @@ def claims_of(request: Request) -> dict | None:
 
 def deny(msg: str, code: int = 401):
     return JSONResponse({"ok": False, "error": msg}, status_code=code)
+
+
+def tidy_name(name: str) -> str:
+    """Title-case a dictated name so the catalog reads like a catalog, not a transcript.
+    Latin only — Indic scripts have no case, and .title() would corrupt combining marks."""
+    if any(c > "\u0900" for c in name):
+        return name.strip()
+    return " ".join(w.capitalize() if w.islower() else w for w in name.strip().split())
 
 
 def admin_proposals(res) -> list[dict]:
@@ -166,13 +202,14 @@ def admin_proposals(res) -> list[dict]:
                         "was": it.unit_price, "qty": q,
                         "certain": certainty("reprice", it.match_score, q)})
         else:
-            out.append({"action": "create", "id": "", "name": it.spoken_name or it.name,
+            out.append({"action": "create", "id": "",
+                        "name": tidy_name(it.spoken_name or it.name),
                         "unit": it.unit, "price": rate(it.amount, q),
                         "near": it.name, "near_score": it.match_score, "qty": q,
                         "certain": certainty("create", it.match_score, q)})
     for u in res.unmatched:
         if u.get("money"):
-            out.append({"action": "create", "id": "", "name": u["name"],
+            out.append({"action": "create", "id": "", "name": tidy_name(u["name"]),
                         "unit": u.get("unit") or "piece", "near": "", "near_score": 0.0,
                         "qty": u.get("qty"), "price": rate(u["money"], u.get("qty")),
                         "certain": certainty("create", 0.0, u.get("qty"))})
@@ -271,12 +308,14 @@ async def auth_signup(req: SignupRequest):
     existing = await db.get_shop(shop_id)
     if existing and existing.get("passcode_hash"):
         return deny("This number already has a shop — sign in instead", 409)
-    error = await db.create_shop(shop_id, req.name, req.vpa, auth.hash_passcode(code))
+    error = await db.create_shop(shop_id, req.name, req.vpa,
+                                 auth.hash_passcode(code), req.lang)
     if error:
         return deny(error, 502)
     await db.add_staff(shop_id, shop_id, auth.hash_passcode(code), "owner", req.name)
     return {"ok": True, "token": auth.issue_token(shop_id, shop_id, "owner"),
-            "shop_id": shop_id, "role": "owner", "shop_name": req.name, "vpa": req.vpa}
+            "shop_id": shop_id, "role": "owner", "shop_name": req.name,
+            "vpa": req.vpa, "lang": req.lang}
 
 
 @router.post("/auth/login")
@@ -286,15 +325,16 @@ async def auth_login(req: LoginRequest):
     shop = await db.get_shop(mobile)
     if shop and shop.get("passcode_hash") and auth.verify_passcode(code, shop["passcode_hash"]):
         return {"ok": True, "token": auth.issue_token(mobile, mobile, "owner"),
-                "shop_id": mobile, "role": "owner",
-                "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", "")}
+                "shop_id": mobile, "role": "owner", "shop_name": shop.get("name", ""),
+                "vpa": shop.get("upi_vpa", ""), "lang": shop.get("lang") or "ta"}
     staff = await db.get_staff(mobile)
     if staff and auth.verify_passcode(code, staff.get("passcode_hash", "")):
         shop = await db.get_shop(staff["shop_id"]) or {}
         return {"ok": True,
                 "token": auth.issue_token(staff["shop_id"], mobile, staff.get("role", "user")),
                 "shop_id": staff["shop_id"], "role": staff.get("role", "user"),
-                "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", "")}
+                "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", ""),
+                "lang": shop.get("lang") or "ta"}
     # One message for both causes, so this can't be used to enumerate numbers.
     return deny("Wrong number or passcode", 401)
 
@@ -336,6 +376,17 @@ async def clear_catalog(request: Request):
                         status_code=200 if not error else 502)
 
 
+@router.post("/catalog/delete")
+async def delete_product(req: DeleteRequest, request: Request):
+    """Remove one SKU. POST rather than DELETE-with-body, which proxies handle unevenly."""
+    c = claims_of(request)
+    if not c or c["role"] != "owner":
+        return deny("Owner only")
+    ok, error = await db.delete_product(c["shop"], req.id)
+    return JSONResponse({"ok": ok and not error, "error": error},
+                        status_code=200 if ok and not error else 502)
+
+
 @router.get("/shops")
 async def shops_by_name(q: str = ""):
     """Find a shop id by name. Returns id and name only — no passcode material."""
@@ -360,7 +411,7 @@ async def parse_text(req: ParseRequest):
     """Text in, line items out. The demo's offline path, and the endpoint the Phase 1
     eval harness will drive."""
     t0 = time.perf_counter()
-    p = await parser_for(req.shop_id)
+    p = await parser_for(req.shop_id, req.lang)
     res = p.parse(req.text, asr_confidence=req.asr_confidence)
     payload = result_payload(res, int((time.perf_counter() - t0) * 1000), req.mode)
     await db.log_utterance(req.shop_id, req.text, payload)
@@ -369,14 +420,15 @@ async def parse_text(req: ParseRequest):
 
 @router.post("/transcribe")
 async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_SHOP),
-                     mode: str = Form("billing")):
+                     mode: str = Form("billing"), lang: str = Form("")):
     """Audio in, line items out. Reports asr_ms separately from parse_ms because the
     latency budget in PLAN.md is about the parse stage, and the network hop here is an
     artefact of the PoC that the shipped product will not have."""
     t0 = time.perf_counter()
     raw = await audio.read()
     asr = get_asr()
-    tr = await asr.transcribe(raw, audio.filename or "clip.webm")
+    tr = await asr.transcribe(raw, audio.filename or "clip.webm",
+                              language=ASR_FOR.get(lang or "ta", "ta-IN"))
     asr_ms = int((time.perf_counter() - t0) * 1000)
 
     if tr.error or not tr.text:
@@ -388,7 +440,7 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
         )
 
     t1 = time.perf_counter()
-    p = await parser_for(shop_id)
+    p = await parser_for(shop_id, lang)
     res = p.parse(tr.text, asr_confidence=tr.confidence)
     payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode)
     payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw)}

@@ -13,10 +13,10 @@
 <section id="auth" class="screen active">
   <div class="pad">
     <h1>வாக்கு <span class="sub">Vaakku</span></h1>
-    <p class="lede">பேசுங்க, பில் தானா எழுதும்.<br><span class="en">Speak, and the bill writes itself.</span></p>
+    <p class="lede" data-t="tagline">Speak, and the bill writes itself.</p>
 
     <label class="field">
-      <span>மொபைல் நம்பர் / Mobile number</span>
+      <span data-t="mobile">Mobile number</span>
       <input id="mobile" type="tel" inputmode="numeric" maxlength="14" placeholder="98400 12345" autocomplete="tel">
     </label>
 
@@ -24,38 +24,39 @@
     <div id="loginBox" hidden>
       <p class="who" id="whoLine"></p>
       <label class="field">
-        <span>6 இலக்க கடவுஎண் / 6-digit passcode</span>
+        <span data-t="passcode">6-digit passcode</span>
         <input id="loginCode" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="current-password">
       </label>
-      <button id="loginBtn" class="primary">உள்ளே போ / Sign in</button>
-      <button id="backBtn" class="ghost wide">வேற நம்பர் / Different number</button>
+      <button id="loginBtn" class="primary" data-t="signIn">Sign in</button>
+      <button id="backBtn" class="ghost wide" data-t="otherNumber">Different number</button>
     </div>
 
     <!-- New business -->
     <div id="signupBox" hidden>
-      <p class="who">புதிய கடை / New business</p>
+      <p class="who" data-t="newBiz">New business</p>
       <label class="field">
-        <span>கடை பெயர் / Shop name</span>
+        <span data-t="language">Language</span>
+        <select id="langPick"></select>
+      </label>
+      <label class="field">
+        <span data-t="shopName">Shop name</span>
         <input id="shopName" type="text" placeholder="Anand Stores" autocomplete="organization">
       </label>
       <label class="field">
-        <span>UPI ID</span>
+        <span data-t="upiId">UPI ID</span>
         <input id="vpa" type="text" placeholder="yourname@okhdfcbank" autocomplete="off" spellcheck="false">
       </label>
       <label class="field">
-        <span>6 இலக்க கடவுஎண் / Choose a 6-digit passcode</span>
+        <span data-t="choosePasscode">Choose a passcode</span>
         <input id="signupCode" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="new-password">
       </label>
-      <button id="signupBtn" class="primary">கடை தொடங்கு / Create business</button>
-      <button id="backBtn2" class="ghost wide">வேற நம்பர் / Different number</button>
+      <button id="signupBtn" class="primary" data-t="createBiz">Create business</button>
+      <button id="backBtn2" class="ghost wide" data-t="otherNumber">Different number</button>
     </div>
 
-    <button id="continueBtn" class="primary">தொடரு / Continue</button>
+    <button id="continueBtn" class="primary" data-t="cont">Continue</button>
 
-    <div class="notice">
-      <p><b>இது ஒரு டெமோ / This is a demo.</b></p>
-      <p>உங்க குரல் இணையம் வழியாக அனுப்பப்படும். <span class="en">Your voice is sent over the internet to be recognised. The real app will work offline and send nothing.</span> <span class="en">No audio is stored.</span></p>
-    </div>
+    <div class="notice"><p data-t="demoNote">This is a demo.</p></div>
     <p class="fineprint" id="healthLine">…</p>
   </div>
 </section>
@@ -66,8 +67,8 @@
     <b id="shopLabel">Shop</b>
     <!-- Owner only. Staff never see this: they bill, they don't set prices. -->
     <div id="modeSwitch" class="switch" hidden>
-      <button data-mode="billing" class="on">பில்</button>
-      <button data-mode="admin">விலை</button>
+      <button data-mode="billing" class="on" data-t="billing">Bill</button>
+      <button data-mode="admin" data-t="admin">Prices</button>
     </div>
     <button id="signOut" class="ghost" title="Sign out">⏻</button>
   </header>
@@ -82,25 +83,25 @@
       <span class="accright"><b id="accTotal">₹0</b><span id="accChev">⌄</span></span>
     </button>
     <div id="items" class="items">
-      <p class="empty">பொருள் சொல்லுங்க…<br><span class="en">Hold the button and say an item.<br>“ரெண்டு கிலோ சர்க்கரை” · “arai kilo thuvaram paruppu” · “ten rupees coriander”</span></p>
+      <p class="empty"></p>
     </div>
   </div>
 
   <!-- ADMIN -->
   <div id="adminPanel" class="panel" hidden>
-    <div class="hint">சொல்லுங்க / Say: “potato 1 kilo 100 rupees” · “coriander 40 rupees”</div>
+    <div class="hint" data-t="adminHint">Say: “potato 1 kilo 100 rupees”</div>
 
     <div class="sectionhead skuhead">
-      <span>பொருட்கள் / Items</span>
-      <button id="clearCatalogBtn" class="mini danger">எல்லாம் நீக்கு / Clear all</button>
+      <span data-t="itemsHead">Items</span>
+      <button id="clearCatalogBtn" class="mini danger" data-t="clearAll">Clear all</button>
     </div>
-    <div class="tablehead"><span>பொருள் / Item</span><span>UOM</span><span>விலை / Price</span><span></span></div>
+    <div class="tablehead"><span data-t="name">Item</span><span data-t="uom">UOM</span><span data-t="price">Price</span><span></span></div>
     <div id="skuList" class="skulist"></div>
 
     <div class="section">
       <div class="sectionhead">
-        <span>ஆட்கள் / Staff</span>
-        <button id="addStaffBtn" class="mini">+ சேர் / Add</button>
+        <span data-t="staffHead">Staff</span>
+        <button id="addStaffBtn" class="mini" data-t="add">Add</button>
       </div>
       <div id="staffList" class="stafflist"></div>
       <form id="staffForm" class="staffform" hidden>
@@ -108,7 +109,7 @@
         <input id="staffCode" type="password" inputmode="numeric" maxlength="6" placeholder="6-digit passcode">
         <input id="staffName" type="text" placeholder="Name (optional)">
         <div class="staffacts">
-          <button type="submit" class="mini go">சேர் / Add</button>
+          <button type="submit" class="mini go" data-t="add">Add</button>
           <button type="button" id="staffCancel" class="mini">✕</button>
         </div>
       </form>
@@ -116,7 +117,7 @@
   </div>
 
   <div class="totalrow" id="totalRow" hidden>
-    <span>மொத்தம் / Total</span><b id="runningTotal">₹0</b>
+    <span data-t="total">Total</span><b id="runningTotal">₹0</b>
   </div>
 
   <div class="controls">
@@ -128,20 +129,20 @@
       <button type="submit" aria-label="Add">→</button>
     </form>
     <button id="typeToggle" class="ghost small">⌨ தட்டச்சு / Type instead</button>
-    <button id="finalize" class="primary finalize" hidden>பில் முடி / Finalise bill</button>
+    <button id="finalize" class="primary finalize" hidden data-t="finalise">Finalise bill</button>
   </div>
 </section>
 
 <!-- Payment -->
 <section id="payment" class="screen">
   <div class="pad center">
-    <p class="paylabel">வாங்க வேண்டியது / Amount due</p>
+    <p class="paylabel" data-t="amountDue">Amount due</p>
     <div class="payamount" id="payAmount">₹0</div>
     <img id="qr" class="qr" alt="UPI QR code">
     <p class="fineprint" id="payRef"></p>
-    <button id="received" class="primary big">வந்தது / Received</button>
-    <button id="backToBill" class="ghost wide">திரும்பு / Back to bill</button>
-    <p class="fineprint dim">பணம் வந்ததா நீங்க பாத்து அழுத்துங்க.<br><span class="en">You confirm payment yourself, the same way you check today. The app cannot detect it.</span></p>
+    <button id="received" class="primary big" data-t="received">Received</button>
+    <button id="backToBill" class="ghost wide" data-t="backToBill">Back to bill</button>
+    <p class="fineprint dim" data-t="payNote">You confirm payment yourself.</p>
   </div>
 </section>
 
@@ -150,12 +151,13 @@
   <div class="pad center">
     <div class="tick">✓</div>
     <div class="payamount" id="paidAmount">₹0</div>
-    <p class="paylabel">பெறப்பட்டது / Received</p>
-    <button id="nextCustomer" class="primary big">அடுத்த கஸ்டமர் / Next customer</button>
+    <p class="paylabel" data-t="received">Received</p>
+    <button id="nextCustomer" class="primary big" data-t="nextCustomer">Next customer</button>
   </div>
 </section>
 
 <div id="toast" class="toast"></div>
+<script src="/i18n.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
