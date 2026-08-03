@@ -89,31 +89,31 @@
 
   <!-- ADMIN -->
   <div id="adminPanel" class="panel" hidden>
-    <div class="hint" data-t="adminHint">Say: “potato 1 kilo 100 rupees”</div>
-
-    <div class="sectionhead skuhead">
-      <span data-t="itemsHead">Items</span>
-      <button id="clearCatalogBtn" class="mini danger" data-t="clearAll">Clear all</button>
-    </div>
-    <div class="tablehead"><span data-t="name">Item</span><span data-t="uom">UOM</span><span data-t="price">Price</span><span></span></div>
-    <div id="skuList" class="skulist"></div>
-
-    <div class="section">
-      <div class="sectionhead">
-        <span data-t="staffHead">Staff</span>
-        <button id="addStaffBtn" class="mini" data-t="add">Add</button>
-      </div>
+    <!-- Staff first, collapsed. It is set up once and then barely touched, so it must not
+         push the item list — the thing actually being worked on — under the talk button. -->
+    <button id="staffHead" class="acc slim">
+      <span class="accsum"><b><span data-t="staffHead">Staff</span> <span id="staffCount"></span></b></span>
+      <span class="accright"><span id="staffChev">⌄</span></span>
+    </button>
+    <div id="staffBody" class="staffbody" hidden>
       <div id="staffList" class="stafflist"></div>
-      <form id="staffForm" class="staffform" hidden>
+      <form id="staffForm" class="staffform">
         <input id="staffMobile" type="tel" inputmode="numeric" maxlength="14" placeholder="Mobile number">
         <input id="staffCode" type="password" inputmode="numeric" maxlength="6" placeholder="6-digit passcode">
         <input id="staffName" type="text" placeholder="Name (optional)">
-        <div class="staffacts">
-          <button type="submit" class="mini go" data-t="add">Add</button>
-          <button type="button" id="staffCancel" class="mini">✕</button>
-        </div>
+        <div class="staffacts"><button type="submit" class="mini go" data-t="add">Add</button></div>
       </form>
     </div>
+
+    <div class="hint" data-t="adminHint">Say: “potato 1 kilo 100 rupees”</div>
+
+    <div class="sectionhead skuhead">
+      <span><span data-t="itemsHead">Items</span> <span id="skuCount"></span></span>
+      <button id="clearCatalogBtn" class="mini danger" data-t="clearAll">Clear all</button>
+    </div>
+    <div class="tablehead"><span data-t="name">Item</span><span data-t="uom">UOM</span><span data-t="price">Price</span><span></span><span></span></div>
+    <!-- Its own scroll container, so the list grows without pushing anything off screen. -->
+    <div id="skuList" class="skulist"></div>
   </div>
 
   <div class="totalrow" id="totalRow" hidden>

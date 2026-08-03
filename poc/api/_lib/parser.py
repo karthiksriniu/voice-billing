@@ -225,7 +225,8 @@ class Parser:
 
     # -- main entry ---------------------------------------------------------
 
-    def parse(self, transcript: str, asr_confidence: float = 1.0) -> ParseResult:
+    def parse(self, transcript: str, asr_confidence: float = 1.0,
+              mode: str = "billing") -> ParseResult:
         res = ParseResult(transcript=transcript)
         text = norm(transcript)
         if not text:
@@ -259,7 +260,7 @@ class Parser:
             spec = self.lang.measures[phrase]
             text = cut_phrase(text, phrase, f"§{spec['qty']}§{spec['unit']}")
 
-        for chunk in self._split_items(text):
+        for chunk in self._split_items(text, mode):
             # "plantation AA 800 gram plus pee berry 200 gram" is one thing the customer is
             # buying — a blend — so it becomes a single line carrying both parts, not two.
             if self._has_join(chunk):
@@ -322,7 +323,7 @@ class Parser:
             raw=chunk.strip(),
         )
 
-    def _split_items(self, text: str) -> list[str]:
+    def _split_items(self, text: str, mode: str = "billing") -> list[str]:
         """Split a multi-item utterance into one chunk per item.
 
         Three signals, in order of reliability:
@@ -332,6 +333,12 @@ class Parser:
              sugar 1 kilo 45 rupees"), so a money word closes the chunk — but only once the
              chunk already holds an item word. Without that guard this would also split
              price-led billing, where the money comes first: "ten rupees | coriander".
+          4. A fresh quantity after an item name — billing only. Billing has neither
+             prices nor connectors ("two kilo sugar one kilo onion" is one breath with
+             nothing to break on), and there the quantity leads each item. Admin puts the
+             name first ("potato 1 kilo 100 rupees"), so the same rule would cut every
+             entry in half. The two modes have opposite word order; the split has to know
+             which one it is in.
         """
         parts = [p for p in re.split(rf"{SEP}|\b(?:and|மற்றும்|apparam|அப்புறம்)\b|,", text)
                  if p.strip()]
@@ -339,17 +346,24 @@ class Parser:
         out = []
         for part in parts:
             chunk, seen_item = [], False
-            for tok in part.split():
+            toks = part.split()
+            for pos, tok in enumerate(toks):
+                is_qty = self._value(tok) is not None or tok.startswith("§")
+                # A quantity that follows a named item opens the next one. Guarded by
+                # seen_item so a leading "two kilo…" and a compound numeral ("irubathi
+                # anju") never split themselves.
+                if is_qty and seen_item and chunk and mode != "admin":
+                    out.append(" ".join(chunk))
+                    chunk, seen_item = [], False
                 chunk.append(tok)
                 if tok in self.lang.money and seen_item:
                     out.append(" ".join(chunk))
                     chunk, seen_item = [], False
                     continue
-                if not (self._value(tok) is not None
+                if not (is_qty
                         or tok in self.lang.units
                         or tok in self.lang.money
-                        or tok in self.lang.fillers
-                        or tok.startswith("§")):
+                        or tok in self.lang.fillers):
                     seen_item = True
             if chunk:
                 out.append(" ".join(chunk))
@@ -494,10 +508,22 @@ class Catalog:
                 if form == q:
                     return p, 1.0, form
                 score = SequenceMatcher(None, qp, form_key).ratio()
-                # A spoken item often carries extra words ("sugar packet"); containment is
-                # strong evidence the shopkeeper named this product.
-                if form in q or q in form:
-                    score = max(score, 0.88)
+                # Containment is asymmetric, and treating it as symmetric was picking the
+                # wrong SKU whenever one name contained another.
+                #
+                #   form in q — the shopkeeper said the catalog name plus extra words
+                #               ("one packet sugar"). Strong: everything the catalog knows
+                #               about was actually said.
+                #   q in form — the catalog name has words the shopkeeper never said
+                #               ("pea berry" inside "cherry pea berry"). Those extra words
+                #               are evidence AGAINST, so the bonus is scaled by how much of
+                #               the name was really spoken. A flat bonus here let
+                #               "cherry pea berry" (0.88) beat the intended "pee berry"
+                #               (0.80) every time.
+                if form and form in q:
+                    score = max(score, 0.92)
+                elif q and q in form:
+                    score = max(score, 0.92 * (len(q) / len(form)))
                 if score > best_score:
                     best, best_score, best_form = p, score, form
 

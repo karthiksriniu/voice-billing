@@ -141,6 +141,39 @@ MULTI = [
 ]
 
 
+# Billing says several items in one breath with no price and no connector between them.
+BILL_MULTI = [
+    ("two kilo sugar one kilo onion", [("SUG001", 2.0), ("ONI001", 1.0)]),
+    ("two kilo sugar one kilo onion half kilo toor dal",
+     [("SUG001", 2.0), ("ONI001", 1.0), ("TUR001", 0.5)]),
+    ("rendu packet biscuit moonu paal packet", [("BIS001", 2.0), ("MIL001", 3.0)]),
+    ("ரெண்டு கிலோ சர்க்கரை ஒரு கிலோ வெங்காயம்", [("SUG001", 2.0), ("ONI001", 1.0)]),
+    # Must stay single: a compound numeral and a two-word item name.
+    ("irubathi anju egg", [("EGG001", 25.0)]),
+    ("arai kilo thuvaram paruppu", [("TUR001", 0.5)]),
+    ("ten rupees coriander", [("COR001", 1.0)]),
+]
+
+
+# Similar names must resolve to the SKU actually spoken. A flat containment bonus made
+# "pea berry" match "Cherry Pea Berry" (0.88) over the intended "Pee Berry" (0.80),
+# because the spoken words sat inside the longer name.
+SIMILAR = [
+    ("pea berry",        "Pee Berry"),
+    ("pee berry",        "Pee Berry"),
+    ("cherry pea berry", "Cherry Pea Berry"),
+    ("sugar",            "Sugar"),
+    ("brown sugar",      "Brown Sugar"),
+    ("one packet sugar", "Sugar"),
+]
+SIMILAR_CATALOG = [
+    {"id": "a", "name": "Cherry Pea Berry", "unit": "kg", "unit_price": 1500, "aliases": []},
+    {"id": "b", "name": "Pee Berry", "unit": "kg", "unit_price": 1200, "aliases": []},
+    {"id": "d", "name": "Sugar", "unit": "kg", "unit_price": 45, "aliases": []},
+    {"id": "e", "name": "Brown Sugar", "unit": "kg", "unit_price": 90, "aliases": []},
+]
+
+
 def run():
     passed = failed = 0
 
@@ -185,7 +218,7 @@ def run():
 
     print("admin rate configuration")
     for text, sku, want_qty, want_rate in RATES:
-        r = P.parse(text)
+        r = P.parse(text, mode="admin")
         if not r.items:
             check(text, False, "-> no item parsed")
             continue
@@ -199,7 +232,7 @@ def run():
     from parser import Catalog as _C
     empty = Parser(LANG, _C([]))
     for text, name, qty, unit, money in UNMATCHED:
-        r = empty.parse(text)
+        r = empty.parse(text, mode="admin")
         u = r.unmatched[0] if r.unmatched else {}
         check(text, u.get("name") == name, f"-> name {u.get('name')!r} (want {name!r})")
         check(text, u.get("qty") == qty, f"-> qty {u.get('qty')} (want {qty})")
@@ -210,8 +243,22 @@ def run():
     from parser import Catalog as _C2
     bare = Parser(LANG, _C2([]))
     for text, want in MULTI:
-        got = [(u["name"], u["money"]) for u in bare.parse(text).unmatched]
+        mode = "billing" if "rupees coriander" in text else "admin"
+        got = [(u["name"], u["money"]) for u in bare.parse(text, mode=mode).unmatched]
         check(text, got == want, f"-> {got} (want {want})")
+
+    print("billing: several items in one breath")
+    for text, want in BILL_MULTI:
+        got = [(i.product_id, i.qty) for i in P.parse(text).items]
+        check(text, got == want, f"-> {got} (want {want})")
+
+    print("similar SKU names resolve to the one spoken")
+    from parser import Catalog as _C3
+    sim = _C3(SIMILAR_CATALOG)
+    for spoken, want in SIMILAR:
+        got, score, _ = sim.match(spoken, LANG)
+        check(spoken, got and got["name"] == want,
+              f"-> {got and got['name']!r} @ {score} (want {want!r})")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:

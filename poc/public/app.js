@@ -4,19 +4,15 @@
    2. A low-confidence line is shown and asked about, never silently added (Principle 2).
    3. Only an unresolved line already on the bill blocks finalising. */
 
-const LATCH_MS = 3000;      // hold this long and the button latches, walkie-talkie style
+/* Push to talk, and nothing else: hold, speak as many items as you like, release. One
+   gesture, one clip, one result — the same on every press.
+
+   This replaces latching plus silence-based segmentation. Cutting on a pause meant the
+   recording could end somewhere the shopkeeper did not choose, and a moment's hesitation
+   split an item in two. Splitting the transcript afterwards is strictly more reliable:
+   the grammar sees the whole sentence and can use word order, prices and quantities to
+   find the boundaries, none of which a silence detector knows anything about. */
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
-
-/* While latched, a pause ends the current item rather than the whole recording: say an
-   item, pause, it lands in the list, say the next one.
-
-   500ms sits just above the natural gap between words in connected speech (~150-300ms)
-   and at the low end of what speech systems use to declare end-of-utterance (500-800ms).
-   It feels immediate; the cost is that a shopkeeper who hesitates mid-item gets cut in
-   two. If that shows up in a real shop, raise it rather than lowering it further. */
-const PAUSE_MS = 500;
-const SILENCE_RMS = 0.012;  // below this counts as silence on a phone mic in a noisy room
-const MIN_SPEECH_MS = 400;  // don't cut on a pause before anything was actually said
 
 const $ = (id) => document.getElementById(id);
 const screens = ["auth", "main", "payment", "receipt"];
@@ -32,7 +28,7 @@ const state = {
 
 let health = { asr_configured: false };
 let stream = null, recorder = null, chunks = [];
-let pressedAt = 0, latched = false, busy = false;
+let pressedAt = 0, busy = false;
 
 let toastTimer;
 function toast(msg, ms = 2400) {
@@ -64,7 +60,11 @@ function applyStrings() {
   $("mobile").placeholder = "98400 12345";
   $("typeInput").placeholder = state.mode === "admin"
     ? "potato 1 kilo 100 rupees" : t("emptyBill");
-  $("talkLabel").innerHTML = `${t("holdToSpeak")}`;
+  $("talkLabel").innerHTML = t("holdToSpeak");
+  // Set here too: this button's label is rewritten as it toggles, so it never picks up a
+  // language change from data-t alone.
+  $("typeToggle").textContent = $("typeForm").hidden
+    ? `⌨ ${t("typeInstead")}` : `✕ ${t("hideTyping")}`;
   $("signIn") && ($("signIn").textContent = t("signIn"));
 }
 
@@ -226,7 +226,7 @@ function setTalk(mode) {
   $("talk").className = "talk " + mode;
   const l = $("talkLabel");
   if (mode === "rec") {
-    l.innerHTML = `${t("recording")}<br><small>${latched ? t("tapToStop") : t("releaseToStop")}</small>`;
+    l.innerHTML = `${t("recording")}<br><small>${t("releaseToStop")}</small>`;
   } else if (mode === "busy") {
     l.innerHTML = t("working");
   } else {
@@ -252,54 +252,9 @@ function startRec() {
 }
 
 function stopRec() {
-  stopSilenceWatch();
   if (recorder && recorder.state === "recording") recorder.stop();
-  latched = false;
 }
 
-/* ---------- pause detection ---------- */
-
-let audioCtx = null, analyser = null, watchTimer = null;
-let lastSoundAt = 0, sawSpeech = false;
-
-function startSilenceWatch() {
-  if (!stream || watchTimer) return;
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (!analyser) {
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 1024;
-      audioCtx.createMediaStreamSource(stream).connect(analyser);
-    }
-  } catch (err) { return; }        // no Web Audio: latch still works, just without cuts
-
-  const buf = new Float32Array(analyser.fftSize);
-  lastSoundAt = Date.now();
-  sawSpeech = false;
-
-  watchTimer = setInterval(() => {
-    analyser.getFloatTimeDomainData(buf);
-    let sum = 0;
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    const rms = Math.sqrt(sum / buf.length);
-    const now = Date.now();
-
-    if (rms > SILENCE_RMS) { lastSoundAt = now; sawSpeech = true; return; }
-    if (!sawSpeech || now - pressedAt < MIN_SPEECH_MS) return;
-    if (now - lastSoundAt < PAUSE_MS) return;
-
-    // A pause: close this item and immediately open the next, without dropping the mic.
-    if (recorder && recorder.state === "recording") {
-      setStatus(t("adding"));
-      recorder.stop();             // onstop -> handleClip -> startRec() below
-    }
-  }, 150);
-}
-
-function stopSilenceWatch() {
-  clearInterval(watchTimer);
-  watchTimer = null;
-}
 
 async function handleClip() {
   const ms = Date.now() - pressedAt;
@@ -321,30 +276,18 @@ async function handleClip() {
     setStatus(t("ready"));
   } finally {
     busy = false;
-    // Still latched means the pause was a break between items, not the end of dictation:
-    // pick straight back up so the next item can be spoken without touching the button.
-    if (latched) { startRec(); startSilenceWatch(); }
-    else setTalk("idle");
+    setTalk("idle");
   }
 }
 
 const talk = $("talk");
-talk.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  if (latched) { stopRec(); return; }
-  startRec();
-});
-talk.addEventListener("pointerup", (e) => {
-  e.preventDefault();
-  if (!recorder || recorder.state !== "recording") return;
-  if (Date.now() - pressedAt >= LATCH_MS) {
-    latched = true;
-    setTalk("rec");
-    startSilenceWatch();
-    setStatus(t("keepGoing"));
-  } else stopRec();
-});
-talk.addEventListener("pointercancel", () => { if (!latched) stopRec(); });
+talk.addEventListener("pointerdown", (e) => { e.preventDefault(); startRec(); });
+// Release ends the utterance, wherever the finger lifts. pointerup only fires on the
+// element it started on, so lostpointercapture covers a thumb that slides off mid-press —
+// otherwise the recorder would run on with nobody watching it.
+talk.addEventListener("pointerup", (e) => { e.preventDefault(); stopRec(); });
+talk.addEventListener("pointercancel", stopRec);
+talk.addEventListener("lostpointercapture", stopRec);
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- results ---------- */
@@ -566,6 +509,7 @@ function mergeProduct(row) {
 function renderCatalog() {
   const box = $("skuList");
   if (!state.products.length) { box.innerHTML = `<p class="empty small">No items yet.</p>`; return; }
+  $("skuCount").textContent = `(${state.products.length})`;
   box.innerHTML = state.products.map((p, i) => `
     <div class="skurow${p.unit_price > 0 ? "" : " unpriced"}">
       <span class="sku-n">${p.name}${p.description ? `<em>${p.description}</em>` : ""}</span>
@@ -643,11 +587,11 @@ $("clearCatalogBtn").onclick = () => {
   });
 };
 
-$("addStaffBtn").onclick = () => {
-  $("staffForm").hidden = !$("staffForm").hidden;
-  if (!$("staffForm").hidden) $("staffMobile").focus();
+$("staffHead").onclick = () => {
+  const b = $("staffBody");
+  b.hidden = !b.hidden;
+  $("staffChev").textContent = b.hidden ? "⌄" : "⌃";
 };
-$("staffCancel").onclick = () => { $("staffForm").hidden = true; };
 
 $("staffForm").onsubmit = async (e) => {
   e.preventDefault();
@@ -659,13 +603,13 @@ $("staffForm").onsubmit = async (e) => {
   if (!j.ok) { toast(j.error || "Could not add", 4000); return; }
   toast(`${j.mobile} ${t("added")}`);
   $("staffForm").reset();
-  $("staffForm").hidden = true;
   loadStaff();
 };
 
 async function loadStaff() {
   const j = await api("/api/staff");
   const rows = (j.staff || []).filter((s) => s.role !== "owner");
+  $("staffCount").textContent = rows.length ? `(${rows.length})` : "";
   $("staffList").innerHTML = rows.length
     ? rows.map((s) => `<div class="staffrow"><b>${s.mobile}</b><span>${s.name || "—"}</span></div>`).join("")
     : `<p class="empty small">${t("noStaff")}</p>`;

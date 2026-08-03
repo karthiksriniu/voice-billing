@@ -67,7 +67,8 @@
       "Bash(awk '{print \"m4a bytes:\", $5}')",
       "Bash(curl -s https://vaakku-poc.vercel.app/app.js)",
       "Bash(say -v Rishi -o e1.aiff \"basmati rice one kilo 120 rupees\")",
-      "Bash(afconvert -f m4af -d aac e1.aiff e1.m4a)"
+      "Bash(afconvert -f m4af -d aac e1.aiff e1.m4a)",
+      "Bash(curl -s https://vaakku-poc.vercel.app/index.html)"
     ]
   }
 }

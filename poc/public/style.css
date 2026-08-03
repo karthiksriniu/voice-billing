@@ -253,3 +253,17 @@ button{font-family:inherit;cursor:pointer;border:none}
   background-position:calc(100% - 20px) 24px,calc(100% - 14px) 24px;
   background-size:6px 6px,6px 6px;background-repeat:no-repeat;
 }
+
+/* Admin panel is a fixed frame: staff and the hint keep their height, the SKU list takes
+   whatever is left and scrolls inside it. Previously the list simply grew and pushed the
+   staff section down behind the talk button, where it could not be reached. */
+#adminPanel{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#adminPanel .hint,#adminPanel .sectionhead,#adminPanel .tablehead,
+#adminPanel .acc,#adminPanel .staffbody{flex:none}
+.skulist{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.acc.slim{padding:11px 15px;margin:10px 12px 0}
+.acc.slim .accsum b{font-size:14px;letter-spacing:.02em}
+.staffbody{margin:8px 12px 0;padding:12px 14px;background:var(--panel);
+           border:1px solid var(--line);border-radius:var(--r)}
+.staffbody .staffform{margin-top:10px}
+#skuCount,#staffCount{color:var(--dim);font-weight:600}

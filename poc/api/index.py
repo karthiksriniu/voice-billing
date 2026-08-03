@@ -417,7 +417,7 @@ async def parse_text(req: ParseRequest):
     eval harness will drive."""
     t0 = time.perf_counter()
     p = await parser_for(req.shop_id, req.lang)
-    res = p.parse(req.text, asr_confidence=req.asr_confidence)
+    res = p.parse(req.text, asr_confidence=req.asr_confidence, mode=req.mode)
     payload = result_payload(res, int((time.perf_counter() - t0) * 1000), req.mode)
     await db.log_utterance(req.shop_id, req.text, payload)
     return payload
@@ -446,7 +446,7 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
 
     t1 = time.perf_counter()
     p = await parser_for(shop_id, lang)
-    res = p.parse(tr.text, asr_confidence=tr.confidence)
+    res = p.parse(tr.text, asr_confidence=tr.confidence, mode=mode)
     payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode)
     payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw)}
     await db.log_utterance(shop_id, tr.text, payload)
