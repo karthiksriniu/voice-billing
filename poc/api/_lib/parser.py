@@ -263,7 +263,7 @@ class Parser:
         for chunk in self._split_items(text, mode):
             # "plantation AA 800 gram plus pee berry 200 gram" is one thing the customer is
             # buying — a blend — so it becomes a single line carrying both parts, not two.
-            if self._has_join(chunk):
+            if self._has_join(chunk) or self._um_parts(chunk):
                 combined = self._parse_combo(chunk, asr_confidence)
                 if combined:
                     res.items.append(combined)
@@ -284,6 +284,25 @@ class Parser:
     def _has_join(self, chunk: str) -> bool:
         return any(f" {j} " in f" {chunk} " for j in self.lang.join)
 
+    def _um_parts(self, chunk: str) -> list[str] | None:
+        """Tamil conjoins nouns with a "-um" suffix on each: "sakkaraiyum vengayamum".
+        There is no separate word to split on, so two or more item words carrying the
+        suffix in one breath is itself the signal. Units and money are excluded — plenty
+        of ordinary words end in um."""
+        toks = chunk.split()
+        marked = [i for i, tk in enumerate(toks)
+                  if tk.endswith("ும்") and len(tk) > 3
+                  and tk not in self.lang.units and tk not in self.lang.money
+                  and tk not in self.lang.fillers]
+        if len(marked) < 2:
+            return None
+        parts, start = [], 0
+        for i in marked[:-1]:
+            parts.append(" ".join(toks[start:i + 1]))
+            start = i + 1
+        parts.append(" ".join(toks[start:]))
+        return [p for p in parts if p.strip()]
+
     def _parse_combo(self, chunk: str, asr_conf: float) -> LineItem | None:
         """Parse "A <qty> plus B <qty>" into one line.
 
@@ -293,6 +312,8 @@ class Parser:
         """
         pattern = "|".join(re.escape(j) for j in sorted(self.lang.join, key=len, reverse=True))
         parts = [p.strip() for p in re.split(rf"\s(?:{pattern})\s", f" {chunk} ") if p.strip()]
+        if len(parts) < 2:
+            parts = self._um_parts(chunk) or []
         if len(parts) < 2:
             return None
 
@@ -340,12 +361,20 @@ class Parser:
              entry in half. The two modes have opposite word order; the split has to know
              which one it is in.
         """
-        parts = [p for p in re.split(rf"{SEP}|\b(?:and|மற்றும்|apparam|அப்புறம்)\b|,", text)
+        parts = [p for p in re.split(rf"{SEP}|\b(?:and|apparam|அப்புறம்)\b|,", text)
                  if p.strip()]
 
         out = []
         for part in parts:
             chunk, seen_item = [], False
+            # A part holding a join keyword, or a Tamil-style "-um … -um" conjunction, is
+            # one blend. Emit it whole: the quantity rule below would otherwise cut
+            # "plantation 800 gram plus pee berry 200 gram" apart before _parse_combo ever
+            # saw it, which is exactly why `plus` stopped working in billing.
+            if self._has_join(part) or self._um_parts(part):
+                out.append(part)
+                continue
+
             toks = part.split()
             for pos, tok in enumerate(toks):
                 is_qty = self._value(tok) is not None or tok.startswith("§")

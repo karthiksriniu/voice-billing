@@ -174,6 +174,31 @@ SIMILAR_CATALOG = [
 ]
 
 
+# A blend is one line. The billing quantity-split runs first and used to tear these apart
+# before _parse_combo saw them, which is why `plus` worked in admin but not in billing.
+COMBO_CATALOG = [
+    {"id": "p1", "name": "Plantation AA", "unit": "kg", "unit_price": 800,
+     "aliases": ["plantation", "பிளான்டேஷன்"]},
+    {"id": "p2", "name": "Pee Berry", "unit": "kg", "unit_price": 1200,
+     "aliases": ["pea berry", "பீபெர்ரி"]},
+    {"id": "s", "name": "Sugar", "unit": "kg", "unit_price": 45, "aliases": ["சர்க்கரை"]},
+    {"id": "o", "name": "Onion", "unit": "kg", "unit_price": 35, "aliases": ["வெங்காயம்"]},
+]
+COMBOS = [
+    # (utterance, part quantities, total) — None means "must NOT be a combo"
+    ("plantation AA 800 gms plus pee berry 200 gms",     [0.8, 0.2], 880.0),
+    ("plantation 800 gram mattrum pee berry 200 gram",   [0.8, 0.2], 880.0),
+    ("plantation 800 gram மற்றும் pee berry 200 gram",   [0.8, 0.2], 880.0),
+    # Tamil conjoins with a -um suffix on each noun; there is no separate word to split on.
+    ("800 கிராம் பிளான்டேஷனும் 200 கிராம் பீபெர்ரியும்", [0.8, 0.2], 880.0),
+    ("அரை கிலோ சர்க்கரையும் அரை கிலோ வெங்காயமும்",       [0.5, 0.5], 40.0),
+]
+NOT_COMBOS = [
+    "two kilo sugar and one kilo onion",
+    "two kilo sugar one kilo onion",
+]
+
+
 def run():
     passed = failed = 0
 
@@ -259,6 +284,23 @@ def run():
         got, score, _ = sim.match(spoken, LANG)
         check(spoken, got and got["name"] == want,
               f"-> {got and got['name']!r} @ {score} (want {want!r})")
+
+    print("combined items stay one line")
+    from parser import Catalog as _C4
+    cp = Parser(LANG, _C4(COMBO_CATALOG))
+    for text, qtys, total in COMBOS:
+        items = cp.parse(text, mode="billing").items
+        one = items[0] if len(items) == 1 else None
+        check(text, one is not None and len(one.combo) == len(qtys),
+              f"-> {len(items)} lines, combo={one and len(one.combo)}")
+        if one and one.combo:
+            check(text, [c["qty"] for c in one.combo] == qtys,
+                  f"-> qtys {[c['qty'] for c in one.combo]} (want {qtys})")
+            check(text, abs(one.amount - total) < 0.01, f"-> total {one.amount} (want {total})")
+    for text in NOT_COMBOS:
+        items = cp.parse(text, mode="billing").items
+        check(text, len(items) == 2 and not any(i.combo for i in items),
+              f"-> {len(items)} lines, combos={[bool(i.combo) for i in items]}")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:

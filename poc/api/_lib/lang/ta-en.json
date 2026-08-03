@@ -632,12 +632,17 @@
       "ஹ": "h"
     }
   },
-  "_comment_join": "'plus' binds two items into one bill line: a coffee blend sold as 800g of one bean plus 200g of another is one thing the customer buys.",
+  "_comment_join": "Words that bind two items into ONE bill line — a blend the customer buys as a single thing. Note these are the same words that mean 'and': a shopkeeper saying 'A மற்றும் B' for a coffee blend means one line, so they JOIN here rather than separate. English 'and' still separates, because 'two kilo sugar and one kilo onion' is two items.",
   "join": [
-    "plus",
     "+",
-    "பிளஸ்",
     "kalandhu",
-    "கலந்து"
+    "matrum",
+    "mattrum",
+    "plus",
+    "serthu",
+    "கலந்து",
+    "சேர்த்து",
+    "பிளஸ்",
+    "மற்றும்"
   ]
 }
