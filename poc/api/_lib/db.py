@@ -98,24 +98,6 @@ def invalidate(shop_id: str) -> None:
     _cache.pop(shop_id, None)
 
 
-def _templates(shop_id: str, owned: list[dict]) -> list[dict]:
-    """Seed entries the shop has not priced yet, returned at price 0.
-
-    DECISIONS.md D4: ship names and aliases, never prices. A seeded name that is wrong
-    costs nothing — the shopkeeper says something else. A seeded price that is wrong is a
-    wrong bill. Price 0 marks "known word, unknown price", which is what triggers the app
-    to ask once during billing and remember the answer.
-    """
-    have = {(p.get("name") or "").lower() for p in owned}
-    out = []
-    for t in _seed():
-        if (t["name"] or "").lower() in have:
-            continue
-        out.append({**t, "id": product_key(shop_id, t["name"]),
-                    "unit_price": 0.0, "is_template": True})
-    return out
-
-
 async def get_products(shop_id: str) -> list[dict]:
     if not configured():
         return _seed()
@@ -132,12 +114,9 @@ async def get_products(shop_id: str) -> list[dict]:
         owned = [_row(x) for x in r.json()] if r.status_code < 400 else []
     except Exception:                                  # noqa: BLE001
         return _seed()                                 # never let the counter stall
-    if not owned and shop_id == DEMO_SHOP:
-        # The sample shop keeps its seeded prices so the deployed demo is usable on the
-        # first tap. A real shop starts unpriced on purpose (D4) — see _templates.
-        products = _seed()
-    else:
-        products = owned + _templates(shop_id, owned)
+    # Only the sample shop is pre-stocked, so the deployed demo works on the first tap.
+    # Every real shop starts empty and fills up from admin mode.
+    products = _seed() if (not owned and shop_id == DEMO_SHOP) else owned
     _cache[shop_id] = (time.monotonic(), products)
     return products
 
@@ -348,3 +327,29 @@ async def probe() -> dict:
             except Exception as exc:                   # noqa: BLE001
                 out[label] = f"{type(exc).__name__}"
     return out
+
+
+async def clear_products(shop_id: str) -> tuple[int, str]:
+    """Delete every product for one shop. Scoped to a single shop_id and reachable only
+    with an owner token — there is no endpoint that can empty someone else's catalog."""
+    invalidate(shop_id)
+    if not configured():
+        _memory["products"] = []
+        return 0, ""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            before = await c.get(f"{SUPABASE_URL}/rest/v1/products", headers=_headers(),
+                                 params={"shop_id": f"eq.{shop_id}", "select": "id"})
+            n = len(before.json()) if before.status_code < 400 else 0
+            r = await c.delete(f"{SUPABASE_URL}/rest/v1/products", headers=_headers(),
+                               params={"shop_id": f"eq.{shop_id}"})
+        return (n, "") if r.status_code < 400 else (0, f"supabase {r.status_code}: {r.text[:200]}")
+    except Exception as exc:                           # noqa: BLE001
+        return 0, f"{type(exc).__name__}: {exc}"
+
+
+async def find_shops(name_like: str) -> list[dict]:
+    """Look a shop up by name — used to point the owner at the right shop_id."""
+    if not configured():
+        return []
+    return await _get("shops", {"name": f"ilike.*{name_like}*"})

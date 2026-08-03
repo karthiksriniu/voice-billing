@@ -299,7 +299,11 @@ class Parser:
                 i += 1
                 continue
 
-            rest.append(tok)
+            # ASR ends sentences with a full stop, and norm() keeps "." so decimals
+            # survive. A lone dot must not become part of the SKU name — that is how a
+            # catalog ends up holding "பொட்டேட்டோ .".
+            if any(c.isalnum() for c in tok):
+                rest.append(tok.strip("."))
             i += 1
 
         if not rest:

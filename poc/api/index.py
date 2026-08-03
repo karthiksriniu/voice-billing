@@ -140,6 +140,18 @@ def admin_proposal(res) -> dict | None:
         would double every potato line thereafter."""
         return round(amount / qty, 2) if qty and qty > 0 else round(amount, 2)
 
+    def certainty(action: str, score: float, qty: float | None) -> bool:
+        """Safe to write without asking?
+
+        Two things have to hold. The identity must be unambiguous — either nothing close
+        exists (a genuine new item) or it is effectively an exact hit. And the rate must be
+        unambiguous: "coffee 250 gram 150 rupees" could mean Rs0.60/g or a Rs150 pack, and
+        guessing between those silently is how a catalog quietly goes wrong.
+        """
+        if qty not in (None, 1, 1.0):
+            return False
+        return score < 0.70 if action == "create" else score >= 0.98
+
     for it in res.items:
         if not it.price_led:
             continue
@@ -147,15 +159,19 @@ def admin_proposal(res) -> dict | None:
         if it.match_score >= ADMIN_SAME_ITEM_THRESHOLD:
             return {"action": "reprice", "id": it.product_id, "name": it.name,
                     "unit": it.unit, "price": rate(it.amount, spoken_qty),
-                    "was": it.unit_price}
+                    "was": it.unit_price, "qty": spoken_qty,
+                    "certain": certainty("reprice", it.match_score, spoken_qty)}
         return {"action": "create", "id": "", "name": it.spoken_name or it.name,
                 "unit": it.unit, "price": rate(it.amount, spoken_qty),
-                "near": it.name, "near_score": it.match_score}
+                "near": it.name, "near_score": it.match_score, "qty": spoken_qty,
+                "certain": certainty("create", it.match_score, spoken_qty)}
     for u in res.unmatched:
         if u.get("money"):
             return {"action": "create", "id": "", "name": u["name"],
-                    "unit": u.get("unit") or "piece",
-                    "price": rate(u["money"], u.get("qty"))}
+                    "unit": u.get("unit") or "piece", "near": "", "near_score": 0.0,
+                    "qty": u.get("qty"),
+                    "price": rate(u["money"], u.get("qty")),
+                    "certain": certainty("create", 0.0, u.get("qty"))}
     return None
 
 
@@ -201,10 +217,14 @@ async def catalog(shop_id: str = DEFAULT_SHOP):
 @router.post("/catalog")
 async def add_product(req: ProductRequest, request: Request):
     c = claims_of(request)
-    shop_id = c["shop"] if c else req.shop_id
+    # A missing token used to fall through to the body's shop_id, which meant anyone could
+    # write into any shop's catalog. The token is the only source of shop identity here.
+    if not c:
+        return deny("Sign in required")
+    shop_id = c["shop"]
     # Staff bill; they do not reprice. Learning a price during billing is the one write a
     # worker can cause, and it only ever fills in a blank.
-    if c and c["role"] != "owner" and req.unit_price and not req.id:
+    if c["role"] != "owner" and req.unit_price and not req.id:
         return deny("Owner only", 403)
     product, error = await db.upsert_product(shop_id, req.model_dump())
     # The error is returned rather than swallowed. Previously a rejected write still came
@@ -294,6 +314,25 @@ async def staff_add(req: StaffRequest, request: Request):
         return deny("Passcode must be 6 digits", 400)
     error = await db.add_staff(c["shop"], mobile, auth.hash_passcode(code), "user", req.name)
     return {"ok": not error, "error": error, "mobile": mobile}
+
+
+@router.delete("/catalog")
+async def clear_catalog(request: Request):
+    """Empty this shop's catalog. Owner only, and scoped to the token's own shop — there is
+    no way to reach another shop's products through this."""
+    c = claims_of(request)
+    if not c or c["role"] != "owner":
+        return deny("Owner only")
+    removed, error = await db.clear_products(c["shop"])
+    return JSONResponse({"ok": not error, "removed": removed, "error": error},
+                        status_code=200 if not error else 502)
+
+
+@router.get("/shops")
+async def shops_by_name(q: str = ""):
+    """Find a shop id by name. Returns id and name only — no passcode material."""
+    rows = await db.find_shops(q) if q else []
+    return {"shops": [{"id": r["id"], "name": r.get("name", "")} for r in rows]}
 
 
 @router.post("/shop")

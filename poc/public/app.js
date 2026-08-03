@@ -47,11 +47,18 @@ async function api(path, { method = "GET", body } = {}) {
 
 /* ---------- health ---------- */
 
-fetch("/api/health").then((r) => r.json()).then((h) => {
+// Held as a promise, not fire-and-forget. Signing in used to read `health` before this
+// resolved, so a returning user saw "Voice is off" on a perfectly working deployment —
+// indistinguishable from an actually missing key.
+const healthReady = fetch("/api/health").then((r) => r.json()).then((h) => {
   health = h;
   $("healthLine").textContent =
     `ASR: ${h.asr_backend}${h.asr_configured ? "" : " (no key — text mode only)"} · store: ${h.db}`;
-}).catch(() => { $("healthLine").textContent = "Backend unreachable."; });
+  return h;
+}).catch(() => {
+  $("healthLine").textContent = "Backend unreachable.";
+  return health;
+});
 
 /* ---------- auth ---------- */
 
@@ -109,6 +116,7 @@ $("signupBtn").onclick = async () => {
 };
 
 async function enter(session) {
+  await healthReady;
   state.token = session.token;
   state.role = session.role;
   state.shop = { id: session.shop_id, name: session.shop_name || "Shop", vpa: session.vpa || "" };
@@ -342,25 +350,38 @@ async function resolvePrice(price) {
 
 /* ---------- admin: catalog ---------- */
 
+async function commitProduct(a) {
+  const j = await api("/api/catalog", {
+    method: "POST",
+    body: { shop_id: state.shop.id, id: a.id || "", name: a.name,
+            unit: a.unit, unit_price: a.price },
+  });
+  if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); return false; }
+  toast(`${a.name} → ${rupees(a.price)}/${a.unit}`);
+  await loadCatalog();          // straight back into the list, no extra tap
+  return true;
+}
+
 function proposeChange(a) {
+  // Unambiguous changes are written immediately and appear in the list. Confirmation is
+  // reserved for the two cases that are genuinely uncertain: a name close to something
+  // that already exists, and a quantity that leaves rate-vs-pack open.
+  if (a.certain) { state.proposal = null; hidePrompt(); commitProduct(a); return; }
+
   state.proposal = a;
   const isNew = a.action === "create";
   showPrompt({
     kind: isNew ? "புதிய பொருள் / New item" : "விலை மாற்றம் / Price change",
     main: `${a.name} — ${rupees(a.price)}/${a.unit}`,
-    note: isNew
-      ? (a.near && a.near_score > 0.7 ? `Not “${a.near}”? Cancel if it is.` : "New item for this shop.")
-      : `was ${rupees(a.was)}`,
+    note: a.qty && a.qty !== 1
+      ? `${a.qty} ${a.unit} for ${rupees(a.price * a.qty)} → ${rupees(a.price)} per ${a.unit}. Right?`
+      : isNew
+        ? (a.near && a.near_score > 0.7 ? `Not “${a.near}”? Cancel if it is.` : "New item for this shop.")
+        : `was ${rupees(a.was)}`,
     warn: isNew && a.near_score > 0.7,
     onOk: async () => {
       hidePrompt();
-      const j = await api("/api/catalog", {
-        method: "POST",
-        body: { shop_id: state.shop.id, id: a.id || "", name: a.name,
-                unit: a.unit, unit_price: a.price },
-      });
-      if (!j.ok) toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500);
-      else { toast(`${a.name} → ${rupees(a.price)}/${a.unit}`); loadCatalog(); }
+      await commitProduct(a);
       state.proposal = null;
     },
     onCancel: () => { state.proposal = null; hidePrompt(); },
@@ -414,6 +435,24 @@ function editSku(p) {
 }
 
 /* ---------- admin: staff ---------- */
+
+$("clearCatalogBtn").onclick = () => {
+  if (!state.products.length) { toast("ஏற்கனவே காலி / Already empty"); return; }
+  showPrompt({
+    kind: "எல்லாம் நீக்கவா? / Clear catalog?",
+    main: `${state.products.length} items`,
+    note: "This deletes every SKU for this shop and cannot be undone.",
+    warn: true,
+    onOk: async () => {
+      hidePrompt();
+      const j = await api("/api/catalog", { method: "DELETE" });
+      if (!j.ok) { toast("நீக்க முடியலை / Not cleared: " + (j.error || ""), 4500); return; }
+      toast(`${j.removed} நீக்கப்பட்டது / removed`);
+      loadCatalog();
+    },
+    onCancel: hidePrompt,
+  });
+};
 
 $("addStaffBtn").onclick = () => {
   $("staffForm").hidden = !$("staffForm").hidden;

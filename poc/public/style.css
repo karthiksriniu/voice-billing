@@ -238,3 +238,6 @@ button{font-family:inherit;cursor:pointer;border:none}
 .accright{display:flex;align-items:center;gap:10px;flex:none}
 .accright b{font-size:21px;font-variant-numeric:tabular-nums}
 .accright span{color:var(--dim);font-size:15px}
+
+.skuhead{padding:0 16px;margin:12px 0 4px}
+.mini.danger{background:none;border-color:var(--rec);color:var(--rec)}

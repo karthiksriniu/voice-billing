@@ -53,7 +53,9 @@
       "Bash(node -e \"1\")",
       "Bash(.tools/node/bin/node --check public/app.js)",
       "Bash(curl -s https://vaakku-poc.vercel.app/api/schema)",
-      "Bash(\"/Users/karthiksrinivasan/Claude/Voice Billing System/poc/.venv/bin/python\" -m json.tool)"
+      "Bash(\"/Users/karthiksrinivasan/Claude/Voice Billing System/poc/.venv/bin/python\" -m json.tool)",
+      "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api/_lib'\\); import db; print\\('db ok'\\)\")",
+      "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api'\\); import index; print\\('api ok'\\)\")"
     ]
   }
 }
