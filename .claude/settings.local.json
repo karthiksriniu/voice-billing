@@ -32,7 +32,18 @@
       "Bash(git commit -q -m 'Add ./vaakku helper and document the Vercel deployment traps *)",
       "Read(//Users/karthiksrinivasan/**)",
       "Read(//Users/karthiksrinivasan/.config/**)",
-      "Bash(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 -T git@github.com)"
+      "Bash(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 -T git@github.com)",
+      "Bash(./vaakku)",
+      "Bash(sed -e 's/\\\\\\(oauth_token:\\\\\\).*/\\\\1 <redacted>/' ~/.config/gh/hosts.yml)",
+      "Bash(env)",
+      "Bash(security find-internet-password *)",
+      "Bash(git ls-remote *)",
+      "Bash(git remote *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git push *)",
+      "Bash(grep -cE '\\\\.venv/|\\\\.tools/|\\\\.env$|\\\\.env\\\\.local|hosts\\\\.yml')",
+      "Bash(say -v '?')",
+      "Bash(awk '{print $2}')"
     ]
   }
 }

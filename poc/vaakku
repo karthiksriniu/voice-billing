@@ -4,9 +4,10 @@
 #         ./vaakku deploy         deploy to production
 #         ./vaakku env            add the API keys (prompts; nothing is echoed)
 #         ./vaakku test           run the parser fixtures
+#         ./vaakku login          authenticate the GitHub CLI (one time, interactive)
 set -euo pipefail
 cd "$(dirname "$0")"
-export PATH="$PWD/.tools/node/bin:$PATH"
+export PATH="$PWD/.tools/node/bin:$PWD/.tools/gh/bin:$PATH"
 
 case "${1:-dev}" in
   dev)    exec .venv/bin/uvicorn api.index:app --reload --host 0.0.0.0 --port 8077 ;;
@@ -20,5 +21,6 @@ case "${1:-dev}" in
     done
     echo "Now redeploy so the new values take effect:  ./vaakku deploy"
     ;;
-  *) echo "usage: ./vaakku {dev|deploy|env|test}"; exit 1 ;;
+  login)  exec gh auth login ;;
+  *) echo "usage: ./vaakku {dev|deploy|env|test|login}"; exit 1 ;;
 esac

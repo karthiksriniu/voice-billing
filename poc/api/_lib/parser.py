@@ -58,6 +58,7 @@ class Lang:
         self.money = {norm(a) for a in self.data["money"]["aliases"]}
         self.fillers = {norm(f) for f in self.data["fillers"]}
         self.rules = self.data["phonetic_rules"]
+        self.script = self.data["script"]
 
         self.units = {}
         for canon, spec in self.data["units"].items():
@@ -81,24 +82,59 @@ class Lang:
     def _reverse(table: dict, cast) -> dict:
         return {norm(a): cast(v) for v, aliases in table.items() for a in aliases}
 
+    def translit(self, s: str) -> str:
+        """Tamil script -> Latin. Tamil is an abugida: a bare consonant carries an inherent
+        'a', which a vowel sign replaces and the virama removes."""
+        sc = self.script
+        out, i = [], 0
+        while i < len(s):
+            c = s[i]
+            if c in sc["consonants"]:
+                nxt = s[i + 1] if i + 1 < len(s) else ""
+                if nxt == sc["virama"]:
+                    out.append(sc["consonants"][c])
+                    i += 2
+                elif nxt in sc["vowel_signs"]:
+                    out.append(sc["consonants"][c] + sc["vowel_signs"][nxt])
+                    i += 2
+                else:
+                    out.append(sc["consonants"][c] + "a")
+                    i += 1
+            elif c in sc["vowels"]:
+                out.append(sc["vowels"][c])
+                i += 1
+            else:
+                out.append(c)
+                i += 1
+        return "".join(out)
+
     def phonetic(self, s: str) -> str:
-        """Fold Tamil-English transliteration variance: thuvaram/tuvaram, chakkarai/sakkarai.
+        """Fold both scripts into one key space.
+
+        Two kinds of variance to absorb. Romanised Tamil spells the same word many ways
+        (thuvaram/tuvaram, chakkarai/sakkarai). And a code-mixed ASR returns English words
+        in Tamil script — 'sugar' comes back as 'சுகர்', matching neither the Latin catalog
+        name nor the Tamil one. Transliterating first puts both on the same footing.
 
         Soundex and Metaphone are English-only and actively mislead on romanised Tamil, so
-        this is an ordered collapse from the language pack instead. Tamil script is returned
-        unchanged — it needs no folding, and romanising it would lose information.
+        the collapse is an ordered rule list from the language pack instead.
         """
-        if any("஀" <= c <= "௿" for c in s):
-            return s
-        out = s
+        out = self.translit(s) if any("஀" <= c <= "௿" for c in s) else s
         for src, dst in self.rules:
             out = out.replace(src, dst)
         return re.sub(r"(.)\1+", r"\1", out)
 
 
+# ASR returns amounts as symbols ("₹10", "Rs.10"), and the symbol is punctuation that the
+# strip below would discard — taking the price-led signal with it and leaving a bare number
+# the grammar reads as a quantity. Rewrite to the word form, in the order the grammar wants.
+_CURRENCY_RE = re.compile(r"(?:₹|\brs\.?)\s*(\d+(?:\.\d+)?)")
+
+
 def norm(s: str) -> str:
     """Lowercase, strip punctuation and accents, collapse whitespace."""
     s = unicodedata.normalize("NFKC", s).lower().strip()
+    s = _CURRENCY_RE.sub(r"\1 rupees ", s)
     s = re.sub(r"[^\w\s஀-௿.]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 

@@ -308,13 +308,15 @@
   },
   "money": {
     "aliases": [
-      "rupees",
-      "rupee",
+      "roobai",
       "rs",
-      "ரூபாய்",
-      "ரூவா",
+      "ruba",
       "rubai",
-      "roobai"
+      "rupee",
+      "rupees",
+      "ரூபா",
+      "ரூபாய்",
+      "ரூவா"
     ],
     "symbol": "₹"
   },
@@ -485,6 +487,78 @@
     [
       "y",
       "i"
+    ],
+    [
+      "c",
+      "k"
+    ],
+    [
+      "g",
+      "k"
+    ],
+    [
+      "d",
+      "t"
+    ],
+    [
+      "b",
+      "p"
     ]
-  ]
+  ],
+  "_comment_script": "Tamil script -> Latin, so a word written in either script folds to the same key. Sarvam returns English words transliterated into Tamil ('sugar' -> 'சுகர்'), which matches neither the Latin catalog name nor the Tamil one without this.",
+  "script": {
+    "virama": "்",
+    "vowels": {
+      "அ": "a",
+      "ஆ": "aa",
+      "இ": "i",
+      "ஈ": "ii",
+      "உ": "u",
+      "ஊ": "uu",
+      "எ": "e",
+      "ஏ": "ee",
+      "ஐ": "ai",
+      "ஒ": "o",
+      "ஓ": "oo",
+      "ஔ": "au",
+      "ஃ": "h"
+    },
+    "vowel_signs": {
+      "ா": "aa",
+      "ி": "i",
+      "ீ": "ii",
+      "ு": "u",
+      "ூ": "uu",
+      "ெ": "e",
+      "ே": "ee",
+      "ை": "ai",
+      "ொ": "o",
+      "ோ": "oo",
+      "ௌ": "au"
+    },
+    "consonants": {
+      "க": "k",
+      "ங": "ng",
+      "ச": "s",
+      "ஞ": "nj",
+      "ட": "t",
+      "ண": "n",
+      "த": "t",
+      "ந": "n",
+      "ப": "p",
+      "ம": "m",
+      "ய": "y",
+      "ர": "r",
+      "ல": "l",
+      "வ": "v",
+      "ழ": "l",
+      "ள": "l",
+      "ற": "r",
+      "ன": "n",
+      "ஜ": "j",
+      "ஷ": "sh",
+      "ஸ": "s",
+      "ஹ": "h"
+    }
+  }
 }

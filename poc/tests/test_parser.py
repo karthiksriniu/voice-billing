@@ -57,6 +57,14 @@ CASES = [
     # bare item, implied quantity
     ("kothamalli",                     "COR001", 1,    "bundle", 10),
 
+    # Code-mixed ASR output: Sarvam with language_code=ta-IN renders English words in
+    # Tamil script, so "two kilo sugar" comes back as "2 கிலோ சுகர்". These are verbatim
+    # transcripts from the deployed Sarvam endpoint, not invented.
+    ("2 கிலோ சுகர்",                    "SUG001", 2,    "kg", 90),
+    ("ஒரு கிலோ தக்காளி",                "TOM001", 1,    "kg", 30),
+    ("ரெண்டு பிஸ்கட்",                   "BIS001", 2,    "packet", 20),
+    ("அரை கிலோ ஆனியன்",                 "ONI001", 0.5,  "kg", 17.5),
+
     # transliteration variance the phonetic fold has to absorb
     ("two kilo chakkarai",             "SUG001", 2,    "kg", 90),
     ("arai kilo tuvaram paruppu",      "TUR001", 0.5,  "kg", 70),
@@ -66,6 +74,9 @@ CASES = [
 # Price-led: the amount is spoken, quantity is derived from it.
 PRICE_LED = [
     ("ten rupees coriander",           "COR001", 10),
+    # Verbatim Sarvam output for "ten rupees coriander" spoken in Indian English.
+    ("₹10 கோரியாண்டா",                  "COR001", 10),
+    ("rs.20 kothamalli",               "COR001", 20),
     ("ஐந்து ரூபாய் biscuit",             "BIS001", 5),
     ("twenty rupees ku kothamalli",    "COR001", 20),
 ]

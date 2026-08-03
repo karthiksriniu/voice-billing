@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -63,9 +64,24 @@ def _seed() -> list[dict]:
     return _memory["products"]
 
 
+# The catalog is read on every utterance. Fetching it over HTTP each time added ~700ms to
+# a parse stage that otherwise runs in ~1ms — the single worst latency offender once
+# Supabase was live. Cached per process (serverless reuses warm instances) and invalidated
+# on write, so a spoken price change still takes effect immediately.
+_CACHE_TTL_S = 60.0
+_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def invalidate(shop_id: str) -> None:
+    _cache.pop(shop_id, None)
+
+
 async def get_products(shop_id: str) -> list[dict]:
     if not configured():
         return _seed()
+    hit = _cache.get(shop_id)
+    if hit and (time.monotonic() - hit[0]) < _CACHE_TTL_S:
+        return hit[1]
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.get(
@@ -74,9 +90,11 @@ async def get_products(shop_id: str) -> list[dict]:
                 params={"shop_id": f"eq.{shop_id}", "select": "*"},
             )
         rows = r.json() if r.status_code < 400 else []
-        return [_row(x) for x in rows] if rows else _seed()
+        products = [_row(x) for x in rows] if rows else _seed()
     except Exception:                                  # noqa: BLE001
         return _seed()                                 # never let the counter stall
+    _cache[shop_id] = (time.monotonic(), products)
+    return products
 
 
 async def upsert_product(shop_id: str, product: dict) -> dict:
@@ -89,6 +107,7 @@ async def upsert_product(shop_id: str, product: dict) -> dict:
                 return items[i]
         items.append(row)
         return row
+    invalidate(shop_id)
     payload = {**row, "shop_id": shop_id, "aliases": row["aliases"]}
     async with httpx.AsyncClient(timeout=10.0) as c:
         r = await c.post(
