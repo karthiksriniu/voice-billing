@@ -182,6 +182,10 @@ def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
         "command": res.command,
         "mode_switch": res.mode_switch,
         "unparsed": res.unparsed,
+        # Names the grammar understood but the catalog has never heard of. With shops now
+        # starting empty this is the common case, and dropping it server-side is what made
+        # billing look deaf: perfect transcript, no line, no reason given.
+        "unmatched": res.unmatched,
         "number": res.number,
         "took_ms": took_ms,
     }

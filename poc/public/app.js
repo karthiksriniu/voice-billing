@@ -311,7 +311,23 @@ function apply(data, roundTripMs) {
     state.items.push({ ...it, pending: it.verdict === "confirm" });
     it.verdict === "confirm" ? asked++ : added++;
   }
-  if (!added && !asked) toast("புரியலை / Didn't get an item — try again");
+
+  // Understood, but not in this shop's catalog. Ask the price once, create the SKU and put
+  // it on the bill — the shopkeeper never has to stop and go set the catalog up first.
+  if (!added && !asked && (data.unmatched || []).length) {
+    const u = data.unmatched[0];
+    askPrice({
+      product_id: null, name: u.name, qty: u.qty || 1, unit: u.unit || "piece",
+      unit_price: 0, amount: 0, price_led: false, isNew: true,
+    });
+    asked++;
+  }
+
+  if (!added && !asked) {
+    toast(data.transcript
+      ? `“${data.transcript}” — புரியலை / couldn't turn that into an item`
+      : "புரியலை / Didn't get an item — try again", 3200);
+  }
   render();
 }
 
@@ -320,9 +336,10 @@ function apply(data, roundTripMs) {
 function askPrice(item) {
   state.askingPrice = item;
   showPrompt({
-    kind: "விலை தெரியலை / Price not known",
+    kind: item.isNew ? "புது பொருள் / New item" : "விலை தெரியலை / Price not known",
     main: `${item.name} — என்ன விலை?`,
-    note: `Say the price per ${item.unit}. Remembered from now on.`,
+    note: `Say the price per ${item.unit}. ${
+      item.isNew ? "It will be added to your catalog." : "Remembered from now on."}`,
     onCancel: () => { state.askingPrice = null; hidePrompt(); render(); },
   });
   setStatus(`${item.name} — என்ன விலை? / What price per ${item.unit}?`);
@@ -334,10 +351,11 @@ async function resolvePrice(price) {
   hidePrompt();
   const j = await api("/api/catalog", {
     method: "POST",
-    body: { shop_id: state.shop.id, id: item.product_id, name: item.name,
+    body: { shop_id: state.shop.id, id: item.product_id || "", name: item.name,
             unit: item.unit, unit_price: price },
   });
   if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); render(); return; }
+  if (item.product_id == null && j.product) item.product_id = j.product.id;
   const qty = item.price_led ? +(item.amount / price).toFixed(3) : item.qty;
   state.items.push({
     ...item, unit_price: price, qty,
