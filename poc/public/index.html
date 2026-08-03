@@ -21,6 +21,10 @@
       <p>ஒலிப்பதிவு சேமிக்கப்படாது. <span class="en">No audio is stored.</span></p>
     </div>
     <label class="field">
+      <span>மொபைல் நம்பர் / Mobile number</span>
+      <input id="mobile" type="tel" inputmode="numeric" placeholder="98400 12345" autocomplete="tel">
+    </label>
+    <label class="field">
       <span>கடை பெயர் / Shop name</span>
       <input id="shopName" type="text" placeholder="Anand Stores" autocomplete="off">
     </label>
@@ -41,6 +45,8 @@
   </header>
 
   <div id="asrBanner" class="banner" hidden></div>
+
+  <div id="prompt" class="prompt" hidden></div>
 
   <div id="items" class="items">
     <p class="empty">பொருள் சொல்லுங்க…<br><span class="en">Hold the button and say an item.<br>“ரெண்டு கிலோ சர்க்கரை” · “arai kilo thuvaram paruppu” · “ten rupees coriander”</span></p>

@@ -23,6 +23,12 @@ LANG_DIR = Path(__file__).parent / "lang"
 ACCEPT_THRESHOLD = 0.72
 CONFIRM_THRESHOLD = 0.42
 
+# In billing, a fuzzy match is a feature — find the nearest thing the shop actually sells.
+# In admin, the same behaviour is destructive: an unrecognised name means "create this",
+# and quietly resolving it to a neighbour edits the wrong product's price. "maida" scores
+# 0.857 against Wheat Flour, so the bar for "this is the existing SKU" sits above that.
+ADMIN_SAME_ITEM_THRESHOLD = 0.90
+
 
 @dataclass
 class LineItem:
@@ -36,6 +42,10 @@ class LineItem:
     verdict: str               # accept | confirm | reject
     matched_on: str = ""       # which catalog form matched, for debugging
     price_led: bool = False    # "ten rupees of coriander" — amount was spoken, not derived
+    match_score: float = 0.0   # catalog match strength, before ASR confidence is applied
+    spoken_name: str = ""      # the item words as heard, before matching — admin needs this
+                               # to create a new SKU rather than reprice a near neighbour
+    needs_price: bool = False  # in the catalog by name but no price known yet (D4)
     raw: str = ""
 
 
@@ -46,6 +56,9 @@ class ParseResult:
     mode_switch: str | None = None  # admin | billing | None
     unparsed: list[str] = field(default_factory=list)
     transcript: str = ""
+    number: float | None = None     # utterance was just a number — an answer to "what price?"
+    match_score: float = 0.0        # strength of the best catalog match, for admin decisions
+    unmatched: list[dict] = field(default_factory=list)   # named, priced, but not in catalog
 
 
 class Lang:
@@ -222,9 +235,14 @@ class Parser:
             text = cut_phrase(text, phrase, f"§{spec['qty']}§{spec['unit']}")
 
         for chunk in self._split_items(text):
-            item = self._parse_one(chunk, asr_confidence)
+            item, info = self._parse_one(chunk, asr_confidence)
             if item:
                 res.items.append(item)
+                res.match_score = max(res.match_score, item.match_score)
+            elif info and "number" in info:
+                res.number = info["number"]
+            elif info:
+                res.unmatched.append(info)
             elif chunk.strip():
                 res.unparsed.append(chunk.strip())
         return res
@@ -235,7 +253,10 @@ class Parser:
         parts = re.split(r"\b(?:and|மற்றும்|apparam|அப்புறம்)\b|,", text)
         return [p for p in parts if p.strip()]
 
-    def _parse_one(self, chunk: str, asr_conf: float) -> LineItem | None:
+    def _parse_one(self, chunk: str, asr_conf: float) -> tuple[LineItem | None, dict | None]:
+        """Returns (line item, info). When nothing matched the catalog, `info` carries what
+        was heard — a bare number (an answer to "what price?") or a name plus a spoken price
+        (a new SKU in admin mode). Discarding those was what made both flows impossible."""
         toks = [t for t in chunk.split() if t]
         qty: float | None = None
         unit: str | None = None
@@ -276,14 +297,20 @@ class Parser:
             i += 1
 
         if not rest:
-            return None
+            # No item words at all — just a number. That is how a shopkeeper answers
+            # "what's the price?", so it has to survive rather than be dropped as noise.
+            val = money_amount if money_amount is not None else qty
+            return None, ({"number": val} if val is not None else None)
 
         name = " ".join(rest)
         product, score, matched = self.catalog.match(name, self.lang)
         if product is None:
-            return None
+            return None, {"name": name, "qty": qty, "unit": unit,
+                          "money": money_amount, "raw": chunk.strip()}
 
-        return self._build(product, score, matched, qty, unit, money_amount, asr_conf, chunk)
+        item = self._build(product, score, matched, qty, unit, money_amount, asr_conf, chunk)
+        item.spoken_name = name
+        return item, None
 
     def _build(self, product, score, matched, qty, unit, money, asr_conf, raw) -> LineItem:
         unit = unit or product["unit"]
@@ -312,7 +339,8 @@ class Parser:
         return LineItem(
             product_id=product["id"], name=product["name"], qty=qty, unit=unit,
             unit_price=price, amount=round(amount, 2), confidence=conf, verdict=verdict,
-            matched_on=matched, price_led=price_led, raw=raw.strip(),
+            matched_on=matched, price_led=price_led, match_score=score,
+            needs_price=price <= 0, raw=raw.strip(),
         )
 
     def _to_canonical(self, qty: float, spoken_unit: str, product_unit: str) -> float:

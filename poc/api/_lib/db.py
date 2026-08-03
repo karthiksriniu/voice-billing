@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -21,12 +22,32 @@ import httpx
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SEED_CSV = Path(__file__).resolve().parent / "seed" / "catalog.csv"
+DEMO_SHOP = "demo"
 
 _memory: dict[str, list[dict]] = {}
 
 
 def configured() -> bool:
     return bool(SUPABASE_URL and SUPABASE_KEY)
+
+
+def shop_key(mobile: str) -> str:
+    """Normalise a spoken or typed Indian mobile number to a stable shop id.
+
+    Strips punctuation and a +91/0 prefix so the same shop reached by '+91 98400 12345',
+    '09840012345' and '9840012345' is one shop, not three.
+    """
+    digits = re.sub(r"\D", "", mobile or "")
+    if len(digits) > 10 and digits.startswith("91"):
+        digits = digits[2:]
+    return digits[-10:] if len(digits) >= 10 else (digits or "demo")
+
+
+def product_key(shop_id: str, name: str) -> str:
+    """Deterministic id so re-stating a price updates the row instead of inserting a
+    duplicate. A null id was silently failing every write against Supabase."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return f"{shop_id}:{slug}" if slug else f"{shop_id}:{uuid.uuid4().hex[:8]}"
 
 
 def _headers() -> dict:
@@ -76,6 +97,24 @@ def invalidate(shop_id: str) -> None:
     _cache.pop(shop_id, None)
 
 
+def _templates(shop_id: str, owned: list[dict]) -> list[dict]:
+    """Seed entries the shop has not priced yet, returned at price 0.
+
+    DECISIONS.md D4: ship names and aliases, never prices. A seeded name that is wrong
+    costs nothing — the shopkeeper says something else. A seeded price that is wrong is a
+    wrong bill. Price 0 marks "known word, unknown price", which is what triggers the app
+    to ask once during billing and remember the answer.
+    """
+    have = {(p.get("name") or "").lower() for p in owned}
+    out = []
+    for t in _seed():
+        if (t["name"] or "").lower() in have:
+            continue
+        out.append({**t, "id": product_key(shop_id, t["name"]),
+                    "unit_price": 0.0, "is_template": True})
+    return out
+
+
 async def get_products(shop_id: str) -> list[dict]:
     if not configured():
         return _seed()
@@ -89,33 +128,66 @@ async def get_products(shop_id: str) -> list[dict]:
                 headers=_headers(),
                 params={"shop_id": f"eq.{shop_id}", "select": "*"},
             )
-        rows = r.json() if r.status_code < 400 else []
-        products = [_row(x) for x in rows] if rows else _seed()
+        owned = [_row(x) for x in r.json()] if r.status_code < 400 else []
     except Exception:                                  # noqa: BLE001
         return _seed()                                 # never let the counter stall
+    if not owned and shop_id == DEMO_SHOP:
+        # The sample shop keeps its seeded prices so the deployed demo is usable on the
+        # first tap. A real shop starts unpriced on purpose (D4) — see _templates.
+        products = _seed()
+    else:
+        products = owned + _templates(shop_id, owned)
     _cache[shop_id] = (time.monotonic(), products)
     return products
 
 
-async def upsert_product(shop_id: str, product: dict) -> dict:
+async def upsert_product(shop_id: str, product: dict) -> tuple[dict, str]:
+    """Returns (row, error). An empty error means it is genuinely stored."""
     row = _row(product)
+    row["id"] = row.get("id") or product_key(shop_id, row["name"])
     if not configured():
         items = _seed()
         for i, p in enumerate(items):
             if p["id"] == row["id"] or p["name"].lower() == row["name"].lower():
                 items[i] = {**p, **row}
-                return items[i]
+                return items[i], ""
         items.append(row)
-        return row
+        return row, ""
     invalidate(shop_id)
-    payload = {**row, "shop_id": shop_id, "aliases": row["aliases"]}
-    async with httpx.AsyncClient(timeout=10.0) as c:
-        r = await c.post(
-            f"{SUPABASE_URL}/rest/v1/products",
-            headers={**_headers(), "Prefer": "resolution=merge-duplicates,return=representation"},
-            json=payload,
-        )
-    return (r.json() or [row])[0] if r.status_code < 400 else row
+    payload = {k: v for k, v in row.items() if k != "is_template"}
+    payload["shop_id"] = shop_id
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(
+                f"{SUPABASE_URL}/rest/v1/products",
+                headers={**_headers(),
+                         "Prefer": "resolution=merge-duplicates,return=representation"},
+                json=payload,
+            )
+    except Exception as exc:                           # noqa: BLE001
+        return row, f"{type(exc).__name__}: {exc}"
+    if r.status_code >= 400:
+        return row, f"supabase {r.status_code}: {r.text[:200]}"
+    body = r.json()
+    return ((body or [row])[0], "")
+
+
+async def upsert_shop(shop_id: str, name: str, vpa: str) -> str:
+    """Register the shop. Not authentication — the mobile number is an identifier only,
+    which is what keeps two shopkeepers demoing at once from sharing one catalog."""
+    if not configured():
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(
+                f"{SUPABASE_URL}/rest/v1/shops",
+                headers={**_headers(),
+                         "Prefer": "resolution=merge-duplicates,return=representation"},
+                json={"id": shop_id, "name": name, "upi_vpa": vpa},
+            )
+        return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
+    except Exception as exc:                           # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"
 
 
 async def save_bill(shop_id: str, bill: dict) -> str:

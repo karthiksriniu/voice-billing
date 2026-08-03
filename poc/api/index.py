@@ -23,7 +23,8 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).parent / "_lib"))
 
 import db                                              # noqa: E402
-from parser import Catalog, Lang, Parser               # noqa: E402
+from parser import (ADMIN_SAME_ITEM_THRESHOLD, Catalog, Lang,  # noqa: E402
+                    Parser)
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
 
@@ -50,6 +51,13 @@ class ParseRequest(BaseModel):
     text: str
     shop_id: str = DEFAULT_SHOP
     asr_confidence: float = 1.0
+    mode: str = "billing"
+
+
+class ShopRequest(BaseModel):
+    mobile: str
+    name: str = "Shop"
+    vpa: str = ""
 
 
 class FinalizeRequest(BaseModel):
@@ -61,6 +69,8 @@ class FinalizeRequest(BaseModel):
 
 class ProductRequest(BaseModel):
     shop_id: str = DEFAULT_SHOP
+    id: str = ""
+    sku: str = ""
     name: str
     name_ta: str = ""
     short_desc: str = ""
@@ -76,18 +86,48 @@ def serialise(item) -> dict:
         "unit": item.unit, "unit_price": item.unit_price, "amount": item.amount,
         "confidence": item.confidence, "verdict": item.verdict,
         "price_led": item.price_led, "raw": item.raw,
+        "match_score": item.match_score, "spoken_name": item.spoken_name,
+        "needs_price": item.needs_price,
     }
 
 
-def result_payload(res, took_ms: int) -> dict:
-    return {
+def admin_proposal(res) -> dict | None:
+    """Turn an admin-mode utterance into a proposed catalog change, for the UI to confirm.
+
+    The important judgement is existing-vs-new. In billing a fuzzy match is what you want;
+    here it is destructive — "maida" scores 0.857 against Wheat Flour, and acting on that
+    silently reprices a product the shopkeeper never mentioned. Anything below the strict
+    threshold is treated as a new item named by what was actually said.
+    """
+    for it in res.items:
+        if not it.price_led:
+            continue
+        if it.match_score >= ADMIN_SAME_ITEM_THRESHOLD:
+            return {"action": "reprice", "id": it.product_id, "name": it.name,
+                    "unit": it.unit, "price": it.amount, "was": it.unit_price}
+        return {"action": "create", "id": "", "name": it.spoken_name or it.name,
+                "unit": it.unit, "price": it.amount, "near": it.name,
+                "near_score": it.match_score}
+    for u in res.unmatched:
+        if u.get("money"):
+            return {"action": "create", "id": "", "name": u["name"],
+                    "unit": u.get("unit") or "piece", "price": u["money"]}
+    return None
+
+
+def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
+    payload = {
         "transcript": res.transcript,
         "items": [serialise(i) for i in res.items],
         "command": res.command,
         "mode_switch": res.mode_switch,
         "unparsed": res.unparsed,
+        "number": res.number,
         "took_ms": took_ms,
     }
+    if mode == "admin" or res.mode_switch == "admin":
+        payload["admin"] = admin_proposal(res)
+    return payload
 
 
 @router.get("/health")
@@ -110,7 +150,24 @@ async def catalog(shop_id: str = DEFAULT_SHOP):
 
 @router.post("/catalog")
 async def add_product(req: ProductRequest):
-    return {"product": await db.upsert_product(req.shop_id, req.model_dump())}
+    product, error = await db.upsert_product(req.shop_id, req.model_dump())
+    # The error is returned rather than swallowed. Previously a rejected write still came
+    # back looking like a success, and the UI cheerfully announced a price change that had
+    # not happened — the exact failure mode this product cannot afford.
+    return JSONResponse({"product": product, "ok": not error, "error": error},
+                        status_code=200 if not error else 502)
+
+
+@router.post("/shop")
+async def register_shop(req: ShopRequest):
+    """Mobile number as identifier, not authentication (no OTP — see DECISIONS.md D5 notes
+    on TRAI DLT). It exists so two shops don't share one catalog."""
+    shop_id = db.shop_key(req.mobile)
+    error = await db.upsert_shop(shop_id, req.name, req.vpa)
+    products = await db.get_products(shop_id)
+    return {"shop_id": shop_id, "ok": not error, "error": error,
+            "priced": sum(1 for p in products if p["unit_price"] > 0),
+            "known_words": len(products)}
 
 
 @router.post("/parse")
@@ -120,13 +177,14 @@ async def parse_text(req: ParseRequest):
     t0 = time.perf_counter()
     p = await parser_for(req.shop_id)
     res = p.parse(req.text, asr_confidence=req.asr_confidence)
-    payload = result_payload(res, int((time.perf_counter() - t0) * 1000))
+    payload = result_payload(res, int((time.perf_counter() - t0) * 1000), req.mode)
     await db.log_utterance(req.shop_id, req.text, payload)
     return payload
 
 
 @router.post("/transcribe")
-async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_SHOP)):
+async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_SHOP),
+                     mode: str = Form("billing")):
     """Audio in, line items out. Reports asr_ms separately from parse_ms because the
     latency budget in PLAN.md is about the parse stage, and the network hop here is an
     artefact of the PoC that the shipped product will not have."""
@@ -147,7 +205,7 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     t1 = time.perf_counter()
     p = await parser_for(shop_id)
     res = p.parse(tr.text, asr_confidence=tr.confidence)
-    payload = result_payload(res, int((time.perf_counter() - t1) * 1000))
+    payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode)
     payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw)}
     await db.log_utterance(shop_id, tr.text, payload)
     return payload

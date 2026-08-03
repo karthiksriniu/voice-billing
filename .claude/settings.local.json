@@ -43,7 +43,15 @@
       "Bash(git push *)",
       "Bash(grep -cE '\\\\.venv/|\\\\.tools/|\\\\.env$|\\\\.env\\\\.local|hosts\\\\.yml')",
       "Bash(say -v '?')",
-      "Bash(awk '{print $2}')"
+      "Bash(awk '{print $2}')",
+      "Bash(curl -s https://vaakku-poc.vercel.app/api/catalog)",
+      "Bash('/Users/karthiksrinivasan/Claude/Voice Billing System/poc/.venv/bin/python' -c ' *)",
+      "Bash(curl -s -X POST https://vaakku-poc.vercel.app/api/catalog -H 'content-type: application/json' -d '{\"name\":\"Sugar\",\"unit\":\"kg\",\"unit_price\":50}')",
+      "Bash(curl -s \"https://vaakku-poc.vercel.app/api/catalog?shop_id=demo\")",
+      "Bash(curl -s -X POST https://vaakku-poc.vercel.app/api/parse -H 'content-type: application/json' -d '{\"text\":\"vilai vaasi maida nooru rubai\"}')",
+      "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api'\\); import index; print\\('imports clean'\\)\")",
+      "Bash(node -e \"1\")",
+      "Bash(.tools/node/bin/node --check public/app.js)"
     ]
   }
 }

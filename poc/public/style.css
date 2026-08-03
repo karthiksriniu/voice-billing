@@ -72,6 +72,22 @@ button{font-family:inherit;cursor:pointer;border:none}
 }
 .banner code{background:rgba(0,0,0,.35);padding:1px 5px;border-radius:4px;font-size:13px}
 
+/* The one thing on screen that needs an answer — a price we don't know, or a catalog
+   change about to be committed. Deliberately loud, and it blocks finalising. */
+.prompt{
+  margin:10px 12px 0;padding:14px 16px;border-radius:var(--r);
+  background:#241c0e;border:1px solid var(--warn);
+  display:flex;align-items:center;gap:12px;
+}
+.prompt .promptbody{flex:1;min-width:0}
+.prompt b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}
+.prompt .promptmain{font-size:19px;font-weight:700;margin-top:3px}
+.prompt .promptnote{font-size:13px;color:var(--dim);margin-top:2px}
+.prompt .promptnote.warn{color:var(--warn)}
+.prompt .promptacts{display:flex;gap:8px;flex:none}
+.prompt .yes{background:var(--warn);color:#1a1205;font-weight:800;border-radius:10px;padding:11px 15px;font-size:15px}
+.prompt .del{background:none;color:var(--dim);font-size:22px;padding:0 6px}
+
 /* items */
 .items{flex:1;overflow-y:auto;padding:8px 12px}
 .empty{color:var(--dim);text-align:center;padding:36px 16px;font-size:17px;line-height:1.6}

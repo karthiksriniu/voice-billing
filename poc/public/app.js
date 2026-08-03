@@ -16,6 +16,8 @@ const state = {
   items: [],
   mode: "billing",
   bill: null,
+  askingPrice: null,   // a line waiting on "what's the price?" (D4: ask once, remember)
+  proposal: null,      // an admin catalog change waiting to be confirmed
 };
 
 let stream = null;
@@ -90,11 +92,32 @@ function applyAsrAvailability() {
 $("startBtn").onclick = async () => {
   const name = $("shopName").value.trim() || "Shop";
   const vpa = $("vpa").value.trim();
+  const mobile = $("mobile").value.trim();
+  if (mobile.replace(/\D/g, "").length < 10) {
+    toast("மொபைல் நம்பர் வேணும் / Enter a 10-digit mobile number");
+    return;
+  }
   if (!vpa || !vpa.includes("@")) {
     toast("UPI ID வேணும் / Enter a UPI ID like name@bank");
     return;
   }
-  state.shop = { id: "demo", name, vpa };
+  // The mobile number is the shop id, not a login. It exists so two shops demoing at the
+  // same time keep separate catalogs — there is no verification and it proves nothing.
+  let shopId = "demo";
+  try {
+    const r = await fetch("/api/shop", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mobile, name, vpa }),
+    });
+    const j = await r.json();
+    shopId = j.shop_id || "demo";
+    if (j.priced === 0) {
+      toast("புதிய கடை — விலை சொல்லிக்கிட்டே போங்க / New shop: prices are learned as you bill", 4200);
+    }
+  } catch (err) {
+    toast("கடை பதிவு ஆகலை / Could not register shop — running locally", 3500);
+  }
+  state.shop = { id: shopId, name, vpa };
   $("shopLabel").textContent = name;
   show("billing");
   applyAsrAvailability();
@@ -153,6 +176,7 @@ async function handleClip() {
     const fd = new FormData();
     fd.append("audio", blob, "clip.webm");
     fd.append("shop_id", state.shop.id);
+    fd.append("mode", state.mode);
     const res = await fetch("/api/transcribe", { method: "POST", body: fd });
     const data = await res.json();
     apply(data, Math.round(performance.now() - t0));
@@ -210,11 +234,20 @@ function apply(data, roundTripMs) {
     : `${roundTripMs} ms`;
   setStatus(`“${data.transcript}” · ${timing}`);
 
+  // Answering an outstanding "what's the price?" takes priority over everything else —
+  // the shopkeeper is mid-sentence with us, not starting a new thought.
+  if (state.askingPrice && data.number != null) { resolvePrice(data.number); return; }
+
+  if (data.admin) { proposeChange(data.admin); return; }
+
   // A bare mode switch ("விலை வாசி") consumes the whole utterance, leaving nothing to
   // parse. That is success, not failure — don't report it as one.
   if (data.mode_switch && !data.items.length && !data.command) return;
 
-  if (state.mode === "admin") { applyAdmin(data); return; }
+  if (state.mode === "admin") {
+    toast("விலை சொல்லுங்க / Say an item name, then its price");
+    return;
+  }
 
   if (data.command === "cancel_last" && state.items.length) {
     const gone = state.items.pop();
@@ -228,11 +261,109 @@ function apply(data, roundTripMs) {
   let added = 0, asked = 0;
   for (const it of data.items) {
     if (it.verdict === "reject") continue;
+    // D4: the catalog ships names, not prices. A known word with no price means ask once,
+    // then remember it forever — that is what keeps setup time at zero.
+    if (it.needs_price) { askPrice(it); asked++; continue; }
     state.items.push({ ...it, pending: it.verdict === "confirm" });
     it.verdict === "confirm" ? asked++ : added++;
   }
   if (!added && !asked) toast("புரியலை / Didn't get an item — try again");
   render();
+}
+
+/* ---------- learning a price (D4) ---------- */
+
+function askPrice(item) {
+  state.askingPrice = item;
+  const per = item.unit;
+  showPrompt({
+    kind: "விலை தெரியலை / Price not known",
+    main: `${item.name} — என்ன விலை?`,
+    note: `Say the price per ${per}. It is remembered from now on.`,
+    onCancel: () => { state.askingPrice = null; hidePrompt(); render(); },
+  });
+  setStatus(`${item.name} — என்ன விலை? / What price per ${per}?`);
+}
+
+async function resolvePrice(price) {
+  const item = state.askingPrice;
+  state.askingPrice = null;
+  hidePrompt();
+  const saved = await saveProduct({
+    id: item.product_id, name: item.name, unit: item.unit, unit_price: price,
+  });
+  if (!saved) return;
+  const qty = item.price_led ? +(item.amount / price).toFixed(3) : item.qty;
+  state.items.push({
+    ...item, unit_price: price, qty,
+    amount: +(item.price_led ? item.amount : qty * price).toFixed(2),
+    needs_price: false, pending: false,
+  });
+  toast(`${item.name} → ${rupees(price)}/${item.unit}`);
+  render();
+}
+
+/* ---------- admin: confirm before changing the catalog ---------- */
+
+function proposeChange(a) {
+  state.proposal = a;
+  const isNew = a.action === "create";
+  showPrompt({
+    kind: isNew ? "புதிய பொருள் / New item" : "விலை மாற்றம் / Price change",
+    main: `${a.name} — ${rupees(a.price)}/${a.unit}`,
+    // A near miss is shown rather than resolved silently: "maida" scores 0.857 against
+    // Wheat Flour, and acting on that would reprice a product nobody mentioned.
+    note: isNew
+      ? (a.near && a.near_score > 0.7 ? `Not “${a.near}”? Cancel if it is.` : "New item for this shop.")
+      : `was ${rupees(a.was)}`,
+    warn: isNew && a.near_score > 0.7,
+    onOk: async () => {
+      hidePrompt();
+      const ok = await saveProduct({
+        id: a.id || "", name: a.name, unit: a.unit, unit_price: a.price,
+      });
+      if (ok) toast(`${a.name} → ${rupees(a.price)}/${a.unit}`);
+      state.proposal = null;
+    },
+    onCancel: () => { state.proposal = null; hidePrompt(); },
+  });
+}
+
+async function saveProduct(body) {
+  try {
+    const r = await fetch("/api/catalog", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, shop_id: state.shop.id }),
+    });
+    const j = await r.json();
+    // Report the failure. A rejected write used to come back looking like a success.
+    if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); return false; }
+    return true;
+  } catch (err) {
+    toast("சேமிக்க முடியலை / Not saved: network", 4000);
+    return false;
+  }
+}
+
+/* ---------- prompt panel ---------- */
+
+function hidePrompt() { $("prompt").hidden = true; $("prompt").innerHTML = ""; }
+
+function showPrompt({ kind, main, note, warn, onOk, onCancel }) {
+  const box = $("prompt");
+  box.hidden = false;
+  box.innerHTML = `<div class="promptbody">
+      <b>${kind}</b>
+      <div class="promptmain">${main}</div>
+      ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}
+    </div>
+    <div class="promptacts">
+      ${onOk ? `<button class="yes" data-ok>சரி</button>` : ""}
+      <button class="del" data-no aria-label="Cancel">✕</button>
+    </div>`;
+  const ok = box.querySelector("[data-ok]");
+  if (ok) ok.onclick = onOk;
+  box.querySelector("[data-no]").onclick = onCancel;
 }
 
 async function applyAdmin(data) {
@@ -292,7 +423,7 @@ function render() {
   $("totalRow").hidden = false;
   // Finalise stays hidden while anything is unconfirmed — an unresolved item must never
   // silently make it into an amount the customer is asked to pay.
-  $("finalize").hidden = pending.length > 0;
+  $("finalize").hidden = pending.length > 0 || !!state.askingPrice;
   if (pending.length) setStatus("உறுதி செய்யுங்க / Confirm the highlighted item first");
 }
 
@@ -345,7 +476,7 @@ $("typeForm").onsubmit = async (e) => {
     const res = await fetch("/api/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, shop_id: state.shop.id }),
+      body: JSON.stringify({ text, shop_id: state.shop.id, mode: state.mode }),
     });
     apply(await res.json(), Math.round(performance.now() - t0));
   } catch (err) {
@@ -370,6 +501,9 @@ function newBill() {
   state.items = [];
   state.bill = null;
   state.mode = "billing";
+  state.askingPrice = null;
+  state.proposal = null;
+  hidePrompt();
   $("modeTag").className = "tag billing";
   $("modeTag").textContent = "பில் / BILLING";
   render();
