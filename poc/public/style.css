@@ -170,3 +170,71 @@ button{font-family:inherit;cursor:pointer;border:none}
   opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;max-width:88vw;text-align:center;z-index:9;
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- auth ---------- */
+.who{font-size:15px;color:var(--warn);font-weight:700;margin:0 0 12px}
+
+/* ---------- mode switch (owner only) ---------- */
+.bar{gap:8px}
+.bar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.switch{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:3px;flex:none}
+.switch button{
+  background:none;color:var(--dim);font-size:14px;font-weight:700;
+  padding:7px 14px;border-radius:8px;transition:background .12s,color .12s;
+}
+.switch button.on{background:var(--go);color:#fff}
+.switch button[data-mode="admin"].on{background:var(--warn);color:#1a1205}
+
+.panel{flex:1;overflow-y:auto;display:flex;flex-direction:column;min-height:0}
+.hint{margin:10px 12px;padding:10px 12px;border-radius:10px;background:var(--panel);
+      color:var(--dim);font-size:13.5px;line-height:1.5}
+
+/* ---------- admin: SKU table ---------- */
+.tablehead,.skurow{
+  display:grid;grid-template-columns:1fr 62px 82px 34px;gap:8px;align-items:center;
+}
+.tablehead{padding:6px 16px;font-size:11px;font-weight:800;letter-spacing:.06em;
+           text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line)}
+.skulist{padding:4px 12px 8px}
+.skurow{padding:11px 4px;border-bottom:1px solid var(--line);font-size:16px}
+.skurow.unpriced .sku-p{color:var(--warn)}
+.sku-n{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.sku-n em{display:block;font-style:normal;font-size:12.5px;color:var(--dim);font-weight:400}
+.sku-u{color:var(--dim);font-size:14px}
+.sku-p{font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+.sku-e{background:none;color:var(--dim);font-size:17px;padding:4px}
+.skuedit{display:grid;grid-template-columns:1fr 60px 74px auto auto;gap:6px;
+         padding:10px 4px;align-items:center;background:#1b2430;border-radius:10px;margin:6px 0}
+.skuedit input{min-width:0;padding:9px 8px;font-size:15px;border-radius:8px;
+               background:var(--bg);border:1px solid var(--line);color:var(--ink)}
+
+.mini{background:var(--panel);border:1px solid var(--line);color:var(--ink);
+      font-size:13px;font-weight:700;padding:9px 12px;border-radius:9px}
+.mini.go{background:var(--go);border-color:transparent;color:#fff}
+.mini.x{color:var(--dim)}
+
+/* ---------- admin: staff ---------- */
+.section{margin:18px 12px 24px;border-top:1px solid var(--line);padding-top:14px}
+.sectionhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;
+             font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.staffrow{display:flex;justify-content:space-between;padding:10px 2px;border-bottom:1px solid var(--line);font-size:15px}
+.staffrow span{color:var(--dim)}
+.staffform{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.staffform input{padding:12px;font-size:16px;border-radius:10px;background:var(--panel);
+                 border:1px solid var(--line);color:var(--ink)}
+.staffacts{display:flex;gap:8px}
+.empty.small{padding:14px;font-size:14px}
+
+/* ---------- billing accordion ---------- */
+.acc{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;width:calc(100% - 24px);
+  margin:10px 12px 0;padding:13px 15px;border-radius:var(--r);
+  background:var(--panel);border:1px solid var(--line);color:var(--ink);text-align:left;
+}
+.acc.alert{border-color:var(--warn)}
+.accsum{display:flex;flex-direction:column;min-width:0}
+.accsum b{font-size:15px}
+.accsum span{font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accright{display:flex;align-items:center;gap:10px;flex:none}
+.accright b{font-size:21px;font-variant-numeric:tabular-nums}
+.accright span{color:var(--dim);font-size:15px}

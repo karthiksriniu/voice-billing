@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).parent / "_lib"))
 
+import auth                                            # noqa: E402
 import db                                              # noqa: E402
 from parser import (ADMIN_SAME_ITEM_THRESHOLD, Catalog, Lang,  # noqa: E402
                     Parser)
@@ -60,6 +61,28 @@ class ShopRequest(BaseModel):
     vpa: str = ""
 
 
+class CheckRequest(BaseModel):
+    mobile: str
+
+
+class SignupRequest(BaseModel):
+    mobile: str
+    passcode: str
+    name: str = "Shop"
+    vpa: str = ""
+
+
+class LoginRequest(BaseModel):
+    mobile: str
+    passcode: str
+
+
+class StaffRequest(BaseModel):
+    mobile: str
+    passcode: str
+    name: str = ""
+
+
 class FinalizeRequest(BaseModel):
     shop_id: str = DEFAULT_SHOP
     items: list[dict]
@@ -91,6 +114,18 @@ def serialise(item) -> dict:
     }
 
 
+def claims_of(request: Request) -> dict | None:
+    """Read the bearer token. Endpoints that mutate a shop trust this, never a shop_id
+    supplied in the body — otherwise the passcode would be decoration."""
+    header = request.headers.get("authorization", "")
+    token = header[7:] if header.lower().startswith("bearer ") else ""
+    return auth.read_token(token)
+
+
+def deny(msg: str, code: int = 401):
+    return JSONResponse({"ok": False, "error": msg}, status_code=code)
+
+
 def admin_proposal(res) -> dict | None:
     """Turn an admin-mode utterance into a proposed catalog change, for the UI to confirm.
 
@@ -99,19 +134,28 @@ def admin_proposal(res) -> dict | None:
     silently reprices a product the shopkeeper never mentioned. Anything below the strict
     threshold is treated as a new item named by what was actually said.
     """
+    def rate(amount: float, qty: float | None) -> float:
+        """Per-UOM rate. "potato 2 kilo is 100 rupees" sets 50/kg, not 100/kg — the
+        shopkeeper is quoting a quantity, and storing the lump sum as the unit price
+        would double every potato line thereafter."""
+        return round(amount / qty, 2) if qty and qty > 0 else round(amount, 2)
+
     for it in res.items:
         if not it.price_led:
             continue
+        spoken_qty = it.spoken_qty
         if it.match_score >= ADMIN_SAME_ITEM_THRESHOLD:
             return {"action": "reprice", "id": it.product_id, "name": it.name,
-                    "unit": it.unit, "price": it.amount, "was": it.unit_price}
+                    "unit": it.unit, "price": rate(it.amount, spoken_qty),
+                    "was": it.unit_price}
         return {"action": "create", "id": "", "name": it.spoken_name or it.name,
-                "unit": it.unit, "price": it.amount, "near": it.name,
-                "near_score": it.match_score}
+                "unit": it.unit, "price": rate(it.amount, spoken_qty),
+                "near": it.name, "near_score": it.match_score}
     for u in res.unmatched:
         if u.get("money"):
             return {"action": "create", "id": "", "name": u["name"],
-                    "unit": u.get("unit") or "piece", "price": u["money"]}
+                    "unit": u.get("unit") or "piece",
+                    "price": rate(u["money"], u.get("qty"))}
     return None
 
 
@@ -149,13 +193,97 @@ async def catalog(shop_id: str = DEFAULT_SHOP):
 
 
 @router.post("/catalog")
-async def add_product(req: ProductRequest):
-    product, error = await db.upsert_product(req.shop_id, req.model_dump())
+async def add_product(req: ProductRequest, request: Request):
+    c = claims_of(request)
+    shop_id = c["shop"] if c else req.shop_id
+    # Staff bill; they do not reprice. Learning a price during billing is the one write a
+    # worker can cause, and it only ever fills in a blank.
+    if c and c["role"] != "owner" and req.unit_price and not req.id:
+        return deny("Owner only", 403)
+    product, error = await db.upsert_product(shop_id, req.model_dump())
     # The error is returned rather than swallowed. Previously a rejected write still came
     # back looking like a success, and the UI cheerfully announced a price change that had
     # not happened — the exact failure mode this product cannot afford.
     return JSONResponse({"product": product, "ok": not error, "error": error},
                         status_code=200 if not error else 502)
+
+
+@router.post("/auth/check")
+async def auth_check(req: CheckRequest):
+    """Does this number already belong to a shop or a worker? Decides whether the landing
+    page asks for a passcode (sign in) or the full signup form."""
+    shop_id = db.shop_key(req.mobile)
+    shop = await db.get_shop(shop_id)
+    if shop and shop.get("passcode_hash"):
+        return {"exists": True, "role": "owner", "shop_name": shop.get("name", "")}
+    staff = await db.get_staff(db.shop_key(req.mobile))
+    if staff:
+        return {"exists": True, "role": staff.get("role", "user"), "shop_name": ""}
+    return {"exists": False, "role": None, "shop_name": ""}
+
+
+@router.post("/auth/signup")
+async def auth_signup(req: SignupRequest):
+    code = auth.normalise_passcode(req.passcode)
+    if len(code) != 6:
+        return deny("Passcode must be 6 digits", 400)
+    shop_id = db.shop_key(req.mobile)
+    if len(shop_id) != 10:
+        return deny("Enter a 10-digit mobile number", 400)
+    existing = await db.get_shop(shop_id)
+    if existing and existing.get("passcode_hash"):
+        return deny("This number already has a shop — sign in instead", 409)
+    error = await db.create_shop(shop_id, req.name, req.vpa, auth.hash_passcode(code))
+    if error:
+        return deny(error, 502)
+    await db.add_staff(shop_id, shop_id, auth.hash_passcode(code), "owner", req.name)
+    return {"ok": True, "token": auth.issue_token(shop_id, shop_id, "owner"),
+            "shop_id": shop_id, "role": "owner", "shop_name": req.name, "vpa": req.vpa}
+
+
+@router.post("/auth/login")
+async def auth_login(req: LoginRequest):
+    code = auth.normalise_passcode(req.passcode)
+    mobile = db.shop_key(req.mobile)
+    shop = await db.get_shop(mobile)
+    if shop and shop.get("passcode_hash") and auth.verify_passcode(code, shop["passcode_hash"]):
+        return {"ok": True, "token": auth.issue_token(mobile, mobile, "owner"),
+                "shop_id": mobile, "role": "owner",
+                "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", "")}
+    staff = await db.get_staff(mobile)
+    if staff and auth.verify_passcode(code, staff.get("passcode_hash", "")):
+        shop = await db.get_shop(staff["shop_id"]) or {}
+        return {"ok": True,
+                "token": auth.issue_token(staff["shop_id"], mobile, staff.get("role", "user")),
+                "shop_id": staff["shop_id"], "role": staff.get("role", "user"),
+                "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", "")}
+    # One message for both causes, so this can't be used to enumerate numbers.
+    return deny("Wrong number or passcode", 401)
+
+
+@router.get("/staff")
+async def staff_list(request: Request):
+    c = claims_of(request)
+    if not c or c["role"] != "owner":
+        return deny("Owner only")
+    rows = await db.list_staff(c["shop"])
+    return {"staff": [{"mobile": r["mobile"], "role": r.get("role", "user"),
+                       "name": r.get("name", "")} for r in rows]}
+
+
+@router.post("/staff")
+async def staff_add(req: StaffRequest, request: Request):
+    c = claims_of(request)
+    if not c or c["role"] != "owner":
+        return deny("Owner only")
+    code = auth.normalise_passcode(req.passcode)
+    mobile = db.shop_key(req.mobile)
+    if len(mobile) != 10:
+        return deny("Enter a 10-digit mobile number", 400)
+    if len(code) != 6:
+        return deny("Passcode must be 6 digits", 400)
+    error = await db.add_staff(c["shop"], mobile, auth.hash_passcode(code), "user", req.name)
+    return {"ok": not error, "error": error, "mobile": mobile}
 
 
 @router.post("/shop")

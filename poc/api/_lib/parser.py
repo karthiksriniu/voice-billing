@@ -46,6 +46,10 @@ class LineItem:
     spoken_name: str = ""      # the item words as heard, before matching — admin needs this
                                # to create a new SKU rather than reprice a near neighbour
     needs_price: bool = False  # in the catalog by name but no price known yet (D4)
+    spoken_qty: float | None = None   # quantity as actually said. A price-led line derives
+                                      # qty from the amount and the current price, which
+                                      # overwrites it — admin needs the original to work
+                                      # out a per-UOM rate rather than echoing the old one.
     raw: str = ""
 
 
@@ -315,6 +319,7 @@ class Parser:
         return item, None
 
     def _build(self, product, score, matched, qty, unit, money, asr_conf, raw) -> LineItem:
+        spoken_qty = qty
         unit = unit or product["unit"]
         price = float(product["unit_price"])
         price_led = money is not None
@@ -339,6 +344,7 @@ class Parser:
             else "reject"
         )
         return LineItem(
+            spoken_qty=spoken_qty,
             product_id=product["id"], name=product["name"], qty=qty, unit=unit,
             unit_price=price, amount=round(amount, 2), confidence=conf, verdict=verdict,
             matched_on=matched, price_led=price_led, match_score=score,

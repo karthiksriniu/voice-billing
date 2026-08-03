@@ -71,6 +71,7 @@ def _row(r: dict) -> dict:
         "name_ta": r.get("name_ta") or "",
         "short_desc": r.get("short_desc") or "",
         "long_desc": r.get("long_desc") or "",
+        "description": r.get("description") or r.get("short_desc") or "",
         "unit": r.get("unit") or "piece",
         "unit_price": float(r.get("unit_price") or 0),
         "stock": float(r.get("stock") or 0),
@@ -232,3 +233,80 @@ async def log_utterance(shop_id: str, transcript: str, parsed: dict, corrected: 
             )
     except Exception:                                  # noqa: BLE001
         pass
+
+
+# ---------------------------------------------------------------------------
+# Accounts. Passcodes arrive here already hashed (auth.hash_passcode) — nothing in this
+# module ever sees or stores the digits.
+# ---------------------------------------------------------------------------
+
+_local_shops: dict[str, dict] = {}
+_local_staff: dict[str, dict] = {}
+
+
+async def _get(table: str, params: dict) -> list[dict]:
+    if not configured():
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(f"{SUPABASE_URL}/rest/v1/{table}",
+                            headers=_headers(), params={**params, "select": "*"})
+        return r.json() if r.status_code < 400 else []
+    except Exception:                                  # noqa: BLE001
+        return []
+
+
+async def _post(table: str, payload: dict, merge: bool = True) -> str:
+    if not configured():
+        return ""
+    prefer = "return=representation"
+    if merge:
+        prefer = "resolution=merge-duplicates," + prefer
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(f"{SUPABASE_URL}/rest/v1/{table}",
+                             headers={**_headers(), "Prefer": prefer}, json=payload)
+        return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
+    except Exception as exc:                           # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"
+
+
+async def get_shop(shop_id: str) -> dict | None:
+    if not configured():
+        return _local_shops.get(shop_id)
+    rows = await _get("shops", {"id": f"eq.{shop_id}"})
+    return rows[0] if rows else None
+
+
+async def create_shop(shop_id: str, name: str, vpa: str, passcode_hash: str) -> str:
+    if not configured():
+        _local_shops[shop_id] = {"id": shop_id, "name": name, "upi_vpa": vpa,
+                                 "passcode_hash": passcode_hash}
+        return ""
+    return await _post("shops", {"id": shop_id, "name": name, "upi_vpa": vpa,
+                                 "passcode_hash": passcode_hash})
+
+
+async def get_staff(mobile: str) -> dict | None:
+    """Staff are looked up by mobile alone — a worker knows their number and passcode,
+    not which shop id they belong to."""
+    if not configured():
+        return next((v for v in _local_staff.values() if v["mobile"] == mobile), None)
+    rows = await _get("staff", {"mobile": f"eq.{mobile}"})
+    return rows[0] if rows else None
+
+
+async def list_staff(shop_id: str) -> list[dict]:
+    if not configured():
+        return [v for v in _local_staff.values() if v["shop_id"] == shop_id]
+    return await _get("staff", {"shop_id": f"eq.{shop_id}"})
+
+
+async def add_staff(shop_id: str, mobile: str, passcode_hash: str,
+                    role: str = "user", name: str = "") -> str:
+    row = {"id": f"{shop_id}:{mobile}", "shop_id": shop_id, "mobile": mobile,
+           "passcode_hash": passcode_hash, "role": role, "name": name}
+    if not configured():
+        _local_staff[row["id"]] = row
+        return ""
+    return await _post("staff", row)

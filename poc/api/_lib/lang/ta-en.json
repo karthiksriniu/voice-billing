@@ -368,15 +368,22 @@
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",
   "fillers": [
-    "of",
-    "ku",
+    "at",
+    "each",
+    "for",
+    "is",
     "kku",
-    "க்கு",
+    "ku",
+    "kudunga",
+    "of",
+    "per",
+    "please",
+    "rate",
     "worth",
     "ஒரு",
-    "please",
-    "kudunga",
-    "கொடுங்க"
+    "கொடுங்க",
+    "க்கு",
+    "விலை"
   ],
   "_comment_phonetic": "Ordered romanisation collapses applied before fuzzy matching, to fold Tamil-English transliteration variance (thuvaram/tuvaram, chakkarai/sakkarai). Applied left to right.",
   "phonetic_rules": [

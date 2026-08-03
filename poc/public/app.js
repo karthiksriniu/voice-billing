@@ -1,146 +1,201 @@
-/* Vaakku PoC — push-to-talk billing.
-   Two rules drive most of this file:
+/* Vaakku PoC — voice billing.
+   Rules that drive most of this file:
    1. The button's colour must never lie about whether the mic is live.
-   2. A low-confidence item is shown and asked about, never silently added (Principle 2). */
+   2. A low-confidence line is shown and asked about, never silently added (Principle 2).
+   3. Only an unresolved line already on the bill blocks finalising. */
 
 const LATCH_MS = 3000;      // hold this long and the button latches, walkie-talkie style
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 const $ = (id) => document.getElementById(id);
-const screens = ["consent", "billing", "payment", "receipt"];
-const show = (name) =>
-  screens.forEach((s) => $(s).classList.toggle("active", s === name));
-
-const state = {
-  shop: { id: "demo", name: "Shop", vpa: "" },
-  items: [],
-  mode: "billing",
-  bill: null,
-  askingPrice: null,   // a line waiting on "what's the price?" (D4: ask once, remember)
-  proposal: null,      // an admin catalog change waiting to be confirmed
-};
-
-let stream = null;
-let recorder = null;
-let chunks = [];
-let pressedAt = 0;
-let latched = false;
-let busy = false;
-
+const screens = ["auth", "main", "payment", "receipt"];
+const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
+const state = {
+  token: "", shop: { id: "", name: "", vpa: "" }, role: "user",
+  items: [], mode: "billing", bill: null,
+  askingPrice: null, proposal: null,
+  expanded: false, products: [],
+};
+
+let health = { asr_configured: false };
+let stream = null, recorder = null, chunks = [];
+let pressedAt = 0, latched = false, busy = false;
+
 let toastTimer;
-function toast(msg, ms = 2200) {
+function toast(msg, ms = 2400) {
   const t = $("toast");
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove("show"), ms);
 }
+const setStatus = (t) => { $("status").textContent = t; };
 
-function setStatus(text) { $("status").textContent = text; }
-
-function setTalk(mode) {
-  const b = $("talk");
-  b.className = "talk " + mode;
-  const label = $("talkLabel");
-  if (mode === "rec") {
-    label.innerHTML = latched
-      ? "பதிவாகுது…<br><small>Recording — tap to stop</small>"
-      : "பதிவாகுது…<br><small>Recording — release to stop</small>";
-  } else if (mode === "busy") {
-    label.innerHTML = "கேட்குது…<br><small>Working…</small>";
-  } else {
-    label.innerHTML = "பேச அழுத்துங்க<br><small>Hold to speak</small>";
-  }
+async function api(path, { method = "GET", body } = {}) {
+  const res = await fetch(path, {
+    method,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
 }
 
-/* ---------- setup ---------- */
+/* ---------- health ---------- */
 
-let health = { asr_configured: false };
+fetch("/api/health").then((r) => r.json()).then((h) => {
+  health = h;
+  $("healthLine").textContent =
+    `ASR: ${h.asr_backend}${h.asr_configured ? "" : " (no key — text mode only)"} · store: ${h.db}`;
+}).catch(() => { $("healthLine").textContent = "Backend unreachable."; });
 
-fetch("/api/health")
-  .then((r) => r.json())
-  .then((h) => {
-    // Warms the serverless function so the first real utterance doesn't eat a cold start.
-    health = h;
-    $("healthLine").textContent =
-      `ASR: ${h.asr_backend}${h.asr_configured ? "" : " (no key — text mode only)"} · ` +
-      `catalog: ${h.products} items · store: ${h.db}`;
-  })
-  .catch(() => { $("healthLine").textContent = "Backend unreachable."; });
+/* ---------- auth ---------- */
 
-/* A mic button that looks live but has no speech backend behind it is worse than no button:
-   it swallows utterances and reports nothing the user will notice. Refuse to present one. */
+const digits = (s) => (s || "").replace(/\D/g, "");
+
+$("continueBtn").onclick = async () => {
+  const mobile = digits($("mobile").value);
+  if (mobile.length < 10) { toast("10 இலக்க நம்பர் / Enter a 10-digit number"); return; }
+  const r = await api("/api/auth/check", { method: "POST", body: { mobile } });
+  $("continueBtn").hidden = true;
+  $("mobile").disabled = true;
+  if (r.exists) {
+    $("whoLine").textContent = r.shop_name
+      ? `${r.shop_name} — ${r.role === "owner" ? "முதலாளி / Owner" : "பணியாளர் / Staff"}`
+      : "கடவுஎண் போடுங்க / Enter your passcode";
+    $("loginBox").hidden = false;
+    $("loginCode").focus();
+  } else {
+    $("signupBox").hidden = false;
+    $("shopName").focus();
+  }
+};
+
+const resetAuth = () => {
+  $("mobile").disabled = false;
+  $("continueBtn").hidden = false;
+  $("loginBox").hidden = true;
+  $("signupBox").hidden = true;
+  $("loginCode").value = ""; $("signupCode").value = "";
+};
+$("backBtn").onclick = resetAuth;
+$("backBtn2").onclick = resetAuth;
+
+$("loginBtn").onclick = async () => {
+  const r = await api("/api/auth/login", {
+    method: "POST",
+    body: { mobile: digits($("mobile").value), passcode: digits($("loginCode").value) },
+  });
+  if (!r.ok) { toast(r.error || "Sign in failed", 3500); $("loginCode").value = ""; return; }
+  enter(r);
+};
+
+$("signupBtn").onclick = async () => {
+  const code = digits($("signupCode").value);
+  const vpa = $("vpa").value.trim();
+  if (code.length !== 6) { toast("6 இலக்கம் வேணும் / Passcode must be 6 digits"); return; }
+  if (!vpa.includes("@")) { toast("UPI ID வேணும் / Enter a UPI ID like name@bank"); return; }
+  const r = await api("/api/auth/signup", {
+    method: "POST",
+    body: { mobile: digits($("mobile").value), passcode: code,
+            name: $("shopName").value.trim() || "Shop", vpa },
+  });
+  if (!r.ok) { toast(r.error || "Could not create business", 4000); return; }
+  enter(r);
+};
+
+async function enter(session) {
+  state.token = session.token;
+  state.role = session.role;
+  state.shop = { id: session.shop_id, name: session.shop_name || "Shop", vpa: session.vpa || "" };
+  try { localStorage.setItem("vaakku", JSON.stringify(session)); } catch (e) { /* private mode */ }
+  $("shopLabel").textContent = state.shop.name;
+  // Staff bill and nothing else, so the switch simply isn't there for them.
+  $("modeSwitch").hidden = state.role !== "owner";
+  setMode("billing");
+  show("main");
+  applyAsrAvailability();
+  if (health.asr_configured) await openMic();
+}
+
+$("signOut").onclick = () => {
+  try { localStorage.removeItem("vaakku"); } catch (e) { /* ignore */ }
+  location.reload();
+};
+
+// Resume a session so a reload mid-trade doesn't cost a sign-in.
+try {
+  const saved = JSON.parse(localStorage.getItem("vaakku") || "null");
+  if (saved && saved.token) setTimeout(() => enter(saved), 80);
+} catch (e) { /* ignore */ }
+
+/* ---------- mode ---------- */
+
+function setMode(mode) {
+  state.mode = mode;
+  const admin = mode === "admin";
+  $("adminPanel").hidden = !admin;
+  $("billPanel").hidden = admin;
+  $("finalize").hidden = true;
+  $("totalRow").hidden = true;
+  document.querySelectorAll("#modeSwitch button")
+    .forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+  $("typeInput").placeholder = admin ? "potato 1 kilo 100 rupees" : "ரெண்டு கிலோ சர்க்கரை";
+  setStatus(admin ? "பொருள், அளவு, விலை சொல்லுங்க / Say item, size, price"
+                  : "தயார் / Ready");
+  if (admin) { loadCatalog(); loadStaff(); } else render();
+}
+
+document.querySelectorAll("#modeSwitch button").forEach((b) => {
+  b.onclick = () => setMode(b.dataset.mode);
+});
+
+/* ---------- mic ---------- */
+
 function applyAsrAvailability() {
   if (health.asr_configured) return;
   const b = $("asrBanner");
   b.hidden = false;
-  b.innerHTML =
-    "🔇 <b>குரல் இயங்கவில்லை / Voice is off.</b> No speech key is configured on the server, " +
-    "so nothing you say can be recognised. Type items below instead, or restart the server " +
-    "with <code>SARVAM_API_KEY</code> set.";
-  const talk = $("talk");
-  talk.disabled = true;
-  talk.classList.add("dead");
-  $("talkLabel").innerHTML =
-    "குரல் இயங்கவில்லை<br><small>Voice unavailable — type below</small>";
+  b.innerHTML = "🔇 <b>குரல் இயங்கவில்லை / Voice is off.</b> No speech key is configured, " +
+    "so nothing you say can be recognised. Type below instead.";
+  $("talk").disabled = true;
+  $("talk").classList.add("dead");
+  $("talkLabel").innerHTML = "குரல் இயங்கவில்லை<br><small>Voice unavailable — type below</small>";
   $("typeForm").hidden = false;
   $("typeToggle").hidden = true;
 }
 
-$("startBtn").onclick = async () => {
-  const name = $("shopName").value.trim() || "Shop";
-  const vpa = $("vpa").value.trim();
-  const mobile = $("mobile").value.trim();
-  if (mobile.replace(/\D/g, "").length < 10) {
-    toast("மொபைல் நம்பர் வேணும் / Enter a 10-digit mobile number");
-    return;
-  }
-  if (!vpa || !vpa.includes("@")) {
-    toast("UPI ID வேணும் / Enter a UPI ID like name@bank");
-    return;
-  }
-  // The mobile number is the shop id, not a login. It exists so two shops demoing at the
-  // same time keep separate catalogs — there is no verification and it proves nothing.
-  let shopId = "demo";
+async function openMic() {
+  if (stream) return;
   try {
-    const r = await fetch("/api/shop", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mobile, name, vpa }),
-    });
-    const j = await r.json();
-    shopId = j.shop_id || "demo";
-    if (j.priced === 0) {
-      toast("புதிய கடை — விலை சொல்லிக்கிட்டே போங்க / New shop: prices are learned as you bill", 4200);
-    }
-  } catch (err) {
-    toast("கடை பதிவு ஆகலை / Could not register shop — running locally", 3500);
-  }
-  state.shop = { id: shopId, name, vpa };
-  $("shopLabel").textContent = name;
-  show("billing");
-  applyAsrAvailability();
-  if (!health.asr_configured) { setStatus("தட்டச்சு செய்யுங்க / Type an item below"); return; }
-  try {
-    // Acquired once and held for the session: getUserMedia is the slow part, and paying
-    // that cost on the first item would blow the latency budget the demo is judged on.
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    setStatus("தயார் / Ready");
   } catch (err) {
     setStatus("மைக் அனுமதி இல்லை / Microphone blocked");
     toast("Allow microphone access, then reload.", 4000);
   }
-};
-
-/* ---------- push to talk ---------- */
-
-function pickMime() {
-  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"]
-    .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
 }
+
+function setTalk(mode) {
+  $("talk").className = "talk " + mode;
+  const l = $("talkLabel");
+  if (mode === "rec") {
+    l.innerHTML = latched ? "பதிவாகுது…<br><small>Recording — tap to stop</small>"
+                          : "பதிவாகுது…<br><small>Recording — release to stop</small>";
+  } else if (mode === "busy") {
+    l.innerHTML = "கேட்குது…<br><small>Working…</small>";
+  } else {
+    l.innerHTML = "பேச அழுத்துங்க<br><small>Hold to speak</small>";
+  }
+}
+
+const pickMime = () => ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"]
+  .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
 
 function startRec() {
   if (!stream || busy) return;
@@ -164,11 +219,7 @@ function stopRec() {
 async function handleClip() {
   const ms = Date.now() - pressedAt;
   const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-  if (ms < MIN_CLIP_MS || blob.size < 1200) {
-    setTalk("idle");
-    setStatus("தயார் / Ready");
-    return;
-  }
+  if (ms < MIN_CLIP_MS || blob.size < 1200) { setTalk("idle"); setStatus("தயார் / Ready"); return; }
   busy = true;
   setTalk("busy");
   const t0 = performance.now();
@@ -178,8 +229,7 @@ async function handleClip() {
     fd.append("shop_id", state.shop.id);
     fd.append("mode", state.mode);
     const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-    const data = await res.json();
-    apply(data, Math.round(performance.now() - t0));
+    apply(await res.json(), Math.round(performance.now() - t0));
   } catch (err) {
     toast("இணைப்பு இல்லை / Network problem");
     setStatus("தயார் / Ready");
@@ -192,19 +242,17 @@ async function handleClip() {
 const talk = $("talk");
 talk.addEventListener("pointerdown", (e) => {
   e.preventDefault();
-  if (latched) { stopRec(); return; }          // second tap ends a latched recording
+  if (latched) { stopRec(); return; }
   startRec();
 });
 talk.addEventListener("pointerup", (e) => {
   e.preventDefault();
   if (!recorder || recorder.state !== "recording") return;
   if (Date.now() - pressedAt >= LATCH_MS) {
-    latched = true;                            // held long enough — keep going hands-free
+    latched = true;
     setTalk("rec");
     setStatus("தொடர்ந்து பதிவு / Latched — tap the button to stop");
-  } else {
-    stopRec();
-  }
+  } else stopRec();
 });
 talk.addEventListener("pointercancel", () => { if (!latched) stopRec(); });
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -212,17 +260,7 @@ talk.addEventListener("contextmenu", (e) => e.preventDefault());
 /* ---------- results ---------- */
 
 function apply(data, roundTripMs) {
-  if (data.mode_switch && data.mode_switch !== state.mode) {
-    state.mode = data.mode_switch;
-    const tag = $("modeTag");
-    tag.className = "tag " + (state.mode === "admin" ? "admin" : "billing");
-    tag.textContent = state.mode === "admin" ? "விலை / ADMIN" : "பில் / BILLING";
-    toast(state.mode === "admin" ? "விலை மோட் / Admin mode" : "பில் மோட் / Billing mode");
-  }
-
   if (data.error) {
-    // Surfaced loudly as well as in the status line. A failure that only whispers looks
-    // identical to the app simply ignoring the shopkeeper.
     setStatus("காதுல விழலை / " + data.error);
     toast("காதுல விழலை / " + data.error, 3500);
     return;
@@ -230,30 +268,30 @@ function apply(data, roundTripMs) {
   if (!data.transcript) { setStatus("காதுல விழலை / Didn't catch that"); return; }
 
   const timing = data.asr_ms != null
-    ? `${roundTripMs} ms (asr ${data.asr_ms}, parse ${data.parse_ms})`
-    : `${roundTripMs} ms`;
+    ? `${roundTripMs} ms (asr ${data.asr_ms}, parse ${data.parse_ms})` : `${roundTripMs} ms`;
   setStatus(`“${data.transcript}” · ${timing}`);
 
-  // Answering an outstanding "what's the price?" takes priority over everything else —
-  // the shopkeeper is mid-sentence with us, not starting a new thought.
-  if (state.askingPrice && data.number != null) { resolvePrice(data.number); return; }
-
-  if (data.admin) { proposeChange(data.admin); return; }
-
-  // A bare mode switch ("விலை வாசி") consumes the whole utterance, leaving nothing to
-  // parse. That is success, not failure — don't report it as one.
-  if (data.mode_switch && !data.items.length && !data.command) return;
-
-  if (state.mode === "admin") {
-    toast("விலை சொல்லுங்க / Say an item name, then its price");
-    return;
+  // An outstanding price question is answered with a bare number. Anything else means the
+  // shopkeeper has moved on, so abandon the question rather than leaving it stuck — that
+  // is what used to hide the Finalise button for the rest of the bill.
+  if (state.askingPrice) {
+    if (data.number != null) { resolvePrice(data.number); return; }
+    const skipped = state.askingPrice.name;
+    state.askingPrice = null;
+    hidePrompt();
+    toast(`${skipped} — விலை சொல்லலை / no price given, skipped`, 3200);
   }
 
-  if (data.command === "cancel_last" && state.items.length) {
-    const gone = state.items.pop();
-    toast(`நீக்கியாச்சு / Removed ${gone.name}`);
-    render();
+  if (data.admin) { proposeChange(data.admin); return; }
+  if (state.mode === "admin") {
+    toast("பொருள், விலை சொல்லுங்க / Say an item name and its price");
     return;
+  }
+  if (data.mode_switch && !data.items.length && !data.command) return;
+
+  if (data.command === "cancel_last" && state.items.length) {
+    toast(`நீக்கியாச்சு / Removed ${state.items.pop().name}`);
+    render(); return;
   }
   if (data.command === "clear_all") { state.items = []; render(); toast("பில் காலி / Cleared"); return; }
   if (data.command === "total" && state.items.length) { finalize(); return; }
@@ -261,8 +299,6 @@ function apply(data, roundTripMs) {
   let added = 0, asked = 0;
   for (const it of data.items) {
     if (it.verdict === "reject") continue;
-    // D4: the catalog ships names, not prices. A known word with no price means ask once,
-    // then remember it forever — that is what keeps setup time at zero.
     if (it.needs_price) { askPrice(it); asked++; continue; }
     state.items.push({ ...it, pending: it.verdict === "confirm" });
     it.verdict === "confirm" ? asked++ : added++;
@@ -275,24 +311,25 @@ function apply(data, roundTripMs) {
 
 function askPrice(item) {
   state.askingPrice = item;
-  const per = item.unit;
   showPrompt({
     kind: "விலை தெரியலை / Price not known",
     main: `${item.name} — என்ன விலை?`,
-    note: `Say the price per ${per}. It is remembered from now on.`,
+    note: `Say the price per ${item.unit}. Remembered from now on.`,
     onCancel: () => { state.askingPrice = null; hidePrompt(); render(); },
   });
-  setStatus(`${item.name} — என்ன விலை? / What price per ${per}?`);
+  setStatus(`${item.name} — என்ன விலை? / What price per ${item.unit}?`);
 }
 
 async function resolvePrice(price) {
   const item = state.askingPrice;
   state.askingPrice = null;
   hidePrompt();
-  const saved = await saveProduct({
-    id: item.product_id, name: item.name, unit: item.unit, unit_price: price,
+  const j = await api("/api/catalog", {
+    method: "POST",
+    body: { shop_id: state.shop.id, id: item.product_id, name: item.name,
+            unit: item.unit, unit_price: price },
   });
-  if (!saved) return;
+  if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); render(); return; }
   const qty = item.price_led ? +(item.amount / price).toFixed(3) : item.qty;
   state.items.push({
     ...item, unit_price: price, qty,
@@ -303,7 +340,7 @@ async function resolvePrice(price) {
   render();
 }
 
-/* ---------- admin: confirm before changing the catalog ---------- */
+/* ---------- admin: catalog ---------- */
 
 function proposeChange(a) {
   state.proposal = a;
@@ -311,101 +348,163 @@ function proposeChange(a) {
   showPrompt({
     kind: isNew ? "புதிய பொருள் / New item" : "விலை மாற்றம் / Price change",
     main: `${a.name} — ${rupees(a.price)}/${a.unit}`,
-    // A near miss is shown rather than resolved silently: "maida" scores 0.857 against
-    // Wheat Flour, and acting on that would reprice a product nobody mentioned.
     note: isNew
       ? (a.near && a.near_score > 0.7 ? `Not “${a.near}”? Cancel if it is.` : "New item for this shop.")
       : `was ${rupees(a.was)}`,
     warn: isNew && a.near_score > 0.7,
     onOk: async () => {
       hidePrompt();
-      const ok = await saveProduct({
-        id: a.id || "", name: a.name, unit: a.unit, unit_price: a.price,
+      const j = await api("/api/catalog", {
+        method: "POST",
+        body: { shop_id: state.shop.id, id: a.id || "", name: a.name,
+                unit: a.unit, unit_price: a.price },
       });
-      if (ok) toast(`${a.name} → ${rupees(a.price)}/${a.unit}`);
+      if (!j.ok) toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500);
+      else { toast(`${a.name} → ${rupees(a.price)}/${a.unit}`); loadCatalog(); }
       state.proposal = null;
     },
     onCancel: () => { state.proposal = null; hidePrompt(); },
   });
 }
 
-async function saveProduct(body) {
-  try {
-    const r = await fetch("/api/catalog", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, shop_id: state.shop.id }),
-    });
-    const j = await r.json();
-    // Report the failure. A rejected write used to come back looking like a success.
-    if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || "unknown"), 4500); return false; }
-    return true;
-  } catch (err) {
-    toast("சேமிக்க முடியலை / Not saved: network", 4000);
-    return false;
-  }
+async function loadCatalog() {
+  const j = await api(`/api/catalog?shop_id=${encodeURIComponent(state.shop.id)}`);
+  state.products = (j.products || []).slice()
+    .sort((a, b) => (b.unit_price > 0) - (a.unit_price > 0) || a.name.localeCompare(b.name));
+  renderCatalog();
 }
 
-/* ---------- prompt panel ---------- */
+function renderCatalog() {
+  const box = $("skuList");
+  if (!state.products.length) { box.innerHTML = `<p class="empty small">No items yet.</p>`; return; }
+  box.innerHTML = state.products.map((p, i) => `
+    <div class="skurow${p.unit_price > 0 ? "" : " unpriced"}">
+      <span class="sku-n">${p.name}${p.description ? `<em>${p.description}</em>` : ""}</span>
+      <span class="sku-u">${p.unit}</span>
+      <span class="sku-p">${p.unit_price > 0 ? rupees(p.unit_price) : "—"}</span>
+      <button class="sku-e" data-edit="${i}" aria-label="Edit">✎</button>
+    </div>`).join("");
+  box.querySelectorAll("[data-edit]").forEach((b) => {
+    b.onclick = () => editSku(state.products[+b.dataset.edit]);
+  });
+}
 
-function hidePrompt() { $("prompt").hidden = true; $("prompt").innerHTML = ""; }
+function editSku(p) {
+  const box = $("skuList");
+  const row = document.createElement("div");
+  row.className = "skuedit";
+  row.innerHTML = `<input class="e-n" value="${p.name}" placeholder="Item">
+    <input class="e-u" value="${p.unit}" placeholder="UOM">
+    <input class="e-p" type="number" step="0.01" value="${p.unit_price || ""}" placeholder="Price">
+    <button class="mini go">சேமி</button><button class="mini x">✕</button>`;
+  box.prepend(row);
+  row.querySelector(".x").onclick = () => row.remove();
+  row.querySelector(".go").onclick = async () => {
+    const j = await api("/api/catalog", {
+      method: "POST",
+      body: { shop_id: state.shop.id, id: p.id, name: row.querySelector(".e-n").value.trim(),
+              unit: row.querySelector(".e-u").value.trim() || "piece",
+              unit_price: parseFloat(row.querySelector(".e-p").value) || 0 },
+    });
+    if (!j.ok) { toast("சேமிக்க முடியலை / Not saved: " + (j.error || ""), 4000); return; }
+    row.remove();
+    toast("சேமிச்சாச்சு / Saved");
+    loadCatalog();
+  };
+}
+
+/* ---------- admin: staff ---------- */
+
+$("addStaffBtn").onclick = () => {
+  $("staffForm").hidden = !$("staffForm").hidden;
+  if (!$("staffForm").hidden) $("staffMobile").focus();
+};
+$("staffCancel").onclick = () => { $("staffForm").hidden = true; };
+
+$("staffForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const j = await api("/api/staff", {
+    method: "POST",
+    body: { mobile: digits($("staffMobile").value), passcode: digits($("staffCode").value),
+            name: $("staffName").value.trim() },
+  });
+  if (!j.ok) { toast(j.error || "Could not add", 4000); return; }
+  toast(`${j.mobile} சேர்க்கப்பட்டது / added`);
+  $("staffForm").reset();
+  $("staffForm").hidden = true;
+  loadStaff();
+};
+
+async function loadStaff() {
+  const j = await api("/api/staff");
+  const rows = (j.staff || []).filter((s) => s.role !== "owner");
+  $("staffList").innerHTML = rows.length
+    ? rows.map((s) => `<div class="staffrow"><b>${s.mobile}</b><span>${s.name || "—"}</span></div>`).join("")
+    : `<p class="empty small">பணியாளர் இல்லை / No staff yet.</p>`;
+}
+
+/* ---------- prompt ---------- */
+
+const hidePrompt = () => { $("prompt").hidden = true; $("prompt").innerHTML = ""; };
 
 function showPrompt({ kind, main, note, warn, onOk, onCancel }) {
   const box = $("prompt");
   box.hidden = false;
-  box.innerHTML = `<div class="promptbody">
-      <b>${kind}</b>
+  box.innerHTML = `<div class="promptbody"><b>${kind}</b>
       <div class="promptmain">${main}</div>
-      ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}
-    </div>
-    <div class="promptacts">
-      ${onOk ? `<button class="yes" data-ok>சரி</button>` : ""}
-      <button class="del" data-no aria-label="Cancel">✕</button>
-    </div>`;
+      ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}</div>
+    <div class="promptacts">${onOk ? `<button class="yes" data-ok>சரி</button>` : ""}
+      <button class="del" data-no aria-label="Cancel">✕</button></div>`;
   const ok = box.querySelector("[data-ok]");
   if (ok) ok.onclick = onOk;
   box.querySelector("[data-no]").onclick = onCancel;
 }
 
-async function applyAdmin(data) {
-  // Admin mode reuses the same grammar: "sugar nooru rubai" is a price-led utterance,
-  // so the spoken amount lands in `amount` and becomes the new unit price.
-  const priced = data.items.find((i) => i.price_led);
-  if (!priced) { toast("விலை சொல்லுங்க / Say: item name, then the price"); return; }
-  const body = {
-    shop_id: state.shop.id, name: priced.name, unit: priced.unit,
-    unit_price: priced.amount,
-  };
-  await fetch("/api/catalog", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  toast(`${priced.name} → ${rupees(priced.amount)}/${priced.unit}`);
-}
+/* ---------- billing list (accordion) ---------- */
+
+$("accHead").onclick = () => { state.expanded = !state.expanded; render(); };
 
 function render() {
+  if (state.mode === "admin") return;
   const box = $("items");
-  if (!state.items.length) {
-    const how = health.asr_configured
-      ? "Hold the button and say an item."
-      : "Type an item below — voice is off on this server.";
-    box.innerHTML = `<p class="empty">பொருள் சொல்லுங்க…<br><span class="en">${how}</span></p>`;
+  const n = state.items.length;
+
+  if (!n) {
+    $("accHead").hidden = true;
+    box.hidden = false;
+    box.innerHTML = `<p class="empty">பொருள் சொல்லுங்க…<br><span class="en">${
+      health.asr_configured ? "Hold the button and say an item."
+                            : "Type an item below — voice is off."}</span></p>`;
     $("totalRow").hidden = true;
     $("finalize").hidden = true;
     return;
   }
+
+  const pending = state.items.filter((i) => i.pending);
+  const total = state.items.reduce((s, i) => s + (i.pending ? 0 : i.amount), 0);
+  const last = state.items[n - 1];
+
+  // Collapsed by default so the shopkeeper sees a running total rather than a wall of
+  // lines — but never collapsed over something still unresolved.
+  const open = state.expanded || pending.length > 0;
+  $("accHead").hidden = false;
+  $("accCount").textContent = `${n} ${n === 1 ? "பொருள் / item" : "பொருள் / items"}`;
+  $("accLast").textContent = open ? "" : `${last.name} · ${rupees(last.amount)}`;
+  $("accTotal").textContent = rupees(total);
+  $("accChev").textContent = open ? "⌃" : "⌄";
+  $("accHead").classList.toggle("alert", pending.length > 0);
+  box.hidden = !open;
+
   box.innerHTML = state.items.map((it, i) => {
-    const qty = it.price_led
-      ? `${rupees(it.amount)} worth`
-      : `${(+it.qty).toFixed(it.qty % 1 ? 2 : 0)} ${it.unit}`;
+    const qty = it.price_led ? `${rupees(it.amount)} worth`
+                             : `${(+it.qty).toFixed(it.qty % 1 ? 2 : 0)} ${it.unit}`;
     return `<div class="item ${it.pending ? "confirm" : ""}">
       <span class="qty">${qty}</span>
-      <span class="nm">${it.name}${it.pending
-        ? `<span class="ask">இதுதானா? / Is this right?</span>` : ""}</span>
+      <span class="nm">${it.name}${it.pending ? `<span class="ask">இதுதானா? / Is this right?</span>` : ""}</span>
       <span class="amt">${rupees(it.amount)}</span>
       ${it.pending ? `<button class="yes" data-ok="${i}">சரி</button>` : ""}
-      <button class="del" data-del="${i}" aria-label="Remove">✕</button>
-    </div>`;
+      <button class="del" data-del="${i}" aria-label="Remove">✕</button></div>`;
   }).join("");
-
   box.querySelectorAll("[data-del]").forEach((b) => {
     b.onclick = () => { state.items.splice(+b.dataset.del, 1); render(); };
   });
@@ -413,46 +512,14 @@ function render() {
     b.onclick = () => { state.items[+b.dataset.ok].pending = false; render(); };
   });
 
-  // Unconfirmed lines are excluded from the running total. The shopkeeper reads this number
-  // out to the customer; it must never contain a line he hasn't verified.
-  const pending = state.items.filter((i) => i.pending);
-  const total = state.items.reduce((s, i) => s + (i.pending ? 0 : i.amount), 0);
   $("runningTotal").innerHTML = pending.length
     ? `${rupees(total)}<span class="pendingnote">+${pending.length} உறுதி செய்ய</span>`
     : rupees(total);
   $("totalRow").hidden = false;
-  // Finalise stays hidden while anything is unconfirmed — an unresolved item must never
-  // silently make it into an amount the customer is asked to pay.
-  $("finalize").hidden = pending.length > 0 || !!state.askingPrice;
+  // Only an unresolved line already on the bill blocks finalising. An unanswered price
+  // question does not — that item was never added, so there is nothing wrong to bill.
+  $("finalize").hidden = pending.length > 0;
   if (pending.length) setStatus("உறுதி செய்யுங்க / Confirm the highlighted item first");
-}
-
-/* ---------- finalise, pay, receipt ---------- */
-
-async function finalize() {
-  if (!state.items.length || state.items.some((i) => i.pending)) return;
-  $("finalize").disabled = true;
-  try {
-    const res = await fetch("/api/finalize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        shop_id: state.shop.id, items: state.items,
-        vpa: state.shop.vpa, payee: state.shop.name,
-      }),
-    });
-    const data = await res.json();
-    state.bill = data;
-    $("payAmount").textContent = rupees(data.total);
-    $("paidAmount").textContent = rupees(data.total);
-    $("qr").src = data.qr;
-    $("payRef").textContent = data.ref;
-    show("payment");
-  } catch (err) {
-    toast("பில் முடியலை / Could not finalise");
-  } finally {
-    $("finalize").disabled = false;
-  }
 }
 
 /* ---------- typed fallback ---------- */
@@ -460,9 +527,7 @@ async function finalize() {
 $("typeToggle").onclick = () => {
   const f = $("typeForm");
   f.hidden = !f.hidden;
-  $("typeToggle").textContent = f.hidden
-    ? "⌨ தட்டச்சு / Type instead"
-    : "✕ மறை / Hide typing";
+  $("typeToggle").textContent = f.hidden ? "⌨ தட்டச்சு / Type instead" : "✕ மறை / Hide typing";
   if (!f.hidden) $("typeInput").focus();
 };
 
@@ -473,19 +538,38 @@ $("typeForm").onsubmit = async (e) => {
   $("typeInput").value = "";
   const t0 = performance.now();
   try {
-    const res = await fetch("/api/parse", {
+    const d = await api("/api/parse", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, shop_id: state.shop.id, mode: state.mode }),
+      body: { text, shop_id: state.shop.id, mode: state.mode },
     });
-    apply(await res.json(), Math.round(performance.now() - t0));
-  } catch (err) {
-    toast("இணைப்பு இல்லை / Network problem");
-  }
+    apply(d, Math.round(performance.now() - t0));
+  } catch (err) { toast("இணைப்பு இல்லை / Network problem"); }
 };
 
+/* ---------- finalise, pay, receipt ---------- */
+
+async function finalize() {
+  if (!state.items.length || state.items.some((i) => i.pending)) return;
+  $("finalize").disabled = true;
+  try {
+    const d = await api("/api/finalize", {
+      method: "POST",
+      body: { shop_id: state.shop.id, items: state.items,
+              vpa: state.shop.vpa, payee: state.shop.name },
+    });
+    state.bill = d;
+    $("payAmount").textContent = rupees(d.total);
+    $("paidAmount").textContent = rupees(d.total);
+    $("qr").src = d.qr;
+    $("payRef").textContent = d.ref;
+    show("payment");
+  } catch (err) {
+    toast("பில் முடியலை / Could not finalise");
+  } finally { $("finalize").disabled = false; }
+}
+
 $("finalize").onclick = finalize;
-$("backToBill").onclick = () => show("billing");
+$("backToBill").onclick = () => show("main");
 
 $("received").onclick = async () => {
   if (state.bill) {
@@ -500,15 +584,11 @@ $("received").onclick = async () => {
 function newBill() {
   state.items = [];
   state.bill = null;
-  state.mode = "billing";
   state.askingPrice = null;
   state.proposal = null;
+  state.expanded = false;
   hidePrompt();
-  $("modeTag").className = "tag billing";
-  $("modeTag").textContent = "பில் / BILLING";
-  render();
-  setStatus("தயார் / Ready");
-  show("billing");
+  setMode("billing");
+  show("main");
 }
 $("nextCustomer").onclick = newBill;
-$("resetBtn").onclick = newBill;

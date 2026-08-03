@@ -9,47 +9,106 @@
 </head>
 <body>
 
-<!-- Consent. The PoC streams audio to a cloud ASR, which is the opposite of the shipped
-     product's promise, so it has to say so before the mic is ever touched. -->
-<section id="consent" class="screen active">
+<!-- Auth. One number field first; what comes next depends on whether the number is known. -->
+<section id="auth" class="screen active">
   <div class="pad">
     <h1>வாக்கு <span class="sub">Vaakku</span></h1>
     <p class="lede">பேசுங்க, பில் தானா எழுதும்.<br><span class="en">Speak, and the bill writes itself.</span></p>
-    <div class="notice">
-      <p><b>இது ஒரு டெமோ / This is a demo.</b></p>
-      <p>உங்க குரல் இணையம் வழியாக அனுப்பப்படும். <span class="en">In this demo your voice is sent over the internet to be recognised. The real app will work fully offline and will not send your voice anywhere.</span></p>
-      <p>ஒலிப்பதிவு சேமிக்கப்படாது. <span class="en">No audio is stored.</span></p>
-    </div>
+
     <label class="field">
       <span>மொபைல் நம்பர் / Mobile number</span>
-      <input id="mobile" type="tel" inputmode="numeric" placeholder="98400 12345" autocomplete="tel">
+      <input id="mobile" type="tel" inputmode="numeric" maxlength="14" placeholder="98400 12345" autocomplete="tel">
     </label>
-    <label class="field">
-      <span>கடை பெயர் / Shop name</span>
-      <input id="shopName" type="text" placeholder="Anand Stores" autocomplete="off">
-    </label>
-    <label class="field">
-      <span>UPI ID</span>
-      <input id="vpa" type="text" placeholder="yourname@okhdfcbank" autocomplete="off" spellcheck="false">
-    </label>
-    <button id="startBtn" class="primary">ஆரம்பிக்கலாம் / Start</button>
+
+    <!-- Returning: passcode only -->
+    <div id="loginBox" hidden>
+      <p class="who" id="whoLine"></p>
+      <label class="field">
+        <span>6 இலக்க கடவுஎண் / 6-digit passcode</span>
+        <input id="loginCode" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="current-password">
+      </label>
+      <button id="loginBtn" class="primary">உள்ளே போ / Sign in</button>
+      <button id="backBtn" class="ghost wide">வேற நம்பர் / Different number</button>
+    </div>
+
+    <!-- New business -->
+    <div id="signupBox" hidden>
+      <p class="who">புதிய கடை / New business</p>
+      <label class="field">
+        <span>கடை பெயர் / Shop name</span>
+        <input id="shopName" type="text" placeholder="Anand Stores" autocomplete="organization">
+      </label>
+      <label class="field">
+        <span>UPI ID</span>
+        <input id="vpa" type="text" placeholder="yourname@okhdfcbank" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="field">
+        <span>6 இலக்க கடவுஎண் / Choose a 6-digit passcode</span>
+        <input id="signupCode" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="new-password">
+      </label>
+      <button id="signupBtn" class="primary">கடை தொடங்கு / Create business</button>
+      <button id="backBtn2" class="ghost wide">வேற நம்பர் / Different number</button>
+    </div>
+
+    <button id="continueBtn" class="primary">தொடரு / Continue</button>
+
+    <div class="notice">
+      <p><b>இது ஒரு டெமோ / This is a demo.</b></p>
+      <p>உங்க குரல் இணையம் வழியாக அனுப்பப்படும். <span class="en">Your voice is sent over the internet to be recognised. The real app will work offline and send nothing.</span> <span class="en">No audio is stored.</span></p>
+    </div>
     <p class="fineprint" id="healthLine">…</p>
   </div>
 </section>
 
-<!-- Billing -->
-<section id="billing" class="screen">
+<!-- Main -->
+<section id="main" class="screen">
   <header class="bar">
-    <div><b id="shopLabel">Shop</b><span id="modeTag" class="tag billing">பில் / BILLING</span></div>
-    <button id="resetBtn" class="ghost" title="New bill">✕</button>
+    <b id="shopLabel">Shop</b>
+    <!-- Owner only. Staff never see this: they bill, they don't set prices. -->
+    <div id="modeSwitch" class="switch" hidden>
+      <button data-mode="billing" class="on">பில்</button>
+      <button data-mode="admin">விலை</button>
+    </div>
+    <button id="signOut" class="ghost" title="Sign out">⏻</button>
   </header>
 
   <div id="asrBanner" class="banner" hidden></div>
-
   <div id="prompt" class="prompt" hidden></div>
 
-  <div id="items" class="items">
-    <p class="empty">பொருள் சொல்லுங்க…<br><span class="en">Hold the button and say an item.<br>“ரெண்டு கிலோ சர்க்கரை” · “arai kilo thuvaram paruppu” · “ten rupees coriander”</span></p>
+  <!-- BILLING -->
+  <div id="billPanel" class="panel">
+    <button id="accHead" class="acc" hidden>
+      <span class="accsum"><b id="accCount">0 items</b><span id="accLast"></span></span>
+      <span class="accright"><b id="accTotal">₹0</b><span id="accChev">⌄</span></span>
+    </button>
+    <div id="items" class="items">
+      <p class="empty">பொருள் சொல்லுங்க…<br><span class="en">Hold the button and say an item.<br>“ரெண்டு கிலோ சர்க்கரை” · “arai kilo thuvaram paruppu” · “ten rupees coriander”</span></p>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="adminPanel" class="panel" hidden>
+    <div class="hint">சொல்லுங்க / Say: “potato 1 kilo 100 rupees” · “coriander 40 rupees”</div>
+
+    <div class="tablehead"><span>பொருள் / Item</span><span>UOM</span><span>விலை / Price</span><span></span></div>
+    <div id="skuList" class="skulist"></div>
+
+    <div class="section">
+      <div class="sectionhead">
+        <span>ஆட்கள் / Staff</span>
+        <button id="addStaffBtn" class="mini">+ சேர் / Add</button>
+      </div>
+      <div id="staffList" class="stafflist"></div>
+      <form id="staffForm" class="staffform" hidden>
+        <input id="staffMobile" type="tel" inputmode="numeric" maxlength="14" placeholder="Mobile number">
+        <input id="staffCode" type="password" inputmode="numeric" maxlength="6" placeholder="6-digit passcode">
+        <input id="staffName" type="text" placeholder="Name (optional)">
+        <div class="staffacts">
+          <button type="submit" class="mini go">சேர் / Add</button>
+          <button type="button" id="staffCancel" class="mini">✕</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <div class="totalrow" id="totalRow" hidden>
@@ -58,19 +117,13 @@
 
   <div class="controls">
     <p id="status" class="status">தயார் / Ready</p>
-    <button id="talk" class="talk idle" aria-label="Hold to speak">
-      <span class="talkicon"></span>
-    </button>
+    <button id="talk" class="talk idle" aria-label="Hold to speak"><span class="talkicon"></span></button>
     <p id="talkLabel" class="talklabel">பேச அழுத்துங்க<br><small>Hold to speak</small></p>
-    <!-- The fallback, never the default (Principle 3). Also the only way to exercise the
-         pipeline with no ASR key, and the input the eval harness will drive. -->
     <form id="typeForm" class="typerow" hidden>
-      <input id="typeInput" type="text" autocomplete="off" autocapitalize="off"
-             placeholder="ரெண்டு கிலோ சர்க்கரை">
+      <input id="typeInput" type="text" autocomplete="off" autocapitalize="off" placeholder="ரெண்டு கிலோ சர்க்கரை">
       <button type="submit" aria-label="Add">→</button>
     </form>
     <button id="typeToggle" class="ghost small">⌨ தட்டச்சு / Type instead</button>
-
     <button id="finalize" class="primary finalize" hidden>பில் முடி / Finalise bill</button>
   </div>
 </section>

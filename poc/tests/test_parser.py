@@ -106,6 +106,17 @@ REJECTS = [
 ]
 
 
+# Admin rate configuration: the spoken quantity must survive so a per-UOM rate can be
+# worked out. A price-led line overwrites qty with amount/current_price, which once made
+# "potato 2 kilo is 100 rupees" echo back the existing price instead of setting Rs50/kg.
+RATES = [
+    ("potato 2 kilo is 100 rupees",  "POT001", 2,    50.0),
+    ("potato 1 kilo is 100 rupees",  "POT001", 1,    100.0),
+    ("sugar 5 kilo 250 rupees",      "SUG001", 5,    50.0),
+    ("coriander 40 rupees",          "COR001", None, 40.0),
+]
+
+
 def run():
     passed = failed = 0
 
@@ -147,6 +158,18 @@ def run():
     print("mode switches")
     for text, mode in MODES:
         check(text, P.parse(text).mode_switch == mode, f"-> {P.parse(text).mode_switch}")
+
+    print("admin rate configuration")
+    for text, sku, want_qty, want_rate in RATES:
+        r = P.parse(text)
+        if not r.items:
+            check(text, False, "-> no item parsed")
+            continue
+        it = r.items[0]
+        check(text, it.product_id == sku, f"-> sku {it.product_id} (want {sku})")
+        check(text, it.spoken_qty == want_qty, f"-> spoken_qty {it.spoken_qty} (want {want_qty})")
+        rate = round(it.amount / it.spoken_qty, 2) if it.spoken_qty else round(it.amount, 2)
+        check(text, abs(rate - want_rate) < 0.01, f"-> rate {rate} (want {want_rate})")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:
