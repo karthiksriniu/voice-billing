@@ -1,0 +1,21 @@
+sku,name,name_ta,short_desc,long_desc,unit,unit_price,stock,aliases
+SUG001,Sugar,சர்க்கரை,White sugar,Refined white crystal sugar,kg,45,100,sakkarai|chakkarai|cheeni
+RIC001,Ponni Rice,பொன்னி அரிசி,Boiled rice,Ponni boiled rice premium,kg,58,200,ponni|arisi|rice|ponni arisi
+TUR001,Toor Dal,துவரம் பருப்பு,Yellow lentil,Toor dal / thuvaram paruppu,kg,140,50,thuvaram paruppu|tuvaram paruppu|thuar dal|paruppu
+URD001,Urad Dal,உளுந்து,Black gram,Urad dal for idli batter,kg,120,40,ulundhu|ulundu|urad
+OIL001,Sunflower Oil,சூரியகாந்தி எண்ணெய்,Cooking oil,Refined sunflower cooking oil,l,140,60,ennai|oil|sunflower oil|refined oil
+SAL001,Salt,உப்பு,Iodised salt,Free flow iodised salt,kg,22,80,uppu
+TAM001,Tamarind,புளி,Seedless tamarind,Cleaned seedless tamarind,kg,180,20,puli|imli
+CHI001,Chilli Powder,மிளகாய் தூள்,Red chilli powder,Ground red chilli powder,kg,320,15,milagai thool|chilli|milagai
+COR001,Coriander,கொத்தமல்லி,Fresh coriander,Fresh coriander leaves bunch,bundle,10,30,kothamalli|kotthamalli|malli|coriander leaves
+ONI001,Onion,வெங்காயம்,Big onion,Nasik big onion,kg,35,150,vengayam|big onion|onions
+TOM001,Tomato,தக்காளி,Fresh tomato,Local fresh tomato,kg,30,100,thakkali|takkali
+POT001,Potato,உருளைக்கிழங்கு,Fresh potato,Agra potato,kg,32,120,urulai|urulaikizhangu|aloo
+BIS001,Biscuit,பிஸ்கட்,Marie biscuit,Marie gold biscuit packet,packet,10,200,biscuit packet|marie|biskat
+TEA001,Tea Powder,தேயிலை,Tea dust,Strong tea dust,kg,420,25,theyilai|tea|chaya podi
+COF001,Coffee Powder,காபி பொடி,Filter coffee,Filter coffee powder blend,kg,600,10,kaapi podi|coffee|kaapi
+MIL001,Milk,பால்,Toned milk,Aavin toned milk sachet,packet,22,80,paal|aavin|milk packet
+EGG001,Egg,முட்டை,Table egg,Fresh table egg,piece,7,120,muttai|eggs
+SOA001,Bath Soap,குளியல் சோப்பு,Bathing bar,Bathing soap bar 100g,piece,42,60,soap|sabun|kuliyal soap
+DET001,Detergent,சவர்க்காரம்,Washing powder,Detergent washing powder,kg,110,30,savarkaram|washing powder|detergent powder
+WHE001,Wheat Flour,கோதுமை மாவு,Atta,Whole wheat atta,kg,48,70,godhumai maavu|atta|wheat

@@ -1,0 +1,344 @@
+# Decisions
+
+One entry per open decision in the brief. Each: options, recommendation, reasoning, and the
+condition that reverses it. Decisions marked **[data]** are provisional and settled by the
+Phase 1 spike.
+
+---
+
+## D1. Speech recognition — on-device only, backend chosen by bakeoff **[data]**
+
+**Options**
+| | Offline | Marginal cost @24k utt/shop/mo | Size | Tamil+English code-mix |
+|---|---|---|---|---|
+| Vosk (small Indic, constrained grammar) | Yes | ₹0 | ~50 MB | Weak base model, but grammar-restricted decoding compensates hard |
+| whisper.cpp tiny-q5 / small-q5 | Yes | ₹0 | 75 / 250 MB | Tiny is poor at Tamil; small is too slow on 3 GB and **hallucinates on noise** |
+| Android `SpeechRecognizer` (on-device) | Partly | ₹0 | 0 MB in APK | Google's own Tamil pack; single-locale, so code-mix degrades; availability varies by OEM |
+| AI4Bharat IndicConformer | Yes | ₹0 | ~120 MB ONNX | Best published Tamil accuracy; NeMo→ONNX→Android is a multi-week project |
+| Bhashini / ULCA, Sarvam, Google Cloud STT, IndicWhisper | No | ₹40–12,000 | — | Good accuracy, wrong cost curve |
+
+**Recommendation: on-device only. No cloud fallback at MVP.** All candidates sit behind one
+`AsrBackend` interface (audio frames in → N-best hypotheses with per-token confidence out),
+and Phase 1 picks the winner on the field corpus. Provisional favourite is **Vosk with a
+grammar restricted to the shop's catalog + numerals + units**, because a closed vocabulary is
+the single biggest accuracy lever we have and only Kaldi-family decoders expose it.
+
+**Reasoning.** The brief's leaning was on-device with cloud fallback for low-confidence
+utterances. The cost arithmetic in `PLAN.md` kills the fallback: even at 5% escalation the
+cheapest Indic cloud ASR is 4–15× the ₹10/shop/month ceiling. Since the fallback can't pay
+for itself, the on-device path must carry 100% of traffic anyway — so build for that and
+skip the dual-path complexity. Offline-non-negotiable points the same way. Whisper deserves
+a specific warning rather than a benchmark: it fabricates fluent text from noise, which
+manufactures exactly the silent errors we have decided are fatal.
+
+**Evidence needed:** the 200-utterance field corpus, scored on silent error rate and
+auto-accept rate per backend. Also required: does `SpeechRecognizer` actually do offline
+Tamil on the ₹6–8k phones our pilot shopkeepers own? Android 12+ has
+`createOnDeviceSpeechRecognizer`, but our floor is Android 10, where offline recognition
+depends on an OEM-dependent Google app language pack. Check it on their phones during the
+field trip — costs nothing.
+
+**Practical note:** `SpeechRecognizer` only reads the mic, so it cannot be fed WAV files.
+Evaluate that arm by playing the corpus through a speaker into the phone in a quiet room.
+Acoustically imperfect, but comparable across devices and closer to real conditions than
+file injection would be.
+
+**Reverses if:** Bhashini's free tier proves genuinely unmetered and low-latency at our
+volume (then a fallback becomes free and we take it); or no on-device backend clears the
+Phase 1 gate (then the product needs rethinking, not a cloud patch we can't afford); or we
+later acquire ML capacity, at which point IndicConformer fine-tuned on our own corpus
+becomes the obvious upgrade.
+
+---
+
+## D2. Capture model — session-scoped VAD
+
+**Options:** push-to-talk per item · session with VAD segmenting continuous speech ·
+always-on with wake word.
+
+**Recommendation: session-scoped VAD.** Tap once to open a bill, speak items freely, say
+"total" (or tap) to close. Use **Silero VAD** (~1 MB ONNX, runs fine on low-end) rather than
+WebRTC VAD, which collapses in shop noise. Two escape hatches: a large hold-to-talk button,
+and **volume-down as a hardware push-to-talk** so the phone can sit on the counter and be
+pressed without looking.
+
+**Reasoning.** Agrees with the brief's leaning. Push-to-talk per item costs a tap per line
+and breaks the rhythm of handing over goods with both hands full. Wake words are a false-
+trigger and privacy-comfort problem in a room full of strangers, and a permanently hot mic on
+a 2 GB phone is a battery and Play-policy problem for no gain. The session scope also bounds
+mic-on time to the duration of an actual bill, which is the honest thing to put on the
+consent screen.
+
+**Reverses if:** Phase 1 shows VAD endpointing is unreliable at shop noise levels (ceiling
+fan, TV, traffic) — specifically if false endpoints cut items mid-utterance more than ~3% of
+the time. Then push-to-talk becomes the default and VAD becomes the power-user mode.
+
+---
+
+## D3. Utterance → line item — deterministic grammar, N-best reranked
+
+**Options:** deterministic grammar + fuzzy catalog match · small on-device LLM · cloud LLM ·
+hybrid with escalation.
+
+**Recommendation: deterministic, with no LLM anywhere in the MVP.**
+
+Pipeline: normalise numerals → parse grammar → fuzzy-match item against this shop's catalog
+→ score. Run it over **every ASR hypothesis in the N-best list**, and rank by
+(parse validity × catalog match score × ASR confidence). This recovers a large fraction of
+ASR errors for free and is the highest-value cheap trick in the whole design.
+
+Grammar must cover, at minimum:
+- weight-led: `[qty][unit][item]` — "two kilo sugar", "arai kilo thuvaram paruppu"
+- price-led: `[amount] rupees [of] [item]` — "ten rupees coriander", "ஐந்து ரூபாய் biscuit"
+- count-led: "one packet", "rendu dozen", "ek packet"
+- fractional/colloquial measures: arai (½), kaal (¼), mukkal (¾), pav (250 g), dozen (12)
+- bare item with implied unit quantity, resolved from the catalog's default unit
+
+Item matching needs phonetic normalisation for Tamil–English transliteration variance
+(*thuvaram / tuvaram / thuar*). Soundex and Metaphone are English-only and will mislead;
+build a small romanisation-normalising key (collapse aspirates, t/th, retroflex/dental,
+vowel length) and combine it with edit distance over both the romanised and Tamil-script
+forms. Catalogs are ~100–400 SKUs, so an exhaustive scan is free.
+
+**Reasoning.** Agrees with the brief. Deterministic is debuggable, free, offline, testable
+against the fixture corpus, and — the point that matters most — its failures are *legible*.
+When it can't parse, it knows it can't, which feeds the confidence gate. A small on-device
+LLM on a 3 GB phone burns our entire latency budget and produces confident wrong answers,
+which is the exact failure mode we are designing against.
+
+**Reverses if:** parse error given a correct transcript stays above ~3% after two grammar
+iterations, meaning real phrasing is more varied than the grammar can absorb. Even then the
+first move is a larger grammar with a learned alias table, not an LLM. An LLM only becomes
+right if we later need free-form utterances ("give me the usual") that have no grammar.
+
+---
+
+## D4. Catalog bootstrap — seeded list, learn prices as you go
+
+**Options:** seeded regional SKU list with typical prices · learn-as-you-go · voice dictation
+of the whole catalog · OCR a photographed price list.
+
+**Recommendation: ship a seeded ~300-SKU Chennai kirana list carrying names, Tamil/English
+aliases and default units — but no prices. Price is learned on first sale**, asked aloud
+once ("சர்க்கரை என்ன விலை?"), then remembered forever.
+
+**Reasoning.** The brief's leaning, with one change: seeding prices is actively harmful. A
+seeded name costs nothing if wrong — the shopkeeper says something else and the alias is
+learned. A seeded *price* that is wrong produces a wrong bill, which is the one thing we
+said destroys trust permanently. Vegetable prices move daily and vary by street, so a seeded
+price is wrong more often than right. Seeding names and aliases still buys the entire ASR
+benefit (a populated vocabulary for grammar-restricted decoding on day one) with none of the
+risk, and setup time stays at zero per principle 4.
+
+Also needed: a fast spoken price-change path ("சர்க்கரை நாற்பத்தி ஐந்து ரூபாய்"), because
+in a vegetable shop prices change every morning and any friction here abandons the app.
+
+**Reverses if:** pilot shops turn out to keep stable enough prices that seeding them saves
+real time and the "confirm this price" step is judged cheap. Test it by seeding prices in a
+*confirm-before-first-use* state for one pilot shop and comparing setup time and error rate.
+Voice dictation of a full catalog and price-list OCR both stay available as optional
+accelerators later; neither should ever be on the critical path to the first bill.
+
+---
+
+## D5. Payment confirmation — dynamic QR, manual confirmation. **Highest-risk decision.**
+
+**Options**
+1. **Android `NotificationListenerService`** reading the shopkeeper's own UPI/bank app
+   notifications.
+2. **Reading payment SMS** (`READ_SMS`).
+3. **PSP / aggregator webhook** (Razorpay, Cashfree, PhonePe merchant).
+4. **Manual confirmation** by the shopkeeper.
+
+**Recommendation: generate a dynamic `upi://pay` QR carrying the exact amount, and have the
+shopkeeper confirm receipt with one tap. No automatic confirmation at MVP.**
+
+**Reasoning.** Play-Store-only distribution removes options 1 and 2 outright, and this is not
+a grey area. `NotificationListenerService` is restricted to a short list of approved use
+cases (accessibility, companion devices, and similar); payment reconciliation is not among
+them, and an app whose core loop depends on it gets rejected or removed. `READ_SMS` is
+governed by the SMS/Call Log policy, which permits it essentially only for default SMS
+handlers — financial reconciliation is again not an exemption. Neither is worth a rejection
+that takes the whole product offline.
+
+Option 3 is technically clean and directly contradicts the distribution constraint: PSP
+merchant onboarding means PAN, bank proof and a review queue, which is not something a
+shopkeeper completes unassisted in under 5 minutes at 8 p.m. It also puts us adjacent to the
+flow of funds, against principle 5.
+
+That leaves manual confirmation — and it is a much better answer than it first appears,
+because **it is exactly what shopkeepers do today.** With a static QR sticker there is no
+automatic confirmation at all: they glance at their phone, hear the sound-box, or look at the
+customer's screen. We are not asking them to accept a downgrade. Meanwhile the dynamic QR
+already removes the two real failure modes of the sticker — the customer typing the amount
+wrong, and the shopkeeper having to read the total aloud and hope.
+
+Design the confirmation to ride on the habit rather than fight it: QR on screen, amount large
+above it, one full-width **"வந்தது / Received"** button. Unconfirmed bills stay in a
+day-end review list, never blocking the next customer.
+
+**What settles the residual doubt (₹0):** on the Phase 1 field trip, sit in 5 shops for two
+hours and count how each UPI payment is actually verified today. If it turns out that
+essentially every shop already relies on a sound-box, then a *matching* audio confirmation
+from us is the differentiator and the priority changes.
+
+**Two things to verify before Phase 2, both cheap and both genuinely uncertain:**
+- Does a `upi://pay` deep link with `am` set against a **personal (P2P) VPA** work
+  consistently across GPay, PhonePe, Paytm and BHIM? NPCI has progressively tightened
+  P2P-with-amount flows for fraud reasons, and some apps make the amount editable or warn.
+  Test with a real VPA on four apps. If P2P-with-amount is unreliable, the product needs a
+  merchant VPA, and D5 changes shape entirely.
+- Does the `tr` (transaction ref) we set survive to the shopkeeper's own statement? If yes, a
+  future reconciliation path exists without a PSP.
+
+**Reverses if:** (a) we ever add a sideloaded distribution channel — the notification listener
+becomes available immediately and is the right answer, so keep the confirmation logic behind
+a `PaymentConfirmer` interface with a manual implementation as the only one shipped; (b) a
+PSP appears with genuinely instant self-serve merchant onboarding (some now offer VPA-only
+onboarding against an existing UPI ID); (c) pilot data shows unconfirmed-bill disputes
+happening more than ~1 per shop per week.
+
+---
+
+## D6. Spoken confirmation — pre-recorded clips for numbers, TTS for item names only
+
+**Options:** Android built-in TTS · pre-recorded numeral and phrase audio concatenated
+locally · hybrid.
+
+**Recommendation: hybrid, weighted to pre-recorded.** Record a professional Tamil voice for
+0–99, hundred / thousand, rupee / rupees / paise, and ~20 stock phrases ("didn't catch that",
+"total", "removed"). Concatenate locally. The **running total and final total are always
+pre-recorded** — they must be unmistakable at 75 dB(A). Item names, which cannot be
+pre-recorded because the catalog grows, use Android TTS when a Tamil voice is installed and
+are **silently skipped when it isn't** — the screen already shows the item, and the number is
+what matters.
+
+**Reasoning.** Agrees with the brief's leaning, and identifies where it stops stretching: the
+catalog is open-ended, so pure pre-recording cannot cover item names. Indic TTS on a ₹7k
+phone is uneven in quality and slow to initialise, which is survivable for a secondary cue and
+not for the amount the customer is about to pay. Clip inventory is ~130 files, a few MB at
+low bitrate.
+
+**Reverses if:** Phase 3 testing shows shopkeepers rely on hearing the item name to catch
+errors (rather than glancing at the screen), which would make TTS availability critical
+rather than optional. In that case, pre-record the top ~300 seeded SKU names too and use TTS
+only for shop-added items.
+
+---
+
+## D7. Output — screen-only at MVP, print in Phase 3, share link later
+
+**Recommendation:** Phase 2 is **screen-only**. Thermal printing lands in **Phase 3**. A
+WhatsApp/SMS bill link is **out of MVP** and probably out of the product for now.
+
+**Reasoning.** Screen-only is enough to replace the scrap of paper, and every hardware
+dependency added before the core loop is proven is a reason for the pilot to fail for reasons
+unrelated to the pilot. Printing matters for a different reason than customer receipts —
+**the printed footer is the primary attribution surface**, which is why it is Phase 3 and not
+Phase 4, and why growth measurement can't start before it.
+
+The share link is rejected on a principle, not a cost: it requires the customer's phone
+number, which means the shopkeeper types. That violates principle 3 at the busiest moment of
+the interaction. Revisit only with a no-typing capture path.
+
+**Pairing requirement (non-negotiable for Phase 3):** the printer must reconnect with zero
+user action after a phone restart, a printer power-cycle, and a day out of range. Bond once
+during setup, store the MAC, reconnect on app foreground with exponential backoff, and never
+show a Bluetooth device picker again after the first successful print. Budget real time for
+this — cheap ESC/POS printers are individually quirky, so test on 3 models.
+
+---
+
+## D8. Data and sync — local-first SQLite, no backend at MVP
+
+**Recommendation: no backend at all in Phases 1–4.** SQLite on device; Android Auto Backup
+(25 MB free, Google-provided) for device-loss recovery; plus a user-triggered encrypted
+export file they can send themselves on WhatsApp.
+
+Schema, sketched so later sync is not a rewrite:
+
+```
+shop(id, name, upi_vpa, payee_name, lang)
+product(id, name, name_ta, default_unit, aliases[], is_seeded)
+price(id, product_id, unit, amount_paise, effective_from)      -- append-only, never updated
+bill(id, opened_at, closed_at, total_paise, payment_state, upi_tr_ref)
+line_item(id, bill_id, product_id, qty_milli, unit, unit_price_paise, amount_paise,
+          asr_confidence, was_corrected, source_utterance_id)
+stock_movement(id, product_id, delta_milli, reason, bill_id, occurred_at)   -- Phase 4
+utterance(id, bill_id, transcript, nbest_json, accepted_hypothesis, at)     -- no audio
+```
+
+Everything that changes over time (`price`, `stock_movement`) is an **append-only event log**
+keyed by a UUID generated on-device, so a later sync is append-mostly with
+last-writer-wins only on the few mutable rows. That is the whole cost of keeping the option
+open, and it is worth paying now.
+
+**Reasoning.** Agrees with the brief's leaning. No backend removes cost, latency, privacy
+exposure, uptime, and an entire compliance surface in one move. The one real objection is
+device loss = total data loss, and Android Auto Backup answers it for ₹0. Nothing downstream
+is blocked: inventory (Phase 4) is single-shop and single-device by the stated non-goals, and
+growth loops (Phase 5) need attribution counters, not a synced database.
+
+**Reverses if:** multi-counter or multi-device shows up (an explicit non-goal today), or a
+monetisation model appears that needs server-side data. Both would land after Phase 4, by
+which point the event-log schema makes the change additive.
+
+---
+
+## D9. Privacy — no audio retained by default, opt-in donation of corrections only
+
+**Recommendation.**
+- **Default: zero audio retention.** Frames are consumed by the recogniser and discarded; the
+  only persisted artefact is the transcript and N-best list in `utterance`, kept 30 days for
+  the shopkeeper's own correction history and then deleted.
+- **No telemetry upload of any kind by default.** With no backend (D8) there is nowhere to
+  send it anyway, which is a useful forcing function.
+- **Model improvement without a corpus we can't keep:** an explicit opt-in toggle, off by
+  default, that donates **only utterances the shopkeeper corrected** — audio plus their
+  correction as the gold label. Corrected utterances are both the highest-value training data
+  and the ones where the user has already looked at the transcript and knows what it says.
+  Wi-Fi only, reviewable and deletable in-app, revocable with retroactive deletion.
+- **The Phase 1 field corpus is collected under separate written consent** with payment, and
+  never conflated with production data.
+
+**Consent screen wording (Tamil + English, plain, one screen, shown before first bill):**
+> This app listens only while you are making a bill. Your voice is not saved and never leaves
+> this phone. Your bills, prices and stock stay on this phone.
+> *(Optional, off by default)* When you correct something the app heard wrong, you can choose
+> to send that one recording to help it understand Tamil better. You can turn this off or
+> delete what you sent at any time.
+
+**Reasoning.** Retaining shop audio would capture bystander conversation in a public space
+from people who never consented — a problem no consent screen we can show the shopkeeper
+solves. Restricting donation to corrected utterances is the compromise that gets us a
+training set that is small, high-signal, and honestly consented.
+
+**Reverses if:** the correction-donation stream proves too sparse to be useful (likely below
+~50 opted-in shops). The answer then is paid field collection, not looser defaults.
+
+---
+
+## D10. Growth and monetisation — loops instrumented, pricing deferred
+
+Per this session's input, pricing is not being designed now. What Phase 5 builds:
+
+- **Printed / on-screen bill footer attribution** — a short line and a WhatsApp-shareable
+  install link. This is the main loop and it does not exist before Phase 3 (D7).
+- **Referral with a concrete reward** — but the reward can't be a discount on a free product.
+  The natural candidate is the thermal printer at cost or free after N referred shops, which
+  also seeds the hardware channel if we ever want it.
+- **Market-cluster seeding** — kirana shops in a market street watch each other constantly.
+  Seed a whole street rather than scattered shops; measure whether adoption is contagious
+  within a cluster. This is the highest-leverage distribution experiment available and it
+  costs only how we choose pilot locations.
+- **Distributor partnerships** — deferred to Phase 4+, since the reorder draft is the hook and
+  it doesn't exist until then. Flagged now because it is the one loop with data-consent
+  implications (D9) and those must not be retrofitted.
+
+**On charging:** billing itself almost certainly has to stay free — the competitor is a free
+piece of paper. If revenue is ever needed, the defensible lines are hardware margin on the
+printer and the Phase 4 inventory/reorder tier, in that order. Payments monetisation is the
+one to be most careful about, since it contradicts principle 5 and D5.
+
+**Reverses if:** a monetisation thesis is chosen, at which point this entry is rewritten
+rather than amended.

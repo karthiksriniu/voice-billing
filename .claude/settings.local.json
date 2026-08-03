@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(python3 tests/test_parser.py)",
+      "Bash(curl -s -X POST localhost:8077/api/finalize -H 'content-type: application/json' -d '{\"items\":[{\"amount\":90},{\"amount\":70},{\"amount\":10}],\"vpa\":\"test@okhdfcbank\",\"payee\":\"Anand Stores\"}')",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(pkill -f \"uvicorn api.index\")",
+      "Bash(.venv/bin/uvicorn api.index:app --host 0.0.0.0 --port 8077 --log-level warning)",
+      "Bash(curl -s localhost:8077/api/health)",
+      "Bash(ipconfig getifaddr *)",
+      "Bash(.venv/bin/uvicorn api.index:app --host 0.0.0.0 --port 8077 --log-level info)",
+      "Bash(head -c 3000 /dev/urandom)",
+      "Bash(curl -s -X POST localhost:8077/api/transcribe -F \"audio=@/tmp/fake.webm\" -F \"shop_id=demo\")",
+      "Bash(.venv/bin/python -c \"import json,sys; h=json.load\\(sys.stdin\\); print\\('server up · asr:', h['asr_backend'], '· configured:', h['asr_configured']\\)\")",
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//Users/karthiksrinivasan/.nvm/versions/**)",
+      "Bash(git -C \"/Users/karthiksrinivasan/Claude/Voice Billing System\" rev-parse --is-inside-work-tree)",
+      "Bash(python3 -)",
+      "Bash(mkdir -p api/_lib/seed)",
+      "Bash(git mv *)",
+      "Bash(mv seed/catalog.csv api/_lib/seed/catalog.csv)",
+      "Bash(rmdir seed *)",
+      "Bash(curl -s https://nodejs.org/dist/index.json)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

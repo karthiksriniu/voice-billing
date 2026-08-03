@@ -1,0 +1,332 @@
+"""Utterance -> line items. Deterministic grammar + fuzzy catalog match (DECISIONS.md D3).
+
+No LLM anywhere. The point of a grammar is that its failures are legible: when it can't
+parse, it knows it can't, and that feeds the confidence gate. A model that always returns
+something confident is the exact failure mode Principle 2 is about.
+
+Language data lives in lang/*.json, never here, so a second language is configuration.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import unicodedata
+from dataclasses import dataclass, field
+from difflib import SequenceMatcher
+from pathlib import Path
+
+LANG_DIR = Path(__file__).parent / "lang"
+
+# Outcome bands from PLAN.md. A CONFIRM costs the shopkeeper ~2s; a silent wrong line costs
+# the relationship. The gate is deliberately pessimistic — we would rather ask twice.
+ACCEPT_THRESHOLD = 0.72
+CONFIRM_THRESHOLD = 0.42
+
+
+@dataclass
+class LineItem:
+    product_id: str | None
+    name: str
+    qty: float
+    unit: str
+    unit_price: float          # rupees
+    amount: float              # rupees
+    confidence: float
+    verdict: str               # accept | confirm | reject
+    matched_on: str = ""       # which catalog form matched, for debugging
+    price_led: bool = False    # "ten rupees of coriander" — amount was spoken, not derived
+    raw: str = ""
+
+
+@dataclass
+class ParseResult:
+    items: list[LineItem] = field(default_factory=list)
+    command: str | None = None      # cancel_last | clear_all | total | None
+    mode_switch: str | None = None  # admin | billing | None
+    unparsed: list[str] = field(default_factory=list)
+    transcript: str = ""
+
+
+class Lang:
+    """A loaded language pack. Builds reverse lookup tables once."""
+
+    def __init__(self, code: str = "ta-en"):
+        self.data = json.loads((LANG_DIR / f"{code}.json").read_text(encoding="utf-8"))
+        self.digits = self._reverse(self.data["digits"], float)
+        self.fractions = self._reverse(self.data["fractions"], float)
+        self.money = {norm(a) for a in self.data["money"]["aliases"]}
+        self.fillers = {norm(f) for f in self.data["fillers"]}
+        self.rules = self.data["phonetic_rules"]
+
+        self.units = {}
+        for canon, spec in self.data["units"].items():
+            for a in spec["aliases"]:
+                self.units[norm(a)] = canon
+        self.unit_spec = self.data["units"]
+
+        # Multi-word measures are matched on the raw string before tokenising, since
+        # "arai kilo" must not be read as the number 0.5 followed by the unit kg.
+        self.measures = {
+            norm(a): m for m in self.data["measures"].values() for a in m["aliases"]
+        }
+        self.modes = {
+            norm(a): mode for mode, al in self.data["modes"].items() for a in al
+        }
+        self.commands = {
+            norm(a): cmd for cmd, al in self.data["commands"].items() for a in al
+        }
+
+    @staticmethod
+    def _reverse(table: dict, cast) -> dict:
+        return {norm(a): cast(v) for v, aliases in table.items() for a in aliases}
+
+    def phonetic(self, s: str) -> str:
+        """Fold Tamil-English transliteration variance: thuvaram/tuvaram, chakkarai/sakkarai.
+
+        Soundex and Metaphone are English-only and actively mislead on romanised Tamil, so
+        this is an ordered collapse from the language pack instead. Tamil script is returned
+        unchanged — it needs no folding, and romanising it would lose information.
+        """
+        if any("஀" <= c <= "௿" for c in s):
+            return s
+        out = s
+        for src, dst in self.rules:
+            out = out.replace(src, dst)
+        return re.sub(r"(.)\1+", r"\1", out)
+
+
+def norm(s: str) -> str:
+    """Lowercase, strip punctuation and accents, collapse whitespace."""
+    s = unicodedata.normalize("NFKC", s).lower().strip()
+    s = re.sub(r"[^\w\s஀-௿.]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def find_phrase(text: str, phrase: str) -> bool:
+    """Whole-phrase containment. Deliberately not a `\\b` regex: Tamil words routinely end
+    in a virama (U+0BCD), a combining mark that isn't a word character, so `\\b` fails to
+    fire where you'd expect. Space padding is dumber and correct for both scripts."""
+    return f" {phrase} " in f" {text} "
+
+
+def cut_phrase(text: str, phrase: str, repl: str = " ") -> str:
+    """Remove or replace a whole phrase. Space-delimited, so 'kaal kilo' does not fire
+    inside 'mukkaal kilo' — a silent quantity error if it did (0.25 instead of 0.75)."""
+    return f" {text} ".replace(f" {phrase} ", f" {repl} ").strip()
+
+
+class Parser:
+    def __init__(self, lang: Lang, catalog):
+        self.lang = lang
+        self.catalog = catalog
+
+    # -- number handling ----------------------------------------------------
+
+    def _value(self, tok: str) -> float | None:
+        if re.fullmatch(r"\d+(\.\d+)?", tok):
+            return float(tok)
+        return self.lang.digits.get(tok, self.lang.fractions.get(tok))
+
+    def _read_number(self, toks: list[str], i: int) -> tuple[float | None, int]:
+        """Read a possibly-compound number starting at i. Returns (value, next_index).
+
+        Handles the three ways Tamil composes them:
+          irubathi anju -> 20 + 5      (tens then unit)
+          rendu nooru   -> 2 * 100     (multiplier then scale)
+          rendu arai    -> 2 + 0.5     (whole then fraction)
+        """
+        val = self._value(toks[i])
+        if val is None:
+            return None, i
+        j = i + 1
+        while j < len(toks):
+            nxt = self._value(toks[j])
+            if nxt is None:
+                break
+            if nxt >= 100 and val < nxt:          # rendu nooru = 200
+                val *= nxt
+            elif val >= 20 and nxt < 10:          # irubathi anju = 25
+                val += nxt
+            elif nxt < 1 and val >= 1:            # rendu arai = 2.5
+                val += nxt
+            else:
+                break
+            j += 1
+        return val, j
+
+    # -- main entry ---------------------------------------------------------
+
+    def parse(self, transcript: str, asr_confidence: float = 1.0) -> ParseResult:
+        res = ParseResult(transcript=transcript)
+        text = norm(transcript)
+        if not text:
+            return res
+
+        # Longest phrase first, so "billing mode" is not shadowed by a shorter alias.
+        for phrase in sorted(self.lang.modes, key=len, reverse=True):
+            if find_phrase(text, phrase):
+                res.mode_switch = self.lang.modes[phrase]
+                text = cut_phrase(text, phrase)
+                break
+
+        for phrase in sorted(self.lang.commands, key=len, reverse=True):
+            if find_phrase(text, phrase):
+                res.command = self.lang.commands[phrase]
+                text = cut_phrase(text, phrase)
+                break
+
+        if not text:
+            return res
+
+        # Multi-word measures collapse to a single token before splitting, so "arai kilo"
+        # survives as one concept rather than becoming 0.5 followed by kg.
+        for phrase in sorted(self.lang.measures, key=len, reverse=True):
+            spec = self.lang.measures[phrase]
+            text = cut_phrase(text, phrase, f"§{spec['qty']}§{spec['unit']}")
+
+        for chunk in self._split_items(text):
+            item = self._parse_one(chunk, asr_confidence)
+            if item:
+                res.items.append(item)
+            elif chunk.strip():
+                res.unparsed.append(chunk.strip())
+        return res
+
+    def _split_items(self, text: str) -> list[str]:
+        """Split a multi-item utterance. A new item starts at a number or measure that
+        follows a matched item, which is why splitting happens after normalisation."""
+        parts = re.split(r"\b(?:and|மற்றும்|apparam|அப்புறம்)\b|,", text)
+        return [p for p in parts if p.strip()]
+
+    def _parse_one(self, chunk: str, asr_conf: float) -> LineItem | None:
+        toks = [t for t in chunk.split() if t]
+        qty: float | None = None
+        unit: str | None = None
+        money_amount: float | None = None
+        rest: list[str] = []
+
+        i = 0
+        while i < len(toks):
+            tok = toks[i]
+
+            if tok.startswith("§"):                       # collapsed measure
+                _, q, u = tok.split("§")
+                qty, unit = float(q), u
+                i += 1
+                continue
+
+            val, nxt = self._read_number(toks, i)
+            if val is not None:
+                # A number followed by a money word is price-led: "ten rupees of coriander".
+                if nxt < len(toks) and toks[nxt] in self.lang.money:
+                    money_amount = val
+                    i = nxt + 1
+                else:
+                    qty = val
+                    i = nxt
+                continue
+
+            if tok in self.lang.units and unit is None:
+                unit = self.lang.units[tok]
+                i += 1
+                continue
+
+            if tok in self.lang.fillers or tok in self.lang.money:
+                i += 1
+                continue
+
+            rest.append(tok)
+            i += 1
+
+        if not rest:
+            return None
+
+        name = " ".join(rest)
+        product, score, matched = self.catalog.match(name, self.lang)
+        if product is None:
+            return None
+
+        return self._build(product, score, matched, qty, unit, money_amount, asr_conf, chunk)
+
+    def _build(self, product, score, matched, qty, unit, money, asr_conf, raw) -> LineItem:
+        unit = unit or product["unit"]
+        price = float(product["unit_price"])
+        price_led = money is not None
+
+        if price_led:
+            amount = float(money)
+            qty = round(amount / price, 3) if price > 0 else 0.0
+        else:
+            if qty is None:
+                qty = 1.0
+            qty = self._to_canonical(qty, unit, product["unit"])
+            unit = product["unit"]
+            amount = round(qty * price, 2)
+
+        # Confidence is the product of how well we heard it and how well it matched a real
+        # product. Both have to hold — a crisp transcript of a word not in the catalog is
+        # exactly as untrustworthy as a mumbled match.
+        conf = round(asr_conf * score, 3)
+        verdict = (
+            "accept" if conf >= ACCEPT_THRESHOLD
+            else "confirm" if conf >= CONFIRM_THRESHOLD
+            else "reject"
+        )
+        return LineItem(
+            product_id=product["id"], name=product["name"], qty=qty, unit=unit,
+            unit_price=price, amount=round(amount, 2), confidence=conf, verdict=verdict,
+            matched_on=matched, price_led=price_led, raw=raw.strip(),
+        )
+
+    def _to_canonical(self, qty: float, spoken_unit: str, product_unit: str) -> float:
+        """Convert a spoken unit to the product's pricing unit — '500 gram' priced per kg."""
+        if spoken_unit == product_unit:
+            return qty
+        spec = self.lang.unit_spec.get(spoken_unit, {})
+        target = self.lang.unit_spec.get(product_unit, {})
+        if "multiplier" in spec:                                    # dozen -> pieces
+            return qty * spec["multiplier"]
+        if "base_grams" in spec and "base_grams" in target:
+            return round(qty * spec["base_grams"] / target["base_grams"], 4)
+        return qty
+
+
+class Catalog:
+    """In-memory catalog with fuzzy match. Shop catalogs are 100-400 SKUs, so an exhaustive
+    scan is free and beats any index."""
+
+    def __init__(self, products: list[dict]):
+        self.products = products
+        self._keys: dict[str, list[tuple[str, str]]] = {}
+
+    def _forms(self, p: dict, lang: Lang) -> list[tuple[str, str]]:
+        """Every string this product could be called, with its phonetic key."""
+        if p["id"] not in self._keys:
+            raw = [p["name"], p.get("name_ta") or "", p.get("short_desc") or ""]
+            raw += p.get("aliases") or []
+            self._keys[p["id"]] = [
+                (norm(f), lang.phonetic(norm(f))) for f in raw if f and f.strip()
+            ]
+        return self._keys[p["id"]]
+
+    def match(self, query: str, lang: Lang) -> tuple[dict | None, float, str]:
+        q = norm(query)
+        if not q:
+            return None, 0.0, ""
+        qp = lang.phonetic(q)
+        best, best_score, best_form = None, 0.0, ""
+
+        for p in self.products:
+            for form, form_key in self._forms(p, lang):
+                if form == q:
+                    return p, 1.0, form
+                score = SequenceMatcher(None, qp, form_key).ratio()
+                # A spoken item often carries extra words ("sugar packet"); containment is
+                # strong evidence the shopkeeper named this product.
+                if form in q or q in form:
+                    score = max(score, 0.88)
+                if score > best_score:
+                    best, best_score, best_form = p, score, form
+
+        return (best, round(best_score, 3), best_form) if best_score >= 0.55 else (None, 0.0, "")

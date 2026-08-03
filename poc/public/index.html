@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ta">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<title>Vaakku — வாக்கு</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Consent. The PoC streams audio to a cloud ASR, which is the opposite of the shipped
+     product's promise, so it has to say so before the mic is ever touched. -->
+<section id="consent" class="screen active">
+  <div class="pad">
+    <h1>வாக்கு <span class="sub">Vaakku</span></h1>
+    <p class="lede">பேசுங்க, பில் தானா எழுதும்.<br><span class="en">Speak, and the bill writes itself.</span></p>
+    <div class="notice">
+      <p><b>இது ஒரு டெமோ / This is a demo.</b></p>
+      <p>உங்க குரல் இணையம் வழியாக அனுப்பப்படும். <span class="en">In this demo your voice is sent over the internet to be recognised. The real app will work fully offline and will not send your voice anywhere.</span></p>
+      <p>ஒலிப்பதிவு சேமிக்கப்படாது. <span class="en">No audio is stored.</span></p>
+    </div>
+    <label class="field">
+      <span>கடை பெயர் / Shop name</span>
+      <input id="shopName" type="text" placeholder="Anand Stores" autocomplete="off">
+    </label>
+    <label class="field">
+      <span>UPI ID</span>
+      <input id="vpa" type="text" placeholder="yourname@okhdfcbank" autocomplete="off" spellcheck="false">
+    </label>
+    <button id="startBtn" class="primary">ஆரம்பிக்கலாம் / Start</button>
+    <p class="fineprint" id="healthLine">…</p>
+  </div>
+</section>
+
+<!-- Billing -->
+<section id="billing" class="screen">
+  <header class="bar">
+    <div><b id="shopLabel">Shop</b><span id="modeTag" class="tag billing">பில் / BILLING</span></div>
+    <button id="resetBtn" class="ghost" title="New bill">✕</button>
+  </header>
+
+  <div id="asrBanner" class="banner" hidden></div>
+
+  <div id="items" class="items">
+    <p class="empty">பொருள் சொல்லுங்க…<br><span class="en">Hold the button and say an item.<br>“ரெண்டு கிலோ சர்க்கரை” · “arai kilo thuvaram paruppu” · “ten rupees coriander”</span></p>
+  </div>
+
+  <div class="totalrow" id="totalRow" hidden>
+    <span>மொத்தம் / Total</span><b id="runningTotal">₹0</b>
+  </div>
+
+  <div class="controls">
+    <p id="status" class="status">தயார் / Ready</p>
+    <button id="talk" class="talk idle" aria-label="Hold to speak">
+      <span class="talkicon"></span>
+    </button>
+    <p id="talkLabel" class="talklabel">பேச அழுத்துங்க<br><small>Hold to speak</small></p>
+    <!-- The fallback, never the default (Principle 3). Also the only way to exercise the
+         pipeline with no ASR key, and the input the eval harness will drive. -->
+    <form id="typeForm" class="typerow" hidden>
+      <input id="typeInput" type="text" autocomplete="off" autocapitalize="off"
+             placeholder="ரெண்டு கிலோ சர்க்கரை">
+      <button type="submit" aria-label="Add">→</button>
+    </form>
+    <button id="typeToggle" class="ghost small">⌨ தட்டச்சு / Type instead</button>
+
+    <button id="finalize" class="primary finalize" hidden>பில் முடி / Finalise bill</button>
+  </div>
+</section>
+
+<!-- Payment -->
+<section id="payment" class="screen">
+  <div class="pad center">
+    <p class="paylabel">வாங்க வேண்டியது / Amount due</p>
+    <div class="payamount" id="payAmount">₹0</div>
+    <img id="qr" class="qr" alt="UPI QR code">
+    <p class="fineprint" id="payRef"></p>
+    <button id="received" class="primary big">வந்தது / Received</button>
+    <button id="backToBill" class="ghost wide">திரும்பு / Back to bill</button>
+    <p class="fineprint dim">பணம் வந்ததா நீங்க பாத்து அழுத்துங்க.<br><span class="en">You confirm payment yourself, the same way you check today. The app cannot detect it.</span></p>
+  </div>
+</section>
+
+<!-- Receipt -->
+<section id="receipt" class="screen">
+  <div class="pad center">
+    <div class="tick">✓</div>
+    <div class="payamount" id="paidAmount">₹0</div>
+    <p class="paylabel">பெறப்பட்டது / Received</p>
+    <button id="nextCustomer" class="primary big">அடுத்த கஸ்டமர் / Next customer</button>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

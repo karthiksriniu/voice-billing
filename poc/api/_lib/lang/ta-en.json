@@ -1,0 +1,490 @@
+{
+  "_comment": "Language pack 1: Tamil + English (Chennai). Data only, no logic — a second language is a sibling file. Every token is listed in both Tamil script and romanised Latin because Sarvam returns Tamil script for Tamil audio and Latin for English, and code-mixed utterances come back mixed.",
+  "code": "ta-en",
+  "name": "Tamil + English",
+  "digits": {
+    "0": [
+      "zero",
+      "பூஜ்யம்",
+      "poojyam"
+    ],
+    "1": [
+      "one",
+      "ஒன்று",
+      "ஒன்னு",
+      "onnu",
+      "ondru",
+      "oru",
+      "ஒரு"
+    ],
+    "2": [
+      "two",
+      "ரெண்டு",
+      "இரண்டு",
+      "rendu",
+      "irandu",
+      "erandu"
+    ],
+    "3": [
+      "three",
+      "மூணு",
+      "மூன்று",
+      "moonu",
+      "moondru"
+    ],
+    "4": [
+      "four",
+      "நாலு",
+      "நான்கு",
+      "naalu",
+      "naangu"
+    ],
+    "5": [
+      "five",
+      "அஞ்சு",
+      "ஐந்து",
+      "anju",
+      "ainthu",
+      "aindhu"
+    ],
+    "6": [
+      "six",
+      "ஆறு",
+      "aaru"
+    ],
+    "7": [
+      "seven",
+      "ஏழு",
+      "ezhu",
+      "yezhu"
+    ],
+    "8": [
+      "eight",
+      "எட்டு",
+      "ettu"
+    ],
+    "9": [
+      "nine",
+      "ஒன்பது",
+      "onbathu",
+      "onbadhu"
+    ],
+    "10": [
+      "ten",
+      "பத்து",
+      "pathu",
+      "paththu"
+    ],
+    "11": [
+      "eleven",
+      "பதினொன்று",
+      "pathinonnu"
+    ],
+    "12": [
+      "twelve",
+      "பன்னிரண்டு",
+      "panniradu",
+      "pannendu"
+    ],
+    "15": [
+      "fifteen",
+      "பதினைந்து",
+      "pathinanju"
+    ],
+    "20": [
+      "twenty",
+      "இருபது",
+      "irubathu",
+      "irupathu",
+      "இருபத்தி",
+      "irubathi",
+      "irubathy"
+    ],
+    "25": [
+      "twentyfive",
+      "இருபத்தி ஐந்து",
+      "irubathi anju"
+    ],
+    "30": [
+      "thirty",
+      "முப்பது",
+      "muppathu",
+      "முப்பத்தி",
+      "muppathi"
+    ],
+    "40": [
+      "forty",
+      "நாற்பது",
+      "naarpathu",
+      "நாற்பத்தி",
+      "naarpathi"
+    ],
+    "50": [
+      "fifty",
+      "ஐம்பது",
+      "aimbathu",
+      "ambathu",
+      "ஐம்பத்தி",
+      "aimbathi",
+      "ambathi"
+    ],
+    "60": [
+      "sixty",
+      "அறுபது",
+      "arubathu",
+      "அறுபத்தி",
+      "arubathi"
+    ],
+    "70": [
+      "seventy",
+      "எழுபது",
+      "ezhubathu",
+      "எழுபத்தி",
+      "ezhubathi"
+    ],
+    "80": [
+      "eighty",
+      "எண்பது",
+      "enbathu",
+      "எண்பத்தி",
+      "enbathi"
+    ],
+    "90": [
+      "ninety",
+      "தொண்ணூறு",
+      "thonnooru",
+      "தொண்ணூற்றி",
+      "thonnootri"
+    ],
+    "100": [
+      "hundred",
+      "நூறு",
+      "nooru",
+      "நூற்று"
+    ],
+    "200": [
+      "இருநூறு",
+      "irunooru"
+    ],
+    "500": [
+      "ஐநூறு",
+      "ainooru"
+    ],
+    "1000": [
+      "thousand",
+      "ஆயிரம்",
+      "aayiram"
+    ]
+  },
+  "fractions": {
+    "0.25": [
+      "கால்",
+      "kaal",
+      "quarter",
+      "கால்வாசி"
+    ],
+    "0.5": [
+      "அரை",
+      "arai",
+      "half",
+      "அரைக்கால்"
+    ],
+    "0.75": [
+      "முக்கால்",
+      "mukkaal",
+      "mukkal"
+    ],
+    "1": [
+      "முழு",
+      "muzhu",
+      "full"
+    ]
+  },
+  "units": {
+    "kg": {
+      "aliases": [
+        "kilo",
+        "kg",
+        "kilogram",
+        "கிலோ",
+        "கிலோகிராம்"
+      ],
+      "base_grams": 1000,
+      "divisible": true
+    },
+    "g": {
+      "aliases": [
+        "gram",
+        "grams",
+        "gm",
+        "கிராம்"
+      ],
+      "base_grams": 1,
+      "divisible": true
+    },
+    "l": {
+      "aliases": [
+        "litre",
+        "liter",
+        "ltr",
+        "லிட்டர்"
+      ],
+      "divisible": true
+    },
+    "ml": {
+      "aliases": [
+        "ml",
+        "millilitre",
+        "மில்லி"
+      ],
+      "divisible": true
+    },
+    "packet": {
+      "aliases": [
+        "packet",
+        "pack",
+        "பாக்கெட்",
+        "பாக்கட்",
+        "ek packet"
+      ],
+      "divisible": false
+    },
+    "piece": {
+      "aliases": [
+        "piece",
+        "pieces",
+        "pcs",
+        "nos",
+        "number",
+        "பீஸ்",
+        "எண்ணிக்கை"
+      ],
+      "divisible": false
+    },
+    "dozen": {
+      "aliases": [
+        "dozen",
+        "டஜன்",
+        "dozon"
+      ],
+      "multiplier": 12,
+      "divisible": false
+    },
+    "bundle": {
+      "aliases": [
+        "bundle",
+        "kattu",
+        "கட்டு"
+      ],
+      "divisible": false
+    }
+  },
+  "_comment_measures": "Colloquial measures that imply BOTH a quantity and a unit. 'pav' is a quarter-kilo, so 'pav sugar' needs no number at all.",
+  "measures": {
+    "pav": {
+      "aliases": [
+        "pav",
+        "பவ்"
+      ],
+      "qty": 0.25,
+      "unit": "kg"
+    },
+    "arai_kilo": {
+      "aliases": [
+        "arai kilo",
+        "அரை கிலோ"
+      ],
+      "qty": 0.5,
+      "unit": "kg"
+    },
+    "kaal_kilo": {
+      "aliases": [
+        "kaal kilo",
+        "கால் கிலோ"
+      ],
+      "qty": 0.25,
+      "unit": "kg"
+    }
+  },
+  "money": {
+    "aliases": [
+      "rupees",
+      "rupee",
+      "rs",
+      "ரூபாய்",
+      "ரூவா",
+      "rubai",
+      "roobai"
+    ],
+    "symbol": "₹"
+  },
+  "_comment_modes": "Spoken mode switches. 'விலை வாசி' = 'read out the price'.",
+  "modes": {
+    "admin": [
+      "owner mode",
+      "admin mode",
+      "விலை வாசி",
+      "vilai vaasi",
+      "vilai vasi",
+      "முதலாளி"
+    ],
+    "billing": [
+      "billing mode",
+      "user mode",
+      "பில் மோட்",
+      "bill mode"
+    ]
+  },
+  "commands": {
+    "cancel_last": [
+      "cancel last",
+      "remove last",
+      "கடைசி வேண்டாம்",
+      "kadaisi vendaam",
+      "வேண்டாம்",
+      "vendaam"
+    ],
+    "clear_all": [
+      "clear all",
+      "cancel bill",
+      "எல்லாம் வேண்டாம்",
+      "ellam vendaam"
+    ],
+    "total": [
+      "total",
+      "மொத்தம்",
+      "motham",
+      "total podu",
+      "டோட்டல்"
+    ],
+    "remove_item": [
+      "remove",
+      "delete",
+      "எடு",
+      "நீக்கு"
+    ]
+  },
+  "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",
+  "fillers": [
+    "of",
+    "ku",
+    "kku",
+    "க்கு",
+    "worth",
+    "ஒரு",
+    "please",
+    "kudunga",
+    "கொடுங்க"
+  ],
+  "_comment_phonetic": "Ordered romanisation collapses applied before fuzzy matching, to fold Tamil-English transliteration variance (thuvaram/tuvaram, chakkarai/sakkarai). Applied left to right.",
+  "phonetic_rules": [
+    [
+      "zh",
+      "l"
+    ],
+    [
+      "th",
+      "t"
+    ],
+    [
+      "dh",
+      "d"
+    ],
+    [
+      "gh",
+      "g"
+    ],
+    [
+      "bh",
+      "b"
+    ],
+    [
+      "ph",
+      "f"
+    ],
+    [
+      "ch",
+      "s"
+    ],
+    [
+      "sh",
+      "s"
+    ],
+    [
+      "ck",
+      "k"
+    ],
+    [
+      "kk",
+      "k"
+    ],
+    [
+      "tt",
+      "t"
+    ],
+    [
+      "pp",
+      "p"
+    ],
+    [
+      "mm",
+      "m"
+    ],
+    [
+      "nn",
+      "n"
+    ],
+    [
+      "ll",
+      "l"
+    ],
+    [
+      "rr",
+      "r"
+    ],
+    [
+      "ss",
+      "s"
+    ],
+    [
+      "aa",
+      "a"
+    ],
+    [
+      "ee",
+      "i"
+    ],
+    [
+      "ii",
+      "i"
+    ],
+    [
+      "oo",
+      "u"
+    ],
+    [
+      "uu",
+      "u"
+    ],
+    [
+      "ai",
+      "a"
+    ],
+    [
+      "au",
+      "o"
+    ],
+    [
+      "v",
+      "w"
+    ],
+    [
+      "j",
+      "s"
+    ],
+    [
+      "y",
+      "i"
+    ]
+  ]
+}

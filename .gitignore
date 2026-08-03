@@ -1,0 +1,15 @@
+# Local toolchains and virtualenvs — never commit these
+poc/.venv/
+poc/.tools/
+experiments/upi-qr/.venv/
+
+# Generated artefacts
+experiments/upi-qr/out/
+__pycache__/
+*.pyc
+
+# Secrets and platform state
+.env
+.env.local
+.vercel/
+.DS_Store
