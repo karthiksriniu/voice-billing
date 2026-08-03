@@ -51,7 +51,9 @@
       "Bash(curl -s -X POST https://vaakku-poc.vercel.app/api/parse -H 'content-type: application/json' -d '{\"text\":\"vilai vaasi maida nooru rubai\"}')",
       "Bash(.venv/bin/python -c \"import sys; sys.path.insert\\(0,'api'\\); import index; print\\('imports clean'\\)\")",
       "Bash(node -e \"1\")",
-      "Bash(.tools/node/bin/node --check public/app.js)"
+      "Bash(.tools/node/bin/node --check public/app.js)",
+      "Bash(curl -s https://vaakku-poc.vercel.app/api/schema)",
+      "Bash(\"/Users/karthiksrinivasan/Claude/Voice Billing System/poc/.venv/bin/python\" -m json.tool)"
     ]
   }
 }

@@ -326,7 +326,18 @@ async def probe() -> dict:
         "products.description": {"select": "description", "limit": "1"},
         "bills": {"select": "id", "limit": "1"},
     }
-    out = {"configured": True}
+    # The project ref is the SUPABASE_URL subdomain — not a secret (it appears in every
+    # browser-side Supabase call) and the fastest way to confirm the SQL editor and this
+    # deployment are pointed at the same database.
+    host = SUPABASE_URL.split("//")[-1].split(".")[0]
+    out = {"configured": True, "project_ref": host, "tables": []}
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as c:
+            r = await c.get(f"{SUPABASE_URL}/rest/v1/", headers=_headers())
+        if r.status_code < 400:
+            out["tables"] = sorted((r.json().get("definitions") or {}).keys())
+    except Exception:                                  # noqa: BLE001
+        pass
     async with httpx.AsyncClient(timeout=8.0) as c:
         for label, params in checks.items():
             table = label.split(".")[0]

@@ -49,11 +49,22 @@ run; `./vaakku` puts it on PATH for you.
 
 ### Finishing the setup
 
-1. Supabase: paste `supabase/schema.sql` into the SQL editor. RLS is on with no public
-   policy — the service key bypasses it and must stay server-side only.
+1. Supabase — project **`ayvlfhrparwncnxsrvvw`**. Paste all of `supabase/schema.sql` into
+   the SQL editor and run it. It is fully idempotent, so re-running it is how you apply any
+   change; there are no separate migration files on purpose, because having two made it
+   possible to re-run the wrong one, which succeeds silently and half-applies the schema.
+   Confirm with `curl -s https://vaakku-poc.vercel.app/api/schema` — every check should say
+   `ok` and `project_ref` should match the project you edited.
 2. `./vaakku env` — prompts for `SARVAM_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
    Values are typed at the prompt, so they never reach shell history or a file.
 3. `./vaakku deploy`, then check `/api/health` reports `asr_configured: true`.
+
+### Schema changes
+
+`GET /api/schema` reports what PostgREST can actually see. When a table or column is
+missing, the error code tells you which problem you have: Postgres `42703`
+(undefined_column) or `PGRST205` means it genuinely is not there, while `PGRST204` means it
+exists but the API's schema cache is stale. Both look identical at the call site.
 
 ### Two deployment traps, already hit and fixed
 
