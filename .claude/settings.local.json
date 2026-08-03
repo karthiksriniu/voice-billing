@@ -68,7 +68,15 @@
       "Bash(curl -s https://vaakku-poc.vercel.app/app.js)",
       "Bash(say -v Rishi -o e1.aiff \"basmati rice one kilo 120 rupees\")",
       "Bash(afconvert -f m4af -d aac e1.aiff e1.m4a)",
-      "Bash(curl -s https://vaakku-poc.vercel.app/index.html)"
+      "Bash(curl -s https://vaakku-poc.vercel.app/index.html)",
+      "Bash(curl -s -D- -o /dev/null https://bolo-bill.vercel.app/)",
+      "Bash(curl -sL -o /dev/null -w \"final: %{url_effective} HTTP %{http_code}\\\\n\" https://bolo-bill.vercel.app/)",
+      "Bash(curl -s -o /dev/null -w \"vaakku-poc: HTTP %{http_code}\\\\n\" https://vaakku-poc.vercel.app/)",
+      "Bash(sed -i '' 's/Vaakku is a voice billing app/Bolo Bill is a voice billing app/' docs/PRODUCT-REVIEW.md)",
+      "Bash(mv poc/vaakku poc/bolo)",
+      "Bash(sed -i '' 's|\\\\./vaakku|./bolo|g' poc/README.md docs/*.md docs/experiments/*.md)",
+      "Bash(sed -i '' 's/vaakku-poc-insecure-fallback/bolo-bill-insecure-fallback/' poc/api/_lib/auth.py)",
+      "Bash(chmod +x poc/bolo)"
     ]
   }
 }

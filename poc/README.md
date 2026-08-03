@@ -1,4 +1,4 @@
-# Vaakku PoC
+# Bolo Bill PoC
 
 Demo-grade voice billing: hold the button, speak items, get an exact-amount UPI QR.
 Python + FastAPI on Vercel, Sarvam for speech, Supabase for storage.
@@ -37,14 +37,14 @@ cd poc && python3 tests/test_parser.py
 
 ## Deployed
 
-**https://vaakku-poc.vercel.app** (Vercel project `crewstone/vaakku-poc`)
+**https://bolo-bill.vercel.app** (Vercel project `crewstone/bolo-bill`)
 
 A local Node toolchain lives in `.tools/` (gitignored, ~360 MB) purely so the Vercel CLI can
-run; `./vaakku` puts it on PATH for you.
+run; `./bolo` puts it on PATH for you.
 
 ```bash
-./vaakku dev      # local, :8077      ./vaakku deploy   # push to production
-./vaakku env      # add API keys      ./vaakku test     # parser fixtures
+./bolo dev      # local, :8077      ./bolo deploy   # push to production
+./bolo env      # add API keys      ./bolo test     # parser fixtures
 ```
 
 ### Finishing the setup
@@ -53,11 +53,11 @@ run; `./vaakku` puts it on PATH for you.
    the SQL editor and run it. It is fully idempotent, so re-running it is how you apply any
    change; there are no separate migration files on purpose, because having two made it
    possible to re-run the wrong one, which succeeds silently and half-applies the schema.
-   Confirm with `curl -s https://vaakku-poc.vercel.app/api/schema` — every check should say
+   Confirm with `curl -s https://bolo-bill.vercel.app/api/schema` — every check should say
    `ok` and `project_ref` should match the project you edited.
-2. `./vaakku env` — prompts for `SARVAM_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+2. `./bolo env` — prompts for `SARVAM_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
    Values are typed at the prompt, so they never reach shell history or a file.
-3. `./vaakku deploy`, then check `/api/health` reports `asr_configured: true`.
+3. `./bolo deploy`, then check `/api/health` reports `asr_configured: true`.
 
 ### Schema changes
 

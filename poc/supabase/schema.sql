@@ -1,4 +1,4 @@
--- Vaakku schema — the single source of truth.
+-- Bolo Bill schema — the single source of truth.
 --
 -- Paste this whole file into the Supabase SQL editor for project ayvlfhrparwncnxsrvvw.
 -- Every statement is idempotent, so re-running it is safe and is the correct way to apply

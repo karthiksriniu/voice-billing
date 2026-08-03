@@ -1,4 +1,4 @@
-# Product review — Vaakku
+# Product review — Bolo Bill
 
 Full PM evaluation of the product and the proposed PoC. Written against `PLAN.md`,
 `DECISIONS.md`, `RISKS.md` and the nine-point PoC design.
@@ -13,7 +13,7 @@ unusually well specified: on-device only, ₹10/shop/month marginal cost with �
 inference, offline-first, Play-Store-only self-serve distribution, Tamil-English code-mixed.
 
 **Positioning statement.** For a Chennai kirana owner who bills on paper and has no record
-of what he sold, Vaakku is a voice billing app that turns what he already says out loud into
+of what he sold, Bolo Bill is a voice billing app that turns what he already says out loud into
 an itemised bill and an exact-amount UPI QR. Unlike paper and a calculator it leaves a record
 without adding a step; unlike Vyapar or myBillBook it needs no catalog, no typing and no setup.
 

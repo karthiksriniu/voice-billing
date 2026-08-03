@@ -1,4 +1,4 @@
-# Project: Voice-first billing for small Indian retail (working name: Vaakku)
+# Project: Voice-first billing for small Indian retail (working name: Bolo Bill)
 
 ## What this is
 

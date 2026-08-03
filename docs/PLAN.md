@@ -1,6 +1,6 @@
 # Build plan — voice-first billing for small Indian retail
 
-Working name: **Vaakku** (placeholder). Beachhead: Tier-1 kirana/vegetable shops in Chennai
+Working name: **Bolo Bill**. Beachhead: Tier-1 kirana/vegetable shops in Chennai
 that bill on paper today. Language pair 1: Tamil + English.
 
 ## Session inputs that shape everything below

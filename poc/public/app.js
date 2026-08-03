@@ -155,6 +155,8 @@ async function enter(session) {
                  vpa: session.vpa || "", lang: session.lang || "en" };
   setLang(state.shop.lang);
   applyStrings();
+  // Storage key deliberately unchanged by the rename — changing it would sign out every
+  // existing tester the moment they reload.
   try { localStorage.setItem("vaakku", JSON.stringify(session)); } catch (e) { /* private mode */ }
   $("shopLabel").textContent = state.shop.name;
   // Staff bill and nothing else, so the switch simply isn't there for them.

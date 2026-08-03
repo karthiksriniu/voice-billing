@@ -1,4 +1,4 @@
-# Positioning — Vaakku
+# Positioning — Bolo Bill
 
 Built with the three-track method: customer deep-dive, competitor moat deconstruction,
 ecosystem pulse — then the intersection where a real unaddressed pain meets unclaimed
@@ -107,7 +107,7 @@ weeks), and eventually the reorder signal that distributor partnerships would ne
 ## Positioning statement
 
 > For **a Chennai kirana owner who bills on paper and has no record of what he sold**,
-> **Vaakku** is a **voice billing app** that **turns what he already says out loud into an
+> **Bolo Bill** is a **voice billing app** that **turns what he already says out loud into an
 > itemised bill and an exact-amount UPI QR**. Unlike **paper and a calculator**, it **leaves a
 > record without adding a single step** — and unlike **Vyapar or myBillBook**, it needs **no
 > catalog, no typing and no setup**.

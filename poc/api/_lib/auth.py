@@ -55,7 +55,7 @@ def _secret() -> bytes:
     next. Derived from an existing server-side secret when none is set explicitly."""
     raw = (os.environ.get("SESSION_SECRET")
            or os.environ.get("SUPABASE_SERVICE_KEY")
-           or "vaakku-poc-insecure-fallback")
+           or "bolo-bill-insecure-fallback")
     return hashlib.sha256(raw.encode()).digest()
 
 

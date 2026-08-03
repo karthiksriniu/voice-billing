@@ -14,6 +14,7 @@ const LANGS = {
 
 const STRINGS = {
   en: {
+    tagline2: "Say it, bill it",
     tagline: "Speak, and the bill writes itself.",
     demoNote: "This is a demo. Your voice is sent over the internet to be recognised. The real app will work offline and send nothing. No audio is stored.",
     mobile: "Mobile number", shopName: "Shop name", upiId: "UPI ID",
@@ -56,6 +57,7 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
+    tagline2: "சொல்லுங்க, பில் ஆகும்",
     tagline: "பேசுங்க, பில் தானா எழுதும்.",
     demoNote: "இது ஒரு டெமோ. உங்க குரல் இணையம் வழியாக அனுப்பப்படும். உண்மையான ஆப் இணையம் இல்லாமலே வேலை செய்யும். ஒலிப்பதிவு சேமிக்கப்படாது.",
     mobile: "மொபைல் நம்பர்", shopName: "கடை பெயர்", upiId: "UPI ID",
@@ -98,6 +100,7 @@ const STRINGS = {
     alreadyEmpty: "ஏற்கனவே காலி", updated: "மாற்றப்பட்டது",
   },
   hi: {
+    tagline2: "बोलो, बिल बनेगा",
     tagline: "बोलिए, बिल अपने आप बनेगा।",
     demoNote: "यह एक डेमो है। आपकी आवाज़ पहचानने के लिए इंटरनेट पर भेजी जाती है। असली ऐप बिना इंटरनेट काम करेगा। कोई रिकॉर्डिंग नहीं रखी जाती।",
     mobile: "मोबाइल नंबर", shopName: "दुकान का नाम", upiId: "UPI ID",
@@ -140,6 +143,7 @@ const STRINGS = {
     alreadyEmpty: "पहले से खाली", updated: "बदल गया",
   },
   ml: {
+    tagline2: "പറയൂ, ബില്ലാകും",
     tagline: "പറയൂ, ബില്ല് സ്വയം എഴുതും.",
     demoNote: "ഇതൊരു ഡെമോ ആണ്. നിങ്ങളുടെ ശബ്ദം തിരിച്ചറിയാൻ ഇന്റർനെറ്റ് വഴി അയക്കുന്നു. യഥാർത്ഥ ആപ്പ് ഇന്റർനെറ്റ് ഇല്ലാതെ പ്രവർത്തിക്കും. ശബ്ദം സൂക്ഷിക്കുന്നില്ല.",
     mobile: "മൊബൈൽ നമ്പർ", shopName: "കടയുടെ പേര്", upiId: "UPI ID",
@@ -182,6 +186,7 @@ const STRINGS = {
     alreadyEmpty: "ഇതിനകം ഒഴിഞ്ഞു", updated: "മാറ്റി",
   },
   te: {
+    tagline2: "చెప్పండి, బిల్లు అవుతుంది",
     tagline: "చెప్పండి, బిల్లు దానంతట అదే రాస్తుంది.",
     demoNote: "ఇది ఒక డెమో. మీ గొంతు గుర్తించడానికి ఇంటర్నెట్ ద్వారా పంపబడుతుంది. అసలు యాప్ ఇంటర్నెట్ లేకుండా పని చేస్తుంది. రికార్డింగ్ దాచబడదు.",
     mobile: "మొబైల్ నంబర్", shopName: "దుకాణం పేరు", upiId: "UPI ID",
@@ -224,6 +229,7 @@ const STRINGS = {
     alreadyEmpty: "ఇప్పటికే ఖాళీ", updated: "మార్చాం",
   },
   kn: {
+    tagline2: "ಹೇಳಿ, ಬಿಲ್ ಆಗುತ್ತದೆ",
     tagline: "ಹೇಳಿ, ಬಿಲ್ ತಾನೇ ಬರೆಯುತ್ತದೆ.",
     demoNote: "ಇದು ಒಂದು ಡೆಮೊ. ನಿಮ್ಮ ಧ್ವನಿ ಗುರುತಿಸಲು ಇಂಟರ್ನೆಟ್ ಮೂಲಕ ಕಳುಹಿಸಲಾಗುತ್ತದೆ. ನಿಜವಾದ ಆ್ಯಪ್ ಇಂಟರ್ನೆಟ್ ಇಲ್ಲದೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ಧ್ವನಿ ಉಳಿಸಲಾಗುವುದಿಲ್ಲ.",
     mobile: "ಮೊಬೈಲ್ ಸಂಖ್ಯೆ", shopName: "ಅಂಗಡಿ ಹೆಸರು", upiId: "UPI ID",
