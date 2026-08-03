@@ -187,6 +187,12 @@ async def health():
     }
 
 
+@router.get("/schema")
+async def schema_probe():
+    """Diagnostic: which tables and columns PostgREST can see right now."""
+    return await db.probe()
+
+
 @router.get("/catalog")
 async def catalog(shop_id: str = DEFAULT_SHOP):
     return {"products": await db.get_products(shop_id)}

@@ -310,3 +310,30 @@ async def add_staff(shop_id: str, mobile: str, passcode_hash: str,
         _local_staff[row["id"]] = row
         return ""
     return await _post("staff", row)
+
+
+async def probe() -> dict:
+    """Report what PostgREST can actually see. Supabase caches the schema, so a migration
+    that ran fine can still 404 until the cache reloads — and the error is indistinguishable
+    from never having run it. This tells the two apart."""
+    if not configured():
+        return {"configured": False}
+    checks = {
+        "shops": {"select": "id", "limit": "1"},
+        "shops.passcode_hash": {"select": "passcode_hash", "limit": "1"},
+        "staff": {"select": "id", "limit": "1"},
+        "products": {"select": "id", "limit": "1"},
+        "products.description": {"select": "description", "limit": "1"},
+        "bills": {"select": "id", "limit": "1"},
+    }
+    out = {"configured": True}
+    async with httpx.AsyncClient(timeout=8.0) as c:
+        for label, params in checks.items():
+            table = label.split(".")[0]
+            try:
+                r = await c.get(f"{SUPABASE_URL}/rest/v1/{table}",
+                                headers=_headers(), params=params)
+                out[label] = "ok" if r.status_code < 400 else f"{r.status_code} {r.text[:90]}"
+            except Exception as exc:                   # noqa: BLE001
+                out[label] = f"{type(exc).__name__}"
+    return out
