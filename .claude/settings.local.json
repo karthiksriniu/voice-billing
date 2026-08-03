@@ -22,7 +22,12 @@
       "Bash(mv seed/catalog.csv api/_lib/seed/catalog.csv)",
       "Bash(rmdir seed *)",
       "Bash(curl -s https://nodejs.org/dist/index.json)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code} in %{time_total}s\\\\n\" https://vaakku-poc.vercel.app/api/health)",
+      "Bash(curl -s -X POST https://vaakku-poc.vercel.app/api/parse -H 'content-type: application/json' -d '{\"text\":\"arai kilo thuvaram paruppu and two kilo sugar\"}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -o /dev/null -w \"root page: HTTP %{http_code}\\\\n\" https://vaakku-poc.vercel.app/)",
+      "Bash(curl -s https://vaakku-poc.vercel.app/)",
+      "Bash(curl -s -o /dev/null -w \"style.css: HTTP %{http_code}\\\\n\" https://vaakku-poc.vercel.app/style.css)"
     ]
   }
 }

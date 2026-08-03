@@ -1,0 +1,10 @@
+# Vercel deploys from this directory, so the repo-root .gitignore's poc/-prefixed
+# patterns do not apply here. These must be listed again, relative to poc/.
+.venv/
+.tools/
+__pycache__/
+*.pyc
+tests/
+supabase/
+.env.local
+README.md

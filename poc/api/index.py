@@ -12,7 +12,9 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile
+from urllib.parse import parse_qs, urlencode
+
+from fastapi import APIRouter, FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +31,12 @@ app = FastAPI(title="Vaakku PoC")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+
+# Routes are declared on a router and then mounted at several prefixes. Vercel's rewrite
+# hands the function a path that is not reliably the one the browser asked for, and guessing
+# wrong shows up as a FastAPI 404 that looks exactly like a broken deploy. Mounting at every
+# plausible prefix costs nothing and removes the guess.
+router = APIRouter()
 
 LANG = Lang(os.environ.get("LANG_PACK", "ta-en"))
 DEFAULT_SHOP = os.environ.get("DEFAULT_SHOP_ID", "demo")
@@ -82,7 +90,7 @@ def result_payload(res, took_ms: int) -> dict:
     }
 
 
-@app.get("/api/health")
+@router.get("/health")
 async def health():
     asr = get_asr()
     return {
@@ -95,17 +103,17 @@ async def health():
     }
 
 
-@app.get("/api/catalog")
+@router.get("/catalog")
 async def catalog(shop_id: str = DEFAULT_SHOP):
     return {"products": await db.get_products(shop_id)}
 
 
-@app.post("/api/catalog")
+@router.post("/catalog")
 async def add_product(req: ProductRequest):
     return {"product": await db.upsert_product(req.shop_id, req.model_dump())}
 
 
-@app.post("/api/parse")
+@router.post("/parse")
 async def parse_text(req: ParseRequest):
     """Text in, line items out. The demo's offline path, and the endpoint the Phase 1
     eval harness will drive."""
@@ -117,7 +125,7 @@ async def parse_text(req: ParseRequest):
     return payload
 
 
-@app.post("/api/transcribe")
+@router.post("/transcribe")
 async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_SHOP)):
     """Audio in, line items out. Reports asr_ms separately from parse_ms because the
     latency budget in PLAN.md is about the parse stage, and the network hop here is an
@@ -145,7 +153,7 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     return payload
 
 
-@app.post("/api/finalize")
+@router.post("/finalize")
 async def finalize(req: FinalizeRequest):
     total = round(sum(float(i["amount"]) for i in req.items), 2)
     # Short ref and no note, on purpose: every character grows the QR symbol version, and a
@@ -165,14 +173,57 @@ async def finalize(req: FinalizeRequest):
     }
 
 
-@app.post("/api/confirm")
+@router.post("/confirm")
 async def confirm(bill_id: str = Form(...), shop_id: str = Form(DEFAULT_SHOP)):
     await db.save_bill(shop_id, {"id": bill_id, "total": 0, "items": [],
                                  "payment_state": "confirmed"})
     return {"ok": True, "bill_id": bill_id}
 
 
+for _prefix in ("/api", "/api/index", ""):
+    app.include_router(router, prefix=_prefix)
+
+
 # Local dev only. On Vercel, public/ is served by the platform.
 _public = Path(__file__).resolve().parents[1] / "public"
-if _public.exists() and not os.environ.get("VERCEL"):
-    app.mount("/", StaticFiles(directory=str(_public), html=True), name="static")
+if not os.environ.get("VERCEL"):
+    if _public.exists():
+        app.mount("/", StaticFiles(directory=str(_public), html=True), name="static")
+else:
+    @app.api_route("/{rest:path}", methods=["GET", "POST"])
+    async def _unrouted(rest: str, request: Request):
+        """Diagnostic of last resort: report the path actually received rather than a bare
+        404, so a routing mismatch is one curl away from being understood."""
+        return JSONResponse(
+            {"error": "no matching route", "seen_path": request.url.path,
+             "routes": sorted({r.path for r in router.routes})},
+            status_code=404,
+        )
+
+
+class VercelPathMiddleware:
+    """Restore the request path that Vercel's rewrite throws away.
+
+    A rewrite to /api/index replaces the path outright, so /api/health and /api/parse both
+    arrive as /api/index and every route 404s. vercel.json carries the real path through in
+    __vpath; this puts it back into the ASGI scope before routing sees it. Pure ASGI rather
+    than a FastAPI middleware because the path has to be fixed before the router runs.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            params = parse_qs(scope.get("query_string", b"").decode(), keep_blank_values=True)
+            vpath = (params.pop("__vpath", [""]) or [""])[0]
+            if vpath:
+                scope = dict(scope)
+                scope["path"] = "/api/" + vpath.lstrip("/")
+                scope["raw_path"] = scope["path"].encode()
+                scope["query_string"] = urlencode(params, doseq=True).encode()
+        await self.inner(scope, receive, send)
+
+
+fastapi_app = app
+app = VercelPathMiddleware(fastapi_app)
