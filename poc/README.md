@@ -35,19 +35,37 @@ cd poc && python3 tests/test_parser.py
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | no | Without them the catalog loads from `seed/catalog.csv` in memory and bills aren't persisted. The demo still runs end to end. |
 | `ASSUMED_ASR_CONFIDENCE` | no | Sarvam returns no confidence score, so this stands in. Lower it to make the confirm gate stricter. |
 
-## Deploy
+## Deployed
 
-Supabase first: paste `supabase/schema.sql` into the SQL editor. RLS is on with no public
-policy — the service key bypasses it, and that key must stay server-side only.
+**https://vaakku-poc.vercel.app** (Vercel project `crewstone/vaakku-poc`)
 
-Then, from `poc/`:
+A local Node toolchain lives in `.tools/` (gitignored, ~360 MB) purely so the Vercel CLI can
+run; `./vaakku` puts it on PATH for you.
 
 ```bash
-npx vercel --prod
+./vaakku dev      # local, :8077      ./vaakku deploy   # push to production
+./vaakku env      # add API keys      ./vaakku test     # parser fixtures
 ```
 
-Set the environment variables in the Vercel project settings before the first real use. I
-can't deploy this for you — it needs your account credentials.
+### Finishing the setup
+
+1. Supabase: paste `supabase/schema.sql` into the SQL editor. RLS is on with no public
+   policy — the service key bypasses it and must stay server-side only.
+2. `./vaakku env` — prompts for `SARVAM_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+   Values are typed at the prompt, so they never reach shell history or a file.
+3. `./vaakku deploy`, then check `/api/health` reports `asr_configured: true`.
+
+### Two deployment traps, already hit and fixed
+
+- **Vercel's rewrite discards the request path.** A rewrite to `/api/index` means
+  `/api/health` and `/api/parse` both arrive as `/api/index`, and every route 404s with
+  FastAPI's own 404 — which looks exactly like a broken build. `vercel.json` now carries the
+  path through as `__vpath` and `VercelPathMiddleware` restores it into the ASGI scope before
+  routing. The diagnostic catch-all in `api/index.py` reports the path actually received;
+  leave it there.
+- **`.vercelignore` is not optional.** Vercel deploys from `poc/`, so the repo-root
+  `.gitignore` patterns (`poc/.venv/`, `poc/.tools/`) don't match and 115 MB of virtualenv
+  and toolchain gets uploaded, past the 100 MB limit.
 
 ## How it works
 

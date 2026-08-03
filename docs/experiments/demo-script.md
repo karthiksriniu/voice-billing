@@ -7,7 +7,7 @@ is arranged around learning that, not around impressing anyone.
 ## Before you go
 
 1. **Preload his catalog.** Get 15–20 of his actual fast movers with his actual prices into
-   `poc/seed/catalog.csv` beforehand. A demo on his own SKUs at his own prices is worth more
+   `poc/api/_lib/seed/catalog.csv` beforehand. A demo on his own SKUs at his own prices is worth more
    than any amount of polish, and it removes the "your app doesn't know my shop" objection
    before it's raised.
 2. **Warm the backend.** Open the app once on the way — the first request pays a cold start.

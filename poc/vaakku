@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Wrapper so node/vercel are on PATH without touching your shell profile.
+# Usage:  ./vaakku dev            run locally on :8077
+#         ./vaakku deploy         deploy to production
+#         ./vaakku env            add the API keys (prompts; nothing is echoed)
+#         ./vaakku test           run the parser fixtures
+set -euo pipefail
+cd "$(dirname "$0")"
+export PATH="$PWD/.tools/node/bin:$PATH"
+
+case "${1:-dev}" in
+  dev)    exec .venv/bin/uvicorn api.index:app --reload --host 0.0.0.0 --port 8077 ;;
+  deploy) exec vercel deploy --prod --yes ;;
+  test)   exec python3 tests/test_parser.py ;;
+  env)
+    echo "Paste each value at the prompt. Nothing is written to shell history."
+    for v in SARVAM_API_KEY SUPABASE_URL SUPABASE_SERVICE_KEY; do
+      echo "--- $v ---"
+      vercel env add "$v" production || true
+    done
+    echo "Now redeploy so the new values take effect:  ./vaakku deploy"
+    ;;
+  *) echo "usage: ./vaakku {dev|deploy|env|test}"; exit 1 ;;
+esac
