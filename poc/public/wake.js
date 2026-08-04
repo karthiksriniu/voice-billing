@@ -443,8 +443,9 @@
         reads.push(dB(level()));
       }
       const lo = Math.min(...reads), hi = Math.max(...reads);
-      say(`room ${lo.toFixed(0)}dB quiet .. ${hi.toFixed(0)}dB loud (speech needs floor+${
-        SPEECH_OVER_FLOOR_DB}dB)`);
+      say(`room ${lo.toFixed(0)}dB quiet .. ${hi.toFixed(0)}dB loud ` +
+          `(counts as him: within ${DROP_DB}dB of the clip peak, and ${
+            OVER_FLOOR_DB}dB over the floor)`);
     }
     releaseMic();
 
@@ -510,13 +511,7 @@
               : "clip did NOT close in 8s — the room is holding it open");
     finish();
 
-    async function finish() {
-      // Sent rather than copied. Reading an audio problem out of somebody's phone by hand
-      // is a poor way to debug one, and there is nothing personal in here.
-      try {
-        await api("/api/diag", { method: "POST", body: { report: box.textContent } });
-        say("(report sent)");
-      } catch (err) { say("(could not send report — copy it instead)"); }
+    function finish() {
       $("hfCopy").hidden = false;
       $("hfCopy").onclick = async () => {
         try { await navigator.clipboard.writeText(box.textContent); toast(t("copied"), 2000, true); }
@@ -529,7 +524,23 @@
     const was = on;
     if (was) setEnabled(false);          // the check needs the microphone to itself
     $("hfRun").disabled = true;
-    try { await runCheck(); } finally {
+    const box = $("hfLog");
+    try {
+      await runCheck();
+    } catch (err) {
+      // A check that dies takes its own report with it, which is how the one run that
+      // would have explained everything explained nothing. Whatever killed it goes into
+      // the report, and the report goes out regardless.
+      box.hidden = false;
+      box.textContent += `\n!! CHECK CRASHED: ${err && err.stack ? err.stack : err}`;
+    } finally {
+      // Sent rather than copied. Reading an audio fault out of somebody's phone by hand is
+      // a poor way to debug one, and there is nothing personal in here.
+      try {
+        await api("/api/diag", { method: "POST", body: { report: box.textContent } });
+        box.textContent += "\n(report sent)";
+      } catch (e) { box.textContent += "\n(could not send — copy it instead)"; }
+      $("hfCopy").hidden = false;
       $("hfRun").disabled = false;
       if (was) setEnabled(true, true);
     }
