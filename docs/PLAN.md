@@ -130,6 +130,17 @@ message. Same voice pipeline, second grammar mode ("inward: 20 kilo sugar").
 **Done when:** stock ledger reconciles to a manual count in a pilot shop within 2% over a
 2-week window, and a reorder draft is sent by a shopkeeper unprompted.
 
+### Phase 3.5 — Premium tier: verified payment + automatic receipts (~8-10 weeks)
+Opt-in, paid, and strictly additive: the free tier must remain complete without it.
+Backend verifies the payment landed (PSP/bank), and that verification — not a tap — triggers
+a WhatsApp receipt to the number captured at the QR. See `DECISIONS.md` D5 and D10.
+
+**Gate before building any of it:** a named PSP that will onboard a sub-GST-threshold kirana
+self-serve from a phone, webhook latency measured at the counter (a confirmation 30s late is
+worse than the sound-box the shop already has), and a price that covers PSP plus
+per-conversation WhatsApp fees out of the tier's own revenue rather than the ₹10 free-tier
+ceiling. If the PSP question has no answer, this phase does not start.
+
 ### Phase 5 — Growth and monetisation (~6 weeks + ongoing)
 Printed/WhatsApp footer attribution, referral, market-cluster seeding. Pricing deferred per
 the session input; this phase instruments the loops rather than closing them.

@@ -191,6 +191,34 @@ from us is the differentiator and the priority changes.
 - Does the `tr` (transaction ref) we set survive to the shopkeeper's own statement? If yes, a
   future reconciliation path exists without a PSP.
 
+### Update — verified payment becomes the paid tier
+
+The owner's intent, recorded: **automatic** confirmation is the goal, done properly —
+verify the payment against the bank/PSP in the backend, and only then trigger a receipt.
+Manual confirmation stays the free-tier behaviour; automation is an opt-in **premium**
+feature. See D10.
+
+This resolves the tension that made D5 hard. Merchant onboarding was rejected because PAN,
+bank proof and a review queue cannot happen inside install-to-first-bill-in-5-minutes. But
+that constraint applies to a shop that has not yet decided we are worth anything. A shop
+choosing to pay for automation, weeks in, is a completely different proposition: it has
+already converted, and KYC is a reasonable price for something it asked for. **The
+self-serve constraint governs the free tier, not the upgrade.**
+
+What still has to be true, and none of it is proven yet:
+- A PSP that will onboard a sub-GST-threshold kirana at all, self-serve, on a phone.
+- Settlement staying shopkeeper ↔ customer. Principle 5 does not bend for a paid tier.
+- Webhook latency fast enough to matter at the counter — a confirmation that lands 30
+  seconds later is worse than the sound-box the shop already has.
+- The economics: per-conversation WhatsApp pricing and PSP fees come out of the tier's
+  own revenue, not the ₹10/shop/month free-tier ceiling, which was never meant to carry
+  them.
+
+**Not building:** the phone's share sheet into WhatsApp. It was the cheapest honest path to
+a receipt and it works today at ₹0, but it is manual, and shipping it would set the
+expectation that receipts are something the shopkeeper does rather than something that
+happens. Rejected on product grounds, not technical ones.
+
 **Reverses if:** (a) we ever add a sideloaded distribution channel — the notification listener
 becomes available immediately and is the right answer, so keep the confirmation logic behind
 a `PaymentConfirmer` interface with a manual implementation as the only one shipped; (b) a
@@ -250,9 +278,10 @@ What remains unresolved is delivery, and it is the same shape as D5. There is no
 provider wired up, and adding one is not free: WhatsApp Business pricing is per-conversation
 and template approval is required, while SMS needs TRAI DLT registration. Both break the
 ₹10/shop/month ceiling at 100 bills a day. So a captured number is stored as `requested`,
-never `sent`, and the shopkeeper is told so plainly. The cheapest honest delivery path is the
-phone's own share sheet into WhatsApp — no provider, no per-message cost, and the number
-never leaves the device — which is the next thing to try.
+never `sent`, and the shopkeeper is told so plainly. The share sheet into WhatsApp would work today at ₹0, and is
+deliberately **not** being built: it is manual, and it would teach shopkeepers that a
+receipt is something they do. The intended path is automatic — payment verified in the
+backend, receipt triggered by that verification — as a premium feature. See D5 and D10.
 
 **Pairing requirement (non-negotiable for Phase 3):** the printer must reconnect with zero
 user action after a phone restart, a printer power-cycle, and a day out of range. Bond once
@@ -353,5 +382,33 @@ piece of paper. If revenue is ever needed, the defensible lines are hardware mar
 printer and the Phase 4 inventory/reorder tier, in that order. Payments monetisation is the
 one to be most careful about, since it contradicts principle 5 and D5.
 
-**Reverses if:** a monetisation thesis is chosen, at which point this entry is rewritten
-rather than amended.
+### Update — the first revenue thesis
+
+Recorded from the owner: **automation is the paid tier.** Billing stays free forever; what
+a shop pays for is the work it no longer has to do.
+
+- **Verified payment confirmation** — the backend confirms the money actually arrived,
+  instead of the shopkeeper glancing at his phone (D5).
+- **Automatic WhatsApp receipts** — triggered by that verification, not by a manual tap
+  (D7).
+
+This is the first answer to the structural problem in `PRODUCT-REVIEW.md` §9: at ₹0 revenue
+any non-zero CAC is unrecoverable, so "free forever, no field force" only worked if growth
+was purely viral. A paid tier does not remove that requirement for the free tier, but it
+does mean the business has somewhere for money to come from.
+
+It is also the right shape of thing to charge for. It is not a feature gate on billing —
+which would break Principle 1 and the whole beachhead argument — it is work being done on
+the shopkeeper's behalf, and it costs us real money per shop (PSP fees, per-conversation
+WhatsApp pricing), so the price has a floor that is easy to explain.
+
+Both are **optional**. The free tier must stay complete on its own: a shop that never pays
+still bills by voice, still shows an exact-amount QR, still keeps its record. If the free
+tier starts feeling deliberately crippled, the beachhead argument dies with it.
+
+Open, and worth settling before building: what it costs, whether it is per-shop-per-month
+or per-transaction, and whether verified payment alone is enough to charge for or only
+becomes compelling bundled with receipts and the Phase 4 reorder draft.
+
+**Reverses if:** a different monetisation thesis is chosen, at which point this entry is
+rewritten rather than amended.
