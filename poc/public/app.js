@@ -24,6 +24,7 @@ const state = {
   items: [], mode: "billing", bill: null,
   askingPrice: null, proposal: null, queue: [],
   customer: "", history: [], picked: -1,
+  debug: localStorage.getItem("boloDebug") === "1",
   expanded: false, products: [],
 };
 
@@ -32,7 +33,11 @@ let stream = null, recorder = null, chunks = [];
 let pressedAt = 0, busy = false;
 
 let toastTimer;
-function toast(msg, ms = 2400) {
+/* `always` marks the toasts that report a loss — an item heard but not billed, an
+   utterance not understood. Those are the shopkeeper's only sign that goods are going
+   out unpaid for, so they survive debug mode being off; everything else is chatter. */
+function toast(msg, ms = 2400, always = false) {
+  if (!state.debug && !always) return;
   const t = $("toast");
   t.textContent = msg;
   t.classList.add("show");
@@ -67,6 +72,7 @@ function applyStrings() {
   $("typeToggle").textContent = $("typeForm").hidden
     ? `⌨ ${t("typeInstead")}` : `✕ ${t("hideTyping")}`;
   $("signIn") && ($("signIn").textContent = t("signIn"));
+  applyDebug();
 }
 
 (function buildLangPicker() {
@@ -379,19 +385,27 @@ function apply(data, roundTripMs) {
 
   // Understood, but not in this shop's catalog. Ask the price once, create the SKU and put
   // it on the bill — the shopkeeper never has to stop and go set the catalog up first.
-  if (!added && !asked && (data.unmatched || []).length) {
-    const u = data.unmatched[0];
+  // This used to run only when nothing else had been understood, so in a multi-item
+  // breath the one unknown item disappeared without a word while its neighbours billed
+  // fine. Now the shop can dictate three items, have two land and still be told about
+  // the third. Anything beyond the first is named in a toast rather than queued: the
+  // shopkeeper needs to know it was dropped, and one price prompt at a time is enough.
+  const unknown = data.unmatched || [];
+  if (unknown.length) {
+    const u = unknown[0];
     askPrice({
       product_id: null, name: u.name, qty: u.qty || 1, unit: u.unit || "piece",
       unit_price: 0, amount: 0, price_led: false, isNew: true,
     });
     asked++;
   }
+  const lost = unknown.slice(1).map((u) => u.name).concat(data.unparsed || []);
+  if (lost.length) toast(`${t("notBilled")}: ${lost.join(", ")}`, 3600, true);
 
   if (!added && !asked && !data.customer_mobile) {
     toast(data.transcript
       ? `“${data.transcript}” — ${t("couldNotParse")}`
-      : t("notHeard"), 3200);
+      : t("notHeard"), 3200, true);
   }
   render();
 }
@@ -440,6 +454,19 @@ function clearCustomer() {
   renderHistory();
 }
 $("custClear").onclick = () => { clearCustomer(); toast(t("customerRemoved")); };
+
+/* ---------- debug mode ---------- */
+
+function applyDebug() {
+  document.body.classList.toggle("debug", state.debug);
+  $("miDebug").setAttribute("aria-checked", String(state.debug));
+  $("miDebugState").textContent = state.debug ? t("on") : t("off");
+}
+$("miDebug").onclick = () => {
+  state.debug = !state.debug;
+  localStorage.setItem("boloDebug", state.debug ? "1" : "0");
+  applyDebug();
+};
 
 /* "Last" for the most recent, dd-mmm before that. The date is only a memory cue, so the
    year is left off — it would cost width and tell the shopkeeper nothing. */

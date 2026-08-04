@@ -4,19 +4,31 @@
   "name": "ML + English",
   "digits": {
     "0": [
+      "poojyam",
       "zero",
       "பூஜ்யம்",
-      "poojyam"
+      "പൂജ്യം"
     ],
     "1": [
       "ondru",
       "one",
+      "onn",
       "onnu",
       "oru",
       "ஒன்னு",
       "ஒன்று",
       "ஒரு",
-      "ഒന്ന്"
+      "ഒന്ന്",
+      "ഒരു"
+    ],
+    "1.5": [
+      "ondrarai",
+      "oneandahalf",
+      "onnara",
+      "onnarai",
+      "ஒன்னரை",
+      "ஒன்றரை",
+      "ഒന്നര"
     ],
     "2": [
       "erandu",
@@ -28,13 +40,29 @@
       "ரெண்டு",
       "രണ്ട്"
     ],
+    "2.5": [
+      "irandarai",
+      "randarai",
+      "rendarai",
+      "renderai",
+      "இரண்டரை",
+      "ரெண்டரை",
+      "രണ്ടര"
+    ],
     "3": [
       "moondru",
+      "moonnu",
       "moonu",
       "three",
       "மூணு",
       "மூன்று",
       "മൂന്ന്"
+    ],
+    "3.5": [
+      "மூணரை",
+      "மூன்றரை",
+      "moonarai",
+      "moondrarai"
     ],
     "4": [
       "four",
@@ -42,7 +70,12 @@
       "naangu",
       "நான்கு",
       "நாலு",
+      "നാലു",
       "നാല്"
+    ],
+    "4.5": [
+      "நாலரை",
+      "naalarai"
     ],
     "5": [
       "aindhu",
@@ -53,6 +86,10 @@
       "அஞ்சு",
       "ஐந்து",
       "അഞ്ച്"
+    ],
+    "5.5": [
+      "அஞ்சரை",
+      "anjarai"
     ],
     "6": [
       "aaru",
@@ -75,34 +112,46 @@
     ],
     "9": [
       "nine",
+      "ombathu",
       "onbadhu",
       "onbathu",
       "onpathu",
       "ஒன்பது",
+      "ഒമ്പത്",
       "ഒൻപത്"
     ],
     "10": [
       "paththu",
       "pathu",
+      "patthu",
       "ten",
       "பத்து",
       "പത്ത്"
     ],
+    "10.5": [
+      "பத்தரை",
+      "patharai"
+    ],
     "11": [
       "eleven",
+      "pathinonnu",
       "பதினொன்று",
-      "pathinonnu"
+      "പതിനൊന്ന്"
     ],
     "12": [
+      "pannendu",
+      "panniradu",
+      "panthrandu",
       "twelve",
       "பன்னிரண்டு",
-      "panniradu",
-      "pannendu"
+      "പന്ത്രണ്ട്"
     ],
     "15": [
       "fifteen",
+      "pathinanchu",
+      "pathinanju",
       "பதினைந்து",
-      "pathinanju"
+      "പതിനഞ്ച്"
     ],
     "20": [
       "irubathi",
@@ -112,26 +161,35 @@
       "twenty",
       "இருபது",
       "இருபத்தி",
-      "ഇരുപത്"
+      "ഇരുപത്",
+      "ഇരുപത്തി"
     ],
     "25": [
+      "irubathi anju",
+      "irupathanchu",
       "twentyfive",
       "இருபத்தி ஐந்து",
-      "irubathi anju"
+      "ഇരുപത്തഞ്ച്"
     ],
     "30": [
+      "muppathi",
+      "muppathu",
       "thirty",
       "முப்பது",
-      "muppathu",
       "முப்பத்தி",
-      "muppathi"
+      "മുപ്പത്",
+      "മുപ്പത്തി"
     ],
     "40": [
       "forty",
-      "நாற்பது",
+      "naalpathu",
+      "naarpathi",
       "naarpathu",
+      "நாற்பது",
       "நாற்பத்தி",
-      "naarpathi"
+      "നാല്പത്",
+      "നാൽപത്",
+      "നാൽപത്തി"
     ],
     "50": [
       "aimbathi",
@@ -142,100 +200,108 @@
       "fifty",
       "ஐம்பது",
       "ஐம்பத்தி",
-      "അമ്പത്"
+      "അമ്പതു",
+      "അമ്പത്",
+      "അമ്പത്തി"
     ],
     "60": [
+      "arubathi",
+      "arubathu",
+      "arupathu",
       "sixty",
       "அறுபது",
-      "arubathu",
       "அறுபத்தி",
-      "arubathi"
+      "അറുപത്",
+      "അറുപത്തി"
     ],
     "70": [
+      "ezhubathi",
+      "ezhubathu",
+      "ezhupathu",
       "seventy",
       "எழுபது",
-      "ezhubathu",
       "எழுபத்தி",
-      "ezhubathi"
+      "എഴുപത്",
+      "എഴുപത്തി"
     ],
     "80": [
       "eighty",
-      "எண்பது",
+      "enbathi",
       "enbathu",
+      "enpathu",
+      "எண்பது",
       "எண்பத்தி",
-      "enbathi"
+      "എമ്പത്",
+      "എൺപത്",
+      "എൺപത്തി"
     ],
     "90": [
       "ninety",
-      "தொண்ணூறு",
       "thonnooru",
+      "thonnootri",
+      "தொண்ணூறு",
       "தொண்ணூற்றி",
-      "thonnootri"
+      "തൊണ്ണൂറ്",
+      "തൊണ്ണൂറ്റി"
     ],
     "100": [
       "hundred",
       "nooru",
       "நூறு",
       "நூற்று",
-      "നൂറ്"
+      "നൂറ്",
+      "നൂറ്റി"
     ],
     "200": [
+      "irunooru",
       "இருநூறு",
-      "irunooru"
+      "ഇരുനൂറ്"
+    ],
+    "300": [
+      "munnooru",
+      "മുന്നൂറ്"
+    ],
+    "400": [
+      "naanooru",
+      "നാനൂറ്"
     ],
     "500": [
+      "ainooru",
+      "anjooru",
       "ஐநூறு",
-      "ainooru"
+      "അഞ്ഞൂറ്"
+    ],
+    "600": [
+      "arunooru",
+      "അറുനൂറ്"
+    ],
+    "700": [
+      "ezhunooru",
+      "എഴുനൂറ്"
+    ],
+    "800": [
+      "ennooru",
+      "എണ്ണൂറ്"
+    ],
+    "900": [
+      "thollayiram",
+      "തൊള്ളായിരം"
     ],
     "1000": [
       "aayiram",
       "thousand",
       "ஆயிரம்",
       "ആയിരം"
-    ],
-    "1.5": [
-      "ondrarai",
-      "oneandahalf",
-      "onnara",
-      "onnarai",
-      "ஒன்னரை",
-      "ஒன்றரை",
-      "ഒന്നര"
-    ],
-    "2.5": [
-      "irandarai",
-      "randarai",
-      "rendarai",
-      "renderai",
-      "இரண்டரை",
-      "ரெண்டரை",
-      "രണ്ടര"
-    ],
-    "3.5": [
-      "மூணரை",
-      "மூன்றரை",
-      "moonarai",
-      "moondrarai"
-    ],
-    "4.5": [
-      "நாலரை",
-      "naalarai"
-    ],
-    "5.5": [
-      "அஞ்சரை",
-      "anjarai"
-    ],
-    "10.5": [
-      "பத்தரை",
-      "patharai"
     ]
   },
   "fractions": {
     "0.25": [
-      "கால்",
       "kaal",
       "quarter",
-      "கால்வாசி"
+      "கால்",
+      "கால்வாசி",
+      "കാല്",
+      "കാൽ"
     ],
     "0.5": [
       "ara",
@@ -246,9 +312,11 @@
       "അര"
     ],
     "0.75": [
-      "முக்கால்",
       "mukkaal",
-      "mukkal"
+      "mukkal",
+      "முக்கால்",
+      "മുക്കാല്",
+      "മുക്കാൽ"
     ],
     "1": [
       "முழு",

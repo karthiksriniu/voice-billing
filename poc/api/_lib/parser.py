@@ -68,6 +68,26 @@ class ParseResult:
                                     # customer so their history can be pulled up
 
 
+def _loose(key: str) -> str:
+    """Fold vowel length out of a phonetic key: long and short are one sound here."""
+    return key.replace("i", "e").replace("u", "o")
+
+
+def _keys(aliases) -> set:
+    """Normalised alias keys, with anything that normalises to nothing thrown away.
+
+    Every language pack lists "+" as a join word, and norm() strips punctuation, so "+"
+    arrived here as the empty string. An empty key in a lookup set is not inert: the
+    phrase tests below pad with spaces, so `" " + "" + " "` matched any run of two
+    spaces — which every utterance has, because ASR ends sentences with a full stop and
+    norm() turns that into a padded separator. The effect was that _has_join answered
+    True for every utterance in every language, so every multi-item dictation was treated
+    as a single blended line: three items spoken, one item billed, at the last quantity
+    heard. Nothing empty gets in here again.
+    """
+    return {k for a in aliases for k in (norm(a),) if k}
+
+
 class Lang:
     """A loaded language pack. Builds reverse lookup tables once."""
 
@@ -75,8 +95,8 @@ class Lang:
         self.data = json.loads((LANG_DIR / f"{code}.json").read_text(encoding="utf-8"))
         self.digits = self._reverse(self.data["digits"], float)
         self.fractions = self._reverse(self.data["fractions"], float)
-        self.money = {norm(a) for a in self.data["money"]["aliases"]}
-        self.fillers = {norm(f) for f in self.data["fillers"]}
+        self.money = _keys(self.data["money"]["aliases"])
+        self.fillers = _keys(self.data["fillers"])
         self.rules = self.data["phonetic_rules"]
         self.script = self.data["script"]
         self._script_chars = (set(self.script["consonants"])
@@ -87,27 +107,67 @@ class Lang:
         self.units = {}
         for canon, spec in self.data["units"].items():
             for a in spec["aliases"]:
-                self.units[norm(a)] = canon
+                if norm(a):
+                    self.units[norm(a)] = canon
         self.unit_spec = self.data["units"]
 
         # Multi-word measures are matched on the raw string before tokenising, since
         # "arai kilo" must not be read as the number 0.5 followed by the unit kg.
         self.measures = {
-            norm(a): m for m in self.data["measures"].values() for a in m["aliases"]
+            k: m for m in self.data["measures"].values() for a in m["aliases"]
+            for k in (norm(a),) if k
         }
         self.modes = {
-            norm(a): mode for mode, al in self.data["modes"].items() for a in al
+            k: mode for mode, al in self.data["modes"].items() for a in al
+            for k in (norm(a),) if k
         }
         self.commands = {
-            norm(a): cmd for cmd, al in self.data["commands"].items() for a in al
+            k: cmd for cmd, al in self.data["commands"].items() for a in al
+            for k in (norm(a),) if k
         }
-        self.join = {norm(a) for a in self.data.get("join", [])}
-        self.customer_trigger = sorted(
-            (norm(a) for a in self.data.get("customer_trigger", [])), key=len, reverse=True)
+        # Numerals get the same phonetic fallback as item names. An exact-string table
+        # cannot keep up with how an ASR chooses to spell a spoken number: Sarvam writes
+        # 300 as "முன்னூறு" where the table said "முந்நூறு", so the word was not a number
+        # at all, the quantity silently fell back to 1 and 300 g of onion billed as 7
+        # paise. Keys that two different values share are left out rather than guessed —
+        # Hindi "saat" (7) and "saath" (60) collapse to the same sound, and inventing an
+        # answer there is exactly the silent error the confidence gate exists to prevent.
+        # Two layers. The strict one is the ordinary phonetic key. The loose one also
+        # folds vowel length (i/e, u/o), because that is the distinction an ASR flips most
+        # readily: Sarvam wrote seventy as "ஏழுபது" where the table has "எழுபது", one
+        # vowel apart, and the price silently fell back to whatever the catalog already
+        # held. A key that two values share is dropped from both layers — Kannada twenty
+        # and seventy are near-homophones, and guessing between them would put the wrong
+        # number on a bill without anyone noticing.
+        strict: dict[str, set] = {}
+        loose: dict[str, set] = {}
+        for table in (self.digits, self.fractions):
+            for alias, val in table.items():
+                key = self.phonetic(alias)
+                strict.setdefault(key, set()).add(val)
+                loose.setdefault(_loose(key), set()).add(val)
+        self.numeral_sounds = {k: v.pop() for k, v in strict.items() if len(v) == 1}
+        self.numeral_sounds_loose = {k: v.pop() for k, v in loose.items() if len(v) == 1}
+
+        self.join = _keys(self.data.get("join", []))
+        self.customer_trigger = sorted(_keys(self.data.get("customer_trigger", [])),
+                                       key=len, reverse=True)
+
+    def canonical_unit(self, unit: str) -> str:
+        """Any spelling of a unit -> the canonical key ("Kg", "KILO", "கிலோ" -> "kg").
+
+        Units reach the catalog from a free-text box in the SKU editor, so what is stored
+        is whatever was typed. An uncanonicalised unit is not a cosmetic problem: a shop
+        holding "Kg" made _to_canonical find no conversion for "500 gram", leave the 500
+        alone and bill 500 x the per-kilo price. Resolving the stored unit through the
+        same alias table as the spoken one is what stops that.
+        """
+        return self.units.get(norm(unit or ""), (unit or "").strip())
 
     @staticmethod
     def _reverse(table: dict, cast) -> dict:
-        return {norm(a): cast(v) for v, aliases in table.items() for a in aliases}
+        return {k: cast(v) for v, aliases in table.items() for a in aliases
+                for k in (norm(a),) if k}
 
     def translit(self, s: str) -> str:
         """Tamil script -> Latin. Tamil is an abugida: a bare consonant carries an inherent
@@ -165,7 +225,12 @@ def norm(s: str) -> str:
     """Lowercase, strip punctuation and accents, collapse whitespace."""
     s = unicodedata.normalize("NFKC", s).lower().strip()
     s = _CURRENCY_RE.sub(r"\1 rupees ", s)
-    s = re.sub(r"[^\w\s\u0900-\u0D7F\u200c\u200d.]", " ", s)
+    # Commas, semicolons and the Devanagari danda are how the ASR marks where one
+    # dictated item ends and the next begins — by far the most reliable boundary signal
+    # we get. The strip below would flatten them to spaces, so they become separators
+    # first. (SEP itself must survive the strip, hence its place in the allowed set.)
+    s = re.sub(r"[,;:!?\u0964\u0965]+", f" {SEP} ", s)
+    s = re.sub(rf"[^\w\s\u0900-\u0D7F\u200c\u200d.{SEP}]", " ", s)
     # Keep decimal points; turn every other dot into an explicit separator. A trailing dot
     # made "ரூபாய்." match no money word, but simply deleting it also threw away the
     # sentence boundary — which is the clearest signal that one dictated item has ended.
@@ -196,7 +261,17 @@ class Parser:
     def _value(self, tok: str) -> float | None:
         if re.fullmatch(r"\d+(\.\d+)?", tok):
             return float(tok)
-        return self.lang.digits.get(tok, self.lang.fractions.get(tok))
+        exact = self.lang.digits.get(tok, self.lang.fractions.get(tok))
+        if exact is not None:
+            return exact
+        # Spelling the word differently must not stop it being a number (see
+        # Lang.numeral_sounds). Only for tokens that carry letters — punctuation and the
+        # measure markers have no business here.
+        if len(tok) > 2 and any(c.isalpha() for c in tok):
+            key = self.lang.phonetic(tok)
+            hit = self.lang.numeral_sounds.get(key)
+            return hit if hit is not None else self.lang.numeral_sounds_loose.get(_loose(key))
+        return None
 
     def _read_number(self, toks: list[str], i: int) -> tuple[float | None, int]:
         """Read a possibly-compound number starting at i. Returns (value, next_index).
@@ -324,7 +399,7 @@ class Parser:
         return text, ""
 
     def _has_join(self, chunk: str) -> bool:
-        return any(f" {j} " in f" {chunk} " for j in self.lang.join)
+        return any(j and find_phrase(chunk.strip(), j) for j in self.lang.join)
 
     def _um_parts(self, chunk: str) -> list[str] | None:
         """Tamil conjoins nouns with a "-um" suffix on each: "sakkaraiyum vengayamum".
@@ -352,7 +427,7 @@ class Parser:
         each priced at its own rate, so 800g of a Rs800/kg bean plus 200g of a Rs1200/kg
         one totals Rs880 — not an average, which would misprice every blend.
         """
-        pattern = "|".join(re.escape(j) for j in sorted(self.lang.join, key=len, reverse=True))
+        pattern = "|".join(re.escape(j) for j in sorted(self.lang.join, key=len, reverse=True) if j)
         parts = [p.strip() for p in re.split(rf"\s(?:{pattern})\s", f" {chunk} ") if p.strip()]
         if len(parts) < 2:
             parts = self._um_parts(chunk) or []
@@ -403,7 +478,9 @@ class Parser:
              entry in half. The two modes have opposite word order; the split has to know
              which one it is in.
         """
-        parts = [p for p in re.split(rf"{SEP}|\b(?:and|apparam|அப்புறம்)\b|,", text)
+        # Commas already arrived here as SEP (norm() converts them), so there is no
+        # comma left to split on.
+        parts = [p.strip() for p in re.split(rf"{SEP}|\b(?:and|apparam|அப்புறம்)\b", text)
                  if p.strip()]
 
         out = []
@@ -505,7 +582,8 @@ class Parser:
 
     def _build(self, product, score, matched, qty, unit, money, asr_conf, raw) -> LineItem:
         spoken_qty = qty
-        unit = unit or product["unit"]
+        product_unit = self.lang.canonical_unit(product["unit"]) or product["unit"]
+        unit = unit or product_unit
         price = float(product["unit_price"])
         price_led = money is not None
 
@@ -515,8 +593,8 @@ class Parser:
         else:
             if qty is None:
                 qty = 1.0
-            qty = self._to_canonical(qty, unit, product["unit"])
-            unit = product["unit"]
+            qty = self._to_canonical(qty, unit, product_unit)
+            unit = product_unit
             amount = round(qty * price, 2)
 
         # Confidence is the product of how well we heard it and how well it matched a real
@@ -537,11 +615,18 @@ class Parser:
         )
 
     def _to_canonical(self, qty: float, spoken_unit: str, product_unit: str) -> float:
-        """Convert a spoken unit to the product's pricing unit — '500 gram' priced per kg."""
-        if spoken_unit == product_unit:
+        """Convert a spoken unit to the product's pricing unit — '500 gram' priced per kg.
+
+        Both sides go through the alias table first. Comparing the raw strings meant a
+        catalog holding "Kg" never matched the spoken "kg", found no conversion, and
+        returned the quantity untouched — 500 gram of a Rs50/kg item billed as Rs25,000.
+        """
+        spoken = self.lang.canonical_unit(spoken_unit)
+        target_unit = self.lang.canonical_unit(product_unit)
+        if spoken == target_unit:
             return qty
-        spec = self.lang.unit_spec.get(spoken_unit, {})
-        target = self.lang.unit_spec.get(product_unit, {})
+        spec = self.lang.unit_spec.get(spoken, {})
+        target = self.lang.unit_spec.get(target_unit, {})
         if "multiplier" in spec:                                    # dozen -> pieces
             return qty * spec["multiplier"]
         if "base_grams" in spec and "base_grams" in target:

@@ -303,7 +303,13 @@ async def add_product(req: ProductRequest, request: Request):
     # worker can cause, and it only ever fills in a blank.
     if c["role"] != "owner" and req.unit_price and not req.id:
         return deny("Owner only", 403)
-    product, error = await db.upsert_product(shop_id, req.model_dump())
+    # The UOM box is free text, so "Kg", "KILO" and "கிலோ" all arrive as themselves.
+    # Canonicalise on the way in: a unit the conversion table cannot recognise silently
+    # skips the conversion, and "500 gram" against a "Kg" product bills 500 kilos.
+    payload = req.model_dump()
+    shop = await db.get_shop(shop_id) or {}
+    payload["unit"] = lang_for(shop.get("lang") or "en").canonical_unit(req.unit) or "piece"
+    product, error = await db.upsert_product(shop_id, payload)
     # The error is returned rather than swallowed. Previously a rejected write still came
     # back looking like a success, and the UI cheerfully announced a price change that had
     # not happened — the exact failure mode this product cannot afford.

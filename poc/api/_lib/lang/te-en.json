@@ -4,9 +4,11 @@
   "name": "TE + English",
   "digits": {
     "0": [
+      "poojyam",
+      "sunna",
       "zero",
       "பூஜ்யம்",
-      "poojyam"
+      "సున్న"
     ],
     "1": [
       "okati",
@@ -17,7 +19,18 @@
       "ஒன்னு",
       "ஒன்று",
       "ஒரு",
+      "ఒక",
       "ఒకటి"
+    ],
+    "1.5": [
+      "okatinnara",
+      "ondrarai",
+      "oneandahalf",
+      "onnara",
+      "onnarai",
+      "ஒன்னரை",
+      "ஒன்றரை",
+      "ఒకటిన్నర"
     ],
     "2": [
       "erandu",
@@ -28,6 +41,15 @@
       "ரெண்டு",
       "రెండు"
     ],
+    "2.5": [
+      "irandarai",
+      "rendarai",
+      "renderai",
+      "rendunnara",
+      "இரண்டரை",
+      "ரெண்டரை",
+      "రెండున్నర"
+    ],
     "3": [
       "moodu",
       "moondru",
@@ -36,6 +58,12 @@
       "மூணு",
       "மூன்று",
       "మూడు"
+    ],
+    "3.5": [
+      "மூணரை",
+      "மூன்றரை",
+      "moonarai",
+      "moondrarai"
     ],
     "4": [
       "four",
@@ -46,6 +74,10 @@
       "நாலு",
       "నాలుగు"
     ],
+    "4.5": [
+      "நாலரை",
+      "naalarai"
+    ],
     "5": [
       "aidu",
       "aindhu",
@@ -54,7 +86,12 @@
       "five",
       "அஞ்சு",
       "ஐந்து",
+      "అయిదు",
       "ఐదు"
+    ],
+    "5.5": [
+      "அஞ்சரை",
+      "anjarai"
     ],
     "6": [
       "aaru",
@@ -81,6 +118,7 @@
       "nine",
       "onbadhu",
       "onbathu",
+      "thommidi",
       "tommidi",
       "ஒன்பது",
       "తొమ్మిది"
@@ -93,21 +131,30 @@
       "பத்து",
       "పది"
     ],
+    "10.5": [
+      "பத்தரை",
+      "patharai"
+    ],
     "11": [
       "eleven",
+      "padakondu",
+      "pathinonnu",
       "பதினொன்று",
-      "pathinonnu"
+      "పదకొండు"
     ],
     "12": [
+      "pannendu",
+      "panniradu",
       "twelve",
       "பன்னிரண்டு",
-      "panniradu",
-      "pannendu"
+      "పన్నెండు"
     ],
     "15": [
       "fifteen",
+      "padihenu",
+      "pathinanju",
       "பதினைந்து",
-      "pathinanju"
+      "పదిహేను"
     ],
     "20": [
       "iravai",
@@ -121,23 +168,29 @@
       "ఇరవై"
     ],
     "25": [
+      "iravai aidu",
+      "irubathi anju",
       "twentyfive",
       "இருபத்தி ஐந்து",
-      "irubathi anju"
+      "ఇరవై ఐదు"
     ],
     "30": [
+      "muppai",
+      "muppathi",
+      "muppathu",
       "thirty",
       "முப்பது",
-      "muppathu",
       "முப்பத்தி",
-      "muppathi"
+      "ముప్పై"
     ],
     "40": [
       "forty",
-      "நாற்பது",
+      "naarpathi",
       "naarpathu",
+      "nalabhai",
+      "நாற்பது",
       "நாற்பத்தி",
-      "naarpathi"
+      "నలభై"
     ],
     "50": [
       "aimbathi",
@@ -145,54 +198,69 @@
       "ambathi",
       "ambathu",
       "fifty",
+      "yaabhai",
       "yabhai",
       "ஐம்பது",
       "ஐம்பத்தி",
       "యాభై"
     ],
     "60": [
+      "aravai",
+      "arubathi",
+      "arubathu",
       "sixty",
       "அறுபது",
-      "arubathu",
       "அறுபத்தி",
-      "arubathi"
+      "అరవై"
     ],
     "70": [
+      "debbai",
+      "ezhubathi",
+      "ezhubathu",
       "seventy",
       "எழுபது",
-      "ezhubathu",
       "எழுபத்தி",
-      "ezhubathi"
+      "డెబ్బై"
     ],
     "80": [
       "eighty",
-      "எண்பது",
+      "enabhai",
+      "enbathi",
       "enbathu",
+      "எண்பது",
       "எண்பத்தி",
-      "enbathi"
+      "ఎనభై"
     ],
     "90": [
       "ninety",
-      "தொண்ணூறு",
+      "thombhai",
       "thonnooru",
+      "thonnootri",
+      "தொண்ணூறு",
       "தொண்ணூற்றி",
-      "thonnootri"
+      "తొంభై"
     ],
     "100": [
       "hundred",
       "nooru",
       "vanda",
+      "vandalu",
       "நூறு",
       "நூற்று",
-      "వంద"
+      "వంద",
+      "వందలు"
     ],
     "200": [
+      "irunooru",
+      "rendu vandalu",
       "இருநூறு",
-      "irunooru"
+      "రెండు వందలు"
     ],
     "500": [
+      "aidu vandalu",
+      "ainooru",
       "ஐநூறு",
-      "ainooru"
+      "ఐదు వందలు"
     ],
     "1000": [
       "aayiram",
@@ -200,51 +268,16 @@
       "veyyi",
       "ஆயிரம்",
       "వెయ్యి"
-    ],
-    "1.5": [
-      "okatinnara",
-      "ondrarai",
-      "oneandahalf",
-      "onnara",
-      "onnarai",
-      "ஒன்னரை",
-      "ஒன்றரை",
-      "ఒకటిన్నర"
-    ],
-    "2.5": [
-      "irandarai",
-      "rendarai",
-      "renderai",
-      "rendunnara",
-      "இரண்டரை",
-      "ரெண்டரை",
-      "రెండున్నర"
-    ],
-    "3.5": [
-      "மூணரை",
-      "மூன்றரை",
-      "moonarai",
-      "moondrarai"
-    ],
-    "4.5": [
-      "நாலரை",
-      "naalarai"
-    ],
-    "5.5": [
-      "அஞ்சரை",
-      "anjarai"
-    ],
-    "10.5": [
-      "பத்தரை",
-      "patharai"
     ]
   },
   "fractions": {
     "0.25": [
-      "கால்",
       "kaal",
+      "paavu",
       "quarter",
-      "கால்வாசி"
+      "கால்",
+      "கால்வாசி",
+      "పావు"
     ],
     "0.5": [
       "arai",
@@ -255,9 +288,11 @@
       "సగం"
     ],
     "0.75": [
-      "முக்கால்",
       "mukkaal",
-      "mukkal"
+      "mukkal",
+      "muppaavu",
+      "முக்கால்",
+      "ముప్పావు"
     ],
     "1": [
       "முழு",

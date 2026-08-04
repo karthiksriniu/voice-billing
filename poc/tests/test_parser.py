@@ -152,6 +152,33 @@ BILL_MULTI = [
     ("irubathi anju egg", [("EGG001", 25.0)]),
     ("arai kilo thuvaram paruppu", [("TUR001", 0.5)]),
     ("ten rupees coriander", [("COR001", 1.0)]),
+
+    # Verbatim Sarvam output, punctuation and all. Every one of these billed as a SINGLE
+    # line at the LAST quantity heard, because "+" is a join alias, norm() strips it to
+    # the empty string, and an empty string in the join set matched the double space that
+    # a trailing full stop leaves behind — so every utterance looked like a blend. The
+    # fixtures above missed it for one reason only: none of them ended in a full stop.
+    ("ரெண்டு கிலோ சர்க்கரை, ஒரு கிலோ வெங்காயம்.", [("SUG001", 2.0), ("ONI001", 1.0)]),
+    ("two kilo sugar, one kilo onion.", [("SUG001", 2.0), ("ONI001", 1.0)]),
+    ("two kilo sugar.", [("SUG001", 2.0)]),
+    ("ஒரு கிலோ தக்காளி, அரை கிலோ வெங்காயம், ரெண்டு கிலோ சர்க்கரை.",
+     [("TOM001", 1.0), ("ONI001", 0.5), ("SUG001", 2.0)]),
+]
+
+
+# Numerals, per language. The tables were Tamil with a few native words sprinkled in, so
+# a Malayalam shopkeeper had no word for thirty, and Telugu "rendu vandalu" read as 2.
+# The phonetic fallback covers the rest: an ASR spells a spoken number how it likes, and
+# Sarvam writes 300 as "முன்னூறு" where the table said "முந்நூறு" — which made it not a
+# number at all, so 300 g of onion billed as 7 paise.
+NUMERALS = [
+    ("ta-en", "முன்னூறு", 300), ("ta-en", "முந்நூறு", 300), ("ta-en", "ஏழுபது", 70),
+    ("ml-en", "ഇരുനൂറ്", 200), ("ml-en", "മുപ്പത്", 30), ("ml-en", "എഴുപത്", 70),
+    ("ml-en", "കാൽ", 0.25), ("ml-en", "മുക്കാൽ", 0.75), ("ml-en", "ഇരുനൂറു", 200),
+    ("hi-en", "तीस", 30), ("hi-en", "साठ", 60), ("hi-en", "सात", 7),
+    ("hi-en", "आठ", 8), ("hi-en", "आधा", 0.5), ("hi-en", "पाव", 0.25),
+    ("te-en", "ముప్పై", 30), ("te-en", "రెండు వందలు", 200), ("te-en", "పావు", 0.25),
+    ("kn-en", "ಇನ್ನೂರು", 200), ("kn-en", "ಮೂವತ್ತು", 30), ("kn-en", "ಮುಕ್ಕಾಲು", 0.75),
 ]
 
 
@@ -291,6 +318,24 @@ def run():
     for text, want in BILL_MULTI:
         got = [(i.product_id, i.qty) for i in P.parse(text).items]
         check(text, got == want, f"-> {got} (want {want})")
+
+    print("numerals in every language")
+    from parser import Catalog as _C4
+    for code, word, want in NUMERALS:
+        pl = Parser(Lang(code), _C4([]))
+        got, _ = pl._read_number(word.split(), 0)
+        check(f"{code} {word}", got == want, f"-> {got} (want {want})")
+
+    print("a unit spelt any way still converts")
+    from parser import Catalog as _C5
+    # A catalog holding "Kg" found no conversion for a spoken "gram", left the 500 alone
+    # and billed 500 kilos: Rs25,000 for half a kilo of potato.
+    for stored in ("Kg", "KILO", "kg", "கிலோ"):
+        u = Parser(LANG, _C5([{"id": "P", "name": "potato", "unit": stored,
+                               "unit_price": 50.0}]))
+        it = u.parse("500 gram potato").items
+        check(f"unit {stored!r}", it and it[0].qty == 0.5 and it[0].amount == 25.0,
+              f"-> {[(i.qty, i.amount) for i in it]} (want 0.5 kg, Rs25)")
 
     print("similar SKU names resolve to the one spoken")
     from parser import Catalog as _C3

@@ -17,6 +17,14 @@
       "oru",
       "ஒரு"
     ],
+    "1.5": [
+      "ஒன்றரை",
+      "ஒன்னரை",
+      "onnarai",
+      "onnara",
+      "ondrarai",
+      "oneandahalf"
+    ],
     "2": [
       "two",
       "ரெண்டு",
@@ -25,12 +33,25 @@
       "irandu",
       "erandu"
     ],
+    "2.5": [
+      "ரெண்டரை",
+      "இரண்டரை",
+      "rendarai",
+      "renderai",
+      "irandarai"
+    ],
     "3": [
       "three",
       "மூணு",
       "மூன்று",
       "moonu",
       "moondru"
+    ],
+    "3.5": [
+      "மூணரை",
+      "மூன்றரை",
+      "moonarai",
+      "moondrarai"
     ],
     "4": [
       "four",
@@ -39,6 +60,10 @@
       "naalu",
       "naangu"
     ],
+    "4.5": [
+      "நாலரை",
+      "naalarai"
+    ],
     "5": [
       "five",
       "அஞ்சு",
@@ -46,6 +71,10 @@
       "anju",
       "ainthu",
       "aindhu"
+    ],
+    "5.5": [
+      "அஞ்சரை",
+      "anjarai"
     ],
     "6": [
       "six",
@@ -74,6 +103,10 @@
       "பத்து",
       "pathu",
       "paththu"
+    ],
+    "10.5": [
+      "பத்தரை",
+      "patharai"
     ],
     "11": [
       "eleven",
@@ -166,47 +199,38 @@
       "இருநூறு",
       "irunooru"
     ],
+    "300": [
+      "munnooru",
+      "முந்நூறு"
+    ],
+    "400": [
+      "naanooru",
+      "நானூறு"
+    ],
     "500": [
       "ஐநூறு",
       "ainooru"
+    ],
+    "600": [
+      "arunooru",
+      "அறுநூறு"
+    ],
+    "700": [
+      "ezhunooru",
+      "எழுநூறு"
+    ],
+    "800": [
+      "ennooru",
+      "எண்ணூறு"
+    ],
+    "900": [
+      "thollayiram",
+      "தொள்ளாயிரம்"
     ],
     "1000": [
       "thousand",
       "ஆயிரம்",
       "aayiram"
-    ],
-    "1.5": [
-      "ஒன்றரை",
-      "ஒன்னரை",
-      "onnarai",
-      "onnara",
-      "ondrarai",
-      "oneandahalf"
-    ],
-    "2.5": [
-      "ரெண்டரை",
-      "இரண்டரை",
-      "rendarai",
-      "renderai",
-      "irandarai"
-    ],
-    "3.5": [
-      "மூணரை",
-      "மூன்றரை",
-      "moonarai",
-      "moondrarai"
-    ],
-    "4.5": [
-      "நாலரை",
-      "naalarai"
-    ],
-    "5.5": [
-      "அஞ்சரை",
-      "anjarai"
-    ],
-    "10.5": [
-      "பத்தரை",
-      "patharai"
     ]
   },
   "fractions": {

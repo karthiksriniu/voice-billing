@@ -31,7 +31,16 @@ body{
   line-height:var(--type-body-large-line);
   letter-spacing:var(--type-body-large-tracking);
   overscroll-behavior:none;
+  /* Holding the talk button on iOS started a text selection that ran up the screen and
+     highlighted the bill above it: Safari treats a long press anywhere as the start of a
+     selection gesture, and preventDefault on the button alone does not stop it. Nothing
+     in a bill is meant to be selected by hand, so selection is off everywhere and turned
+     back on only for the fields the shopkeeper actually types into. */
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-touch-callout:none;
 }
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}
 .en{color:var(--color-on-surface-variant);font-size:.86em}
 
 .screen{display:none;height:100dvh;flex-direction:column}
@@ -577,3 +586,17 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
              transform var(--duration-medium) var(--ease-emphasized);
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* -- Debug mode ------------------------------------------------ */
+/* Off by default. The transcript echo, the timings and the hint lines are ours, not the
+   shopkeeper's — at a counter they are noise between them and the bill. */
+body:not(.debug) #status,
+body:not(.debug) .hint{display:none}
+.mistate{
+  margin-left:auto;padding:2px var(--space-2);border-radius:var(--radius-full);
+  font-size:var(--type-label-medium-size);letter-spacing:var(--type-label-medium-tracking);
+  background:var(--color-surface-container-highest);color:var(--color-on-surface-variant);
+}
+.menuitem[aria-checked="true"] .mistate{
+  background:var(--color-primary-container);color:var(--color-on-primary-container);
+}

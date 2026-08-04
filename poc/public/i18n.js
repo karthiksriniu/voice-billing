@@ -14,7 +14,7 @@ const LANGS = {
 
 const STRINGS = {
   en: {
-    notThem: "Not them? Remove", customerRemoved: "Customer removed", loadedReplacing: "items loaded — earlier items cleared",
+    debugInfo: "Debug info", on: "On", off: "Off", notBilled: "Not billed", notThem: "Not them? Remove", customerRemoved: "Customer removed", loadedReplacing: "items loaded — earlier items cleared",
     personName: "Name (optional)",
     addUser: "Add user", logout: "Sign out", back: "Back",
     lastVisit: "Last",
@@ -63,7 +63,7 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
-    notThem: "இவங்க இல்லையா? நீக்கு", customerRemoved: "கஸ்டமர் நீக்கப்பட்டார்", loadedReplacing: "பொருள் ஏற்றப்பட்டது — முந்தையவை நீக்கப்பட்டன",
+    debugInfo: "டீபக் தகவல்", on: "ஆன்", off: "ஆஃப்", notBilled: "பில்லில் சேரவில்லை", notThem: "இவங்க இல்லையா? நீக்கு", customerRemoved: "கஸ்டமர் நீக்கப்பட்டார்", loadedReplacing: "பொருள் ஏற்றப்பட்டது — முந்தையவை நீக்கப்பட்டன",
     personName: "பெயர் (விருப்பம்)",
     addUser: "ஆள் சேர்", logout: "வெளியேறு", back: "பின்",
     lastVisit: "கடைசி",
@@ -112,7 +112,7 @@ const STRINGS = {
     alreadyEmpty: "ஏற்கனவே காலி", updated: "மாற்றப்பட்டது",
   },
   hi: {
-    notThem: "ये नहीं? हटाएँ", customerRemoved: "ग्राहक हटाया गया", loadedReplacing: "सामान लोड हुआ — पिछले हटाए गए",
+    debugInfo: "डीबग जानकारी", on: "चालू", off: "बंद", notBilled: "बिल में नहीं जुड़ा", notThem: "ये नहीं? हटाएँ", customerRemoved: "ग्राहक हटाया गया", loadedReplacing: "सामान लोड हुआ — पिछले हटाए गए",
     personName: "नाम (वैकल्पिक)",
     addUser: "उपयोगकर्ता जोड़ें", logout: "साइन आउट", back: "वापस",
     lastVisit: "पिछली",
@@ -161,7 +161,7 @@ const STRINGS = {
     alreadyEmpty: "पहले से खाली", updated: "बदल गया",
   },
   ml: {
-    notThem: "ഇവരല്ലേ? നീക്കുക", customerRemoved: "ഉപഭോക്താവിനെ നീക്കി", loadedReplacing: "സാധനങ്ങൾ ചേർത്തു — മുമ്പുള്ളവ നീക്കി",
+    debugInfo: "ഡീബഗ് വിവരം", on: "ഓൺ", off: "ഓഫ്", notBilled: "ബില്ലിൽ ചേർത്തില്ല", notThem: "ഇവരല്ലേ? നീക്കുക", customerRemoved: "ഉപഭോക്താവിനെ നീക്കി", loadedReplacing: "സാധനങ്ങൾ ചേർത്തു — മുമ്പുള്ളവ നീക്കി",
     personName: "പേര് (ഐച്ഛികം)",
     addUser: "ഉപയോക്താവിനെ ചേർക്കുക", logout: "സൈൻ ഔട്ട്", back: "തിരികെ",
     lastVisit: "കഴിഞ്ഞ",
@@ -210,7 +210,7 @@ const STRINGS = {
     alreadyEmpty: "ഇതിനകം ഒഴിഞ്ഞു", updated: "മാറ്റി",
   },
   te: {
-    notThem: "వీరు కాదా? తీసివేయి", customerRemoved: "కస్టమర్ తీసివేయబడ్డారు", loadedReplacing: "సరుకులు లోడ్ అయ్యాయి — మునుపటివి తీసివేశాం",
+    debugInfo: "డీబగ్ సమాచారం", on: "ఆన్", off: "ఆఫ్", notBilled: "బిల్లులో చేరలేదు", notThem: "వీరు కాదా? తీసివేయి", customerRemoved: "కస్టమర్ తీసివేయబడ్డారు", loadedReplacing: "సరుకులు లోడ్ అయ్యాయి — మునుపటివి తీసివేశాం",
     personName: "పేరు (ఐచ్ఛికం)",
     addUser: "వినియోగదారుని జోడించు", logout: "సైన్ అవుట్", back: "వెనక్కి",
     lastVisit: "గత",
@@ -259,7 +259,7 @@ const STRINGS = {
     alreadyEmpty: "ఇప్పటికే ఖాళీ", updated: "మార్చాం",
   },
   kn: {
-    notThem: "ಇವರಲ್ಲವೇ? ತೆಗೆದುಹಾಕಿ", customerRemoved: "ಗ್ರಾಹಕರನ್ನು ತೆಗೆದಿದೆ", loadedReplacing: "ಸಾಮಾನು ಲೋಡ್ ಆಗಿದೆ — ಹಿಂದಿನವು ತೆಗೆದಿದೆ",
+    debugInfo: "ಡೀಬಗ್ ಮಾಹಿತಿ", on: "ಆನ್", off: "ಆಫ್", notBilled: "ಬಿಲ್‌ಗೆ ಸೇರಿಸಿಲ್ಲ", notThem: "ಇವರಲ್ಲವೇ? ತೆಗೆದುಹಾಕಿ", customerRemoved: "ಗ್ರಾಹಕರನ್ನು ತೆಗೆದಿದೆ", loadedReplacing: "ಸಾಮಾನು ಲೋಡ್ ಆಗಿದೆ — ಹಿಂದಿನವು ತೆಗೆದಿದೆ",
     personName: "ಹೆಸರು (ಐಚ್ಛಿಕ)",
     addUser: "ಬಳಕೆದಾರರನ್ನು ಸೇರಿಸಿ", logout: "ಸೈನ್ ಔಟ್", back: "ಹಿಂದೆ",
     lastVisit: "ಕಳೆದ",
