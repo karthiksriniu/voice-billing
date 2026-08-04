@@ -19,7 +19,7 @@ create table if not exists shops (
   id             text primary key,          -- normalised 10-digit mobile number
   name           text not null,
   upi_vpa        text not null default '',
-  lang           text not null default 'ta-en',
+  lang           text not null default 'en',   -- language CODE (en/ta/hi/ml/te/kn)
   created_at     timestamptz not null default now()
 );
 

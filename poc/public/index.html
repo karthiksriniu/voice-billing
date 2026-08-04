@@ -89,7 +89,26 @@
 
   <!-- ADMIN -->
   <div id="adminPanel" class="panel" hidden>
-    <!-- Staff first, collapsed. It is set up once and then barely touched, so it must not
+    <!-- Settings first: the business name and language live here, and getting the language
+         wrong silently breaks dictation, so it must be visible and changeable. -->
+    <button id="setHead" class="acc slim">
+      <span class="accsum"><b><span data-t="settingsHead">Settings</span></b>
+        <span id="setSummary"></span></span>
+      <span class="accright"><span id="setChev">⌄</span></span>
+    </button>
+    <div id="setBody" class="staffbody" hidden>
+      <label class="field"><span data-t="shopName">Shop name</span>
+        <input id="setName" type="text" autocomplete="organization"></label>
+      <label class="field"><span data-t="language">Language</span>
+        <select id="setLang"></select></label>
+      <label class="field"><span data-t="upiId">UPI ID</span>
+        <input id="setVpa" type="text" spellcheck="false" autocomplete="off"></label>
+      <p class="fineprint" id="setMobile"></p>
+      <div class="staffacts"><button id="setSave" class="mini go" data-t="save">Save</button></div>
+      <p class="fineprint dim" data-t="passcodeSoon">Changing the passcode comes next.</p>
+    </div>
+
+    <!-- Staff, collapsed. It is set up once and then barely touched, so it must not
          push the item list — the thing actually being worked on — under the talk button. -->
     <button id="staffHead" class="acc slim">
       <span class="accsum"><b><span data-t="staffHead">Staff</span> <span id="staffCount"></span></b></span>

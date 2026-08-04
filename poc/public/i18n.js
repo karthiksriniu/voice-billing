@@ -14,6 +14,7 @@ const LANGS = {
 
 const STRINGS = {
   en: {
+    settingsHead: "Settings", passcodeSoon: "Changing the passcode comes in a later update.", signedInAs: "Signed in as",
     tagline2: "Say it, bill it",
     tagline: "Speak, and the bill writes itself.",
     demoNote: "This is a demo. Your voice is sent over the internet to be recognised. The real app will work offline and send nothing. No audio is stored.",
@@ -57,6 +58,7 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
+    settingsHead: "அமைப்புகள்", passcodeSoon: "கடவுஎண் மாற்றம் அடுத்த பதிப்பில்.", signedInAs: "உள்நுழைந்தவர்",
     tagline2: "சொல்லுங்க, பில் ஆகும்",
     tagline: "பேசுங்க, பில் தானா எழுதும்.",
     demoNote: "இது ஒரு டெமோ. உங்க குரல் இணையம் வழியாக அனுப்பப்படும். உண்மையான ஆப் இணையம் இல்லாமலே வேலை செய்யும். ஒலிப்பதிவு சேமிக்கப்படாது.",
@@ -100,6 +102,7 @@ const STRINGS = {
     alreadyEmpty: "ஏற்கனவே காலி", updated: "மாற்றப்பட்டது",
   },
   hi: {
+    settingsHead: "सेटिंग्स", passcodeSoon: "पासकोड बदलना अगले अपडेट में आएगा।", signedInAs: "साइन इन",
     tagline2: "बोलो, बिल बनेगा",
     tagline: "बोलिए, बिल अपने आप बनेगा।",
     demoNote: "यह एक डेमो है। आपकी आवाज़ पहचानने के लिए इंटरनेट पर भेजी जाती है। असली ऐप बिना इंटरनेट काम करेगा। कोई रिकॉर्डिंग नहीं रखी जाती।",
@@ -143,6 +146,7 @@ const STRINGS = {
     alreadyEmpty: "पहले से खाली", updated: "बदल गया",
   },
   ml: {
+    settingsHead: "ക്രമീകരണങ്ങൾ", passcodeSoon: "പാസ്‌കോഡ് മാറ്റം അടുത്ത അപ്ഡേറ്റിൽ.", signedInAs: "സൈൻ ഇൻ",
     tagline2: "പറയൂ, ബില്ലാകും",
     tagline: "പറയൂ, ബില്ല് സ്വയം എഴുതും.",
     demoNote: "ഇതൊരു ഡെമോ ആണ്. നിങ്ങളുടെ ശബ്ദം തിരിച്ചറിയാൻ ഇന്റർനെറ്റ് വഴി അയക്കുന്നു. യഥാർത്ഥ ആപ്പ് ഇന്റർനെറ്റ് ഇല്ലാതെ പ്രവർത്തിക്കും. ശബ്ദം സൂക്ഷിക്കുന്നില്ല.",
@@ -186,6 +190,7 @@ const STRINGS = {
     alreadyEmpty: "ഇതിനകം ഒഴിഞ്ഞു", updated: "മാറ്റി",
   },
   te: {
+    settingsHead: "సెట్టింగ్‌లు", passcodeSoon: "పాస్‌కోడ్ మార్పు తదుపరి అప్‌డేట్‌లో.", signedInAs: "సైన్ ఇన్",
     tagline2: "చెప్పండి, బిల్లు అవుతుంది",
     tagline: "చెప్పండి, బిల్లు దానంతట అదే రాస్తుంది.",
     demoNote: "ఇది ఒక డెమో. మీ గొంతు గుర్తించడానికి ఇంటర్నెట్ ద్వారా పంపబడుతుంది. అసలు యాప్ ఇంటర్నెట్ లేకుండా పని చేస్తుంది. రికార్డింగ్ దాచబడదు.",
@@ -229,6 +234,7 @@ const STRINGS = {
     alreadyEmpty: "ఇప్పటికే ఖాళీ", updated: "మార్చాం",
   },
   kn: {
+    settingsHead: "ಸೆಟ್ಟಿಂಗ್‌ಗಳು", passcodeSoon: "ಪಾಸ್‌ಕೋಡ್ ಬದಲಾವಣೆ ಮುಂದಿನ ನವೀಕರಣದಲ್ಲಿ.", signedInAs: "ಸೈನ್ ಇನ್",
     tagline2: "ಹೇಳಿ, ಬಿಲ್ ಆಗುತ್ತದೆ",
     tagline: "ಹೇಳಿ, ಬಿಲ್ ತಾನೇ ಬರೆಯುತ್ತದೆ.",
     demoNote: "ಇದು ಒಂದು ಡೆಮೊ. ನಿಮ್ಮ ಧ್ವನಿ ಗುರುತಿಸಲು ಇಂಟರ್ನೆಟ್ ಮೂಲಕ ಕಳುಹಿಸಲಾಗುತ್ತದೆ. ನಿಜವಾದ ಆ್ಯಪ್ ಇಂಟರ್ನೆಟ್ ಇಲ್ಲದೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ಧ್ವನಿ ಉಳಿಸಲಾಗುವುದಿಲ್ಲ.",

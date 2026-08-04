@@ -191,7 +191,7 @@ function setMode(mode) {
     .forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   $("typeInput").placeholder = admin ? "potato 1 kilo 100 rupees" : t("emptyBill");
   setStatus(admin ? t("sayItemPrice") : t("ready"));
-  if (admin) { loadCatalog(); loadStaff(); } else render();
+  if (admin) { loadCatalog(); loadStaff(); loadSettings(); } else render();
 }
 
 document.querySelectorAll("#modeSwitch button").forEach((b) => {
@@ -587,6 +587,65 @@ $("clearCatalogBtn").onclick = () => {
     },
     onCancel: hidePrompt,
   });
+};
+
+/* ---------- settings ---------- */
+
+$("setHead").onclick = () => {
+  const b = $("setBody");
+  b.hidden = !b.hidden;
+  $("setChev").textContent = b.hidden ? "⌄" : "⌃";
+  if (!b.hidden) loadSettings();
+};
+
+(function buildSettingsLangPicker() {
+  $("setLang").innerHTML = Object.entries(LANGS)
+    .map(([c, l]) => `<option value="${c}">${l.native} — ${l.label}</option>`).join("");
+})();
+
+async function loadSettings() {
+  const j = await api("/api/settings");
+  if (!j.ok) { toast(j.error || t("signInRequired"), 3500); return; }
+  $("setName").value = j.name || "";
+  $("setVpa").value = j.vpa || "";
+  $("setLang").value = j.lang;
+  $("setMobile").textContent = `${t("signedInAs")} ${j.mobile}`;
+  // A stored value that isn't a language code is what broke dictation for a shop whose
+  // interface still looked right. Show it rather than quietly normalising in silence.
+  if (j.stored_lang && j.stored_lang !== j.lang) {
+    $("setMobile").textContent += `  ·  stored “${j.stored_lang}” → ${j.lang}`;
+  }
+  refreshSettingsSummary(j.name, j.lang);
+}
+
+function refreshSettingsSummary(name, lang) {
+  const l = LANGS[lang];
+  $("setSummary").textContent = `${name || ""}${l ? " · " + l.native : ""}`;
+}
+
+$("setSave").onclick = async (e) => {
+  e.preventDefault();
+  const j = await api("/api/settings", {
+    method: "POST",
+    body: { name: $("setName").value.trim(), lang: $("setLang").value,
+            vpa: $("setVpa").value.trim() },
+  });
+  if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
+  // Apply immediately: language drives the interface, the parser pack and the ASR locale,
+  // so it must take effect on the very next utterance rather than at the next sign-in.
+  state.shop.name = j.name;
+  state.shop.lang = j.lang;
+  state.shop.vpa = j.vpa;
+  setLang(j.lang);
+  applyStrings();
+  $("shopLabel").textContent = j.name;
+  refreshSettingsSummary(j.name, j.lang);
+  try {
+    const saved = JSON.parse(localStorage.getItem("vaakku") || "{}");
+    localStorage.setItem("vaakku", JSON.stringify(
+      { ...saved, shop_name: j.name, lang: j.lang, vpa: j.vpa }));
+  } catch (err) { /* private mode */ }
+  toast(t("saved"));
 };
 
 $("staffHead").onclick = () => {

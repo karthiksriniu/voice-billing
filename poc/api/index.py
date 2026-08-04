@@ -49,8 +49,28 @@ ASR_FOR = {"en": "en-IN", "ta": "ta-IN", "hi": "hi-IN",
            "ml": "ml-IN", "te": "te-IN", "kn": "kn-IN"}
 
 
+# Shops created before the language picker kept the column default, which was the *pack*
+# name "ta-en" rather than a language code. Every lookup keyed on codes missed it and fell
+# through to Tamil, so an English shop's speech was transcribed as Tamil while the UI —
+# whose own lookup also missed — silently rendered in English. Normalise once, here.
+# "ta-en" lands on English, not Tamil. It was a column default, never a choice anyone
+# made, and English is the safer place for an unchosen value: a wrong English transcript
+# still lands in Latin script alongside a Latin catalog, whereas ta-IN turns English speech
+# into Tamil script ("cappuccino plain" -> "கேப் எக்ஸினோ பிளேன்") which matches nothing.
+# Shops that really are Tamil set it once in Settings and it sticks.
+LEGACY_LANG = {"ta-en": "en", "ta_en": "en", "ta-in": "ta", "hi-en": "hi",
+               "ml-en": "ml", "te-en": "te", "kn-en": "kn", "en-in": "en"}
+
+
+def norm_lang(code: str) -> str:
+    code = (code or "").strip().lower()
+    if code in ASR_FOR:
+        return code
+    return LEGACY_LANG.get(code, "en")
+
+
 def lang_for(code: str) -> Lang:
-    pack = LANG_FOR.get(code or "ta", "ta-en")
+    pack = LANG_FOR.get(norm_lang(code), "ta-en")
     if pack not in LANGS:
         try:
             LANGS[pack] = Lang(pack)
@@ -66,7 +86,7 @@ DEFAULT_SHOP = os.environ.get("DEFAULT_SHOP_ID", "demo")
 async def parser_for(shop_id: str, lang: str = "") -> Parser:
     if not lang:
         shop = await db.get_shop(shop_id) or {}
-        lang = shop.get("lang") or "ta"
+        lang = shop.get("lang") or "en"
     return Parser(lang_for(lang), Catalog(await db.get_products(shop_id)))
 
 
@@ -99,6 +119,12 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     mobile: str
     passcode: str
+
+
+class SettingsRequest(BaseModel):
+    name: str = ""
+    lang: str = ""
+    vpa: str = ""
 
 
 class DeleteRequest(BaseModel):
@@ -314,13 +340,13 @@ async def auth_signup(req: SignupRequest):
     if existing and existing.get("passcode_hash"):
         return deny("This number already has a shop — sign in instead", 409)
     error = await db.create_shop(shop_id, req.name, req.vpa,
-                                 auth.hash_passcode(code), req.lang)
+                                 auth.hash_passcode(code), norm_lang(req.lang))
     if error:
         return deny(error, 502)
     await db.add_staff(shop_id, shop_id, auth.hash_passcode(code), "owner", req.name)
     return {"ok": True, "token": auth.issue_token(shop_id, shop_id, "owner"),
             "shop_id": shop_id, "role": "owner", "shop_name": req.name,
-            "vpa": req.vpa, "lang": req.lang}
+            "vpa": req.vpa, "lang": norm_lang(req.lang)}
 
 
 @router.post("/auth/login")
@@ -331,7 +357,7 @@ async def auth_login(req: LoginRequest):
     if shop and shop.get("passcode_hash") and auth.verify_passcode(code, shop["passcode_hash"]):
         return {"ok": True, "token": auth.issue_token(mobile, mobile, "owner"),
                 "shop_id": mobile, "role": "owner", "shop_name": shop.get("name", ""),
-                "vpa": shop.get("upi_vpa", ""), "lang": shop.get("lang") or "ta"}
+                "vpa": shop.get("upi_vpa", ""), "lang": norm_lang(shop.get("lang"))}
     staff = await db.get_staff(mobile)
     if staff and auth.verify_passcode(code, staff.get("passcode_hash", "")):
         shop = await db.get_shop(staff["shop_id"]) or {}
@@ -392,6 +418,32 @@ async def delete_product(req: DeleteRequest, request: Request):
                         status_code=200 if ok and not error else 502)
 
 
+@router.get("/settings")
+async def settings_get(request: Request):
+    c = claims_of(request)
+    if not c or c["role"] != "owner":
+        return deny("Owner only")
+    shop = await db.get_shop(c["shop"]) or {}
+    return {"ok": True, "mobile": c["shop"], "name": shop.get("name", ""),
+            "lang": norm_lang(shop.get("lang")), "vpa": shop.get("upi_vpa", ""),
+            "stored_lang": shop.get("lang", "")}
+
+
+@router.post("/settings")
+async def settings_set(req: SettingsRequest, request: Request):
+    c = claims_of(request)
+    if not c or c["role"] != "owner":
+        return deny("Owner only")
+    shop = await db.get_shop(c["shop"]) or {}
+    name = req.name.strip() or shop.get("name", "")
+    lang = norm_lang(req.lang or shop.get("lang"))
+    vpa = req.vpa.strip() or shop.get("upi_vpa", "")
+    error = await db.update_shop(c["shop"], name, vpa, lang)
+    return JSONResponse({"ok": not error, "error": error,
+                         "name": name, "lang": lang, "vpa": vpa},
+                        status_code=200 if not error else 502)
+
+
 @router.get("/shops")
 async def shops_by_name(q: str = ""):
     """Find a shop id by name. Returns id and name only — no passcode material."""
@@ -433,7 +485,7 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     raw = await audio.read()
     asr = get_asr()
     tr = await asr.transcribe(raw, audio.filename or "clip.webm",
-                              language=ASR_FOR.get(lang or "ta", "ta-IN"))
+                              language=ASR_FOR[norm_lang(lang)])
     asr_ms = int((time.perf_counter() - t0) * 1000)
 
     if tr.error or not tr.text:
