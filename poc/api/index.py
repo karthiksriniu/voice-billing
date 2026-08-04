@@ -448,7 +448,11 @@ async def settings_set(req: SettingsRequest, request: Request):
 async def shops_by_name(q: str = ""):
     """Find a shop id by name. Returns id and name only — no passcode material."""
     rows = await db.find_shops(q) if q else []
-    return {"shops": [{"id": r["id"], "name": r.get("name", "")} for r in rows]}
+    # Language included so a misconfigured shop can be spotted without signing in as it.
+    # Nothing secret here — id, name and language only, never passcode material.
+    return {"shops": [{"id": r["id"], "name": r.get("name", ""),
+                       "stored_lang": r.get("lang", ""),
+                       "effective_lang": norm_lang(r.get("lang"))} for r in rows]}
 
 
 @router.post("/shop")
@@ -483,6 +487,13 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     artefact of the PoC that the shipped product will not have."""
     t0 = time.perf_counter()
     raw = await audio.read()
+    # The shop's own language is authoritative. Falling back to a client-supplied value
+    # meant an omitted field silently became English, regardless of what the business had
+    # chosen — the language belongs to the business, not to whatever the page happened
+    # to send.
+    if not lang:
+        shop = await db.get_shop(shop_id) or {}
+        lang = shop.get("lang") or ""
     asr = get_asr()
     tr = await asr.transcribe(raw, audio.filename or "clip.webm",
                               language=ASR_FOR[norm_lang(lang)])
@@ -500,7 +511,8 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     p = await parser_for(shop_id, lang)
     res = p.parse(tr.text, asr_confidence=tr.confidence, mode=mode)
     payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode)
-    payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw)}
+    payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw),
+                "lang": norm_lang(lang)}
     await db.log_utterance(shop_id, tr.text, payload)
     return payload
 
