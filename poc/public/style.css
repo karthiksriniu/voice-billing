@@ -654,3 +654,17 @@ body.handsfree .talk.idle{
 }
 .promptchips .chip{padding:var(--space-2) var(--space-3)}
 .promptextra{display:flex;gap:var(--space-4);margin-top:var(--space-3)}
+
+/* -- Hands-free diagnostic ------------------------------------- */
+.checkbox{
+  margin-top:var(--space-6);padding-top:var(--space-4);
+  border-top:1px solid var(--color-outline-variant);
+}
+.hflog{
+  margin:var(--space-3) 0 0;padding:var(--space-3);
+  background:var(--color-surface-container-lowest);
+  border:1px solid var(--color-outline-variant);border-radius:var(--radius-sm);
+  font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.5;
+  color:var(--color-on-surface-variant);
+  white-space:pre-wrap;word-break:break-word;max-height:280px;overflow-y:auto;
+}

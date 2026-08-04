@@ -238,6 +238,95 @@
 
   window.handsFreeActive = () => on;
 
+  /* ---- the check ----
+     Twelve seconds of the real thing, with every event the browser emits written down.
+     Nothing here is a simulation: it is the same recogniser, the same language, the same
+     wake words. Android Chrome ends a session on its own every few seconds and reports
+     `no-speech` when the shop is quiet — seeing that in the log is the feature working,
+     not failing, and knowing the difference is the whole point of writing it down. */
+  async function runCheck() {
+    const box = $("hfLog");
+    const line = [];
+    const t0 = Date.now();
+    const say = (m) => {
+      line.push(`${String(Date.now() - t0).padStart(5)}ms  ${m}`);
+      box.textContent = line.join("\n");
+      box.scrollTop = box.scrollHeight;
+    };
+    box.hidden = false;
+    box.textContent = "";
+    $("hfCopy").hidden = true;
+
+    say(`ua ${navigator.userAgent}`);
+    say(`secure=${window.isSecureContext} standalone=${
+      !!(window.matchMedia("(display-mode: standalone)").matches || navigator.standalone)}`);
+    say(`SpeechRecognition=${!!SR} iOS=${IOS} lang=${srLang()} words=${words.join("/")}`);
+    if (navigator.permissions) {
+      try {
+        const st = await navigator.permissions.query({ name: "microphone" });
+        say(`mic permission=${st.state}`);
+      } catch (err) { say(`mic permission unknown (${err.name})`); }
+    }
+    if (!SR) { say("STOP: this browser has no speech recognition"); return finish(); }
+
+    // The recorder side, tested on its own so a fault can be told from the doorbell's.
+    await openMic();
+    say(stream ? `getUserMedia ok, ${stream.getAudioTracks().length} track(s)`
+               : "getUserMedia FAILED — no microphone");
+    releaseMic();
+
+    let sessions = 0, gotAudio = 0, heard = 0, stop = false;
+    const spin = () => {
+      if (stop) return;
+      sessions++;
+      const r = new SR();
+      r.continuous = true; r.interimResults = true; r.lang = srLang();
+      r.onstart = () => say(`session ${sessions}: start`);
+      r.onaudiostart = () => { gotAudio++; say(`session ${sessions}: audio reaching it`); };
+      r.onresult = (e) => {
+        const txt = e.results[e.results.length - 1][0].transcript.trim();
+        const hit = heardName(txt);
+        if (hit) heard++;
+        say(`session ${sessions}: heard "${txt}"${hit ? "  <-- WAKE WORD MATCHED" : ""}`);
+      };
+      r.onerror = (e) => say(`session ${sessions}: error ${e.error}`);
+      r.onend = () => { say(`session ${sessions}: end`); if (!stop) setTimeout(spin, 400); };
+      try { r.start(); } catch (err) { say(`session ${sessions}: start threw ${err.name}`); }
+      window.__hfRec = r;
+    };
+    say('SAY "CHITTI" NOW — listening for 12 seconds');
+    spin();
+
+    await new Promise((res) => setTimeout(res, 12000));
+    stop = true;
+    try { window.__hfRec.onend = null; window.__hfRec.stop(); } catch (err) { /* done */ }
+    say(`--- ${sessions} session(s), audio in ${gotAudio}, wake word matched ${heard}x`);
+    say(gotAudio === 0
+      ? "VERDICT: the recogniser never received audio."
+      : heard === 0
+        ? "VERDICT: audio is reaching it but the wake word was not matched."
+        : "VERDICT: working — the wake word was matched.");
+    finish();
+
+    function finish() {
+      $("hfCopy").hidden = false;
+      $("hfCopy").onclick = async () => {
+        try { await navigator.clipboard.writeText(box.textContent); toast(t("copied"), 2000, true); }
+        catch (err) { toast(t("network"), 2000, true); }
+      };
+    }
+  }
+
+  $("hfRun").onclick = async () => {
+    const was = on;
+    if (was) setEnabled(false);          // the check needs the microphone to itself
+    $("hfRun").disabled = true;
+    try { await runCheck(); } finally {
+      $("hfRun").disabled = false;
+      if (was) setEnabled(true, true);
+    }
+  };
+
   $("miWake").onclick = () => {
     if (!SR || IOS) { speak(t("handsFreeNo")); return; }
     setEnabled(!on, true);

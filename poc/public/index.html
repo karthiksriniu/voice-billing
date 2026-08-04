@@ -200,6 +200,17 @@
     <p class="fineprint" id="setMobile"></p>
     <button id="setSave" class="primary" data-t="save">Save</button>
     <p class="fineprint dim" data-t="passcodeSoon">Changing the passcode comes next.</p>
+
+    <!-- Hands-free is the one feature that cannot report its own health by being looked
+         at: the shopkeeper is not watching the screen. This runs it for twelve seconds
+         and writes down everything the browser did, so "it isn't working" becomes a
+         thing that can be read. -->
+    <div class="checkbox">
+      <div class="sectionhead"><span data-t="hfCheck">Hands-free check</span>
+        <button id="hfRun" class="mini" data-t="hfRunBtn">Run</button></div>
+      <pre id="hfLog" class="hflog" hidden></pre>
+      <button id="hfCopy" class="ghost small" data-t="hfCopy" hidden>Copy result</button>
+    </div>
   </div>
 </section>
 
