@@ -66,6 +66,24 @@ function speak(msg) {
   } catch (err) { /* speaking is a courtesy, never the mechanism */ }
 }
 
+/* Run an action with the button visibly doing it.
+   Guards against the second tap as well as announcing the first: the button is inert for
+   the whole of the work, so a double tap cannot submit twice however fast it lands. The
+   original disabled state is restored rather than assumed, because some of these buttons
+   are disabled for their own reasons. */
+async function withBusy(btn, fn) {
+  if (!btn || btn.classList.contains("busy")) return undefined;
+  const wasDisabled = btn.disabled;
+  btn.classList.add("busy");
+  btn.disabled = true;
+  try {
+    return await fn();
+  } finally {
+    btn.classList.remove("busy");
+    btn.disabled = wasDisabled;
+  }
+}
+
 async function api(path, { method = "GET", body } = {}) {
   const res = await fetch(path, {
     method,
@@ -123,7 +141,7 @@ const healthReady = fetch("/api/health").then((r) => r.json()).then((h) => {
 
 const digits = (s) => (s || "").replace(/\D/g, "");
 
-$("continueBtn").onclick = async () => {
+$("continueBtn").onclick = () => withBusy($("continueBtn"), async () => {
   const mobile = digits($("mobile").value);
   if (mobile.length < 10) { toast(t("need10")); return; }
   const r = await api("/api/auth/check", { method: "POST", body: { mobile } });
@@ -139,7 +157,7 @@ $("continueBtn").onclick = async () => {
     $("signupBox").hidden = false;
     $("shopName").focus();
   }
-};
+});
 
 const resetAuth = () => {
   $("mobile").disabled = false;
@@ -151,16 +169,16 @@ const resetAuth = () => {
 $("backBtn").onclick = resetAuth;
 $("backBtn2").onclick = resetAuth;
 
-$("loginBtn").onclick = async () => {
+$("loginBtn").onclick = () => withBusy($("loginBtn"), async () => {
   const r = await api("/api/auth/login", {
     method: "POST",
     body: { mobile: digits($("mobile").value), passcode: digits($("loginCode").value) },
   });
   if (!r.ok) { toast(r.error || "Sign in failed", 3500); $("loginCode").value = ""; return; }
-  enter(r);
-};
+  await enter(r);
+});
 
-$("signupBtn").onclick = async () => {
+$("signupBtn").onclick = () => withBusy($("signupBtn"), async () => {
   const code = digits($("signupCode").value);
   const vpa = $("vpa").value.trim();
   if (code.length !== 6) { toast(t("need6")); return; }
@@ -171,8 +189,8 @@ $("signupBtn").onclick = async () => {
             name: $("shopName").value.trim() || "Shop", vpa, lang: $("langPick").value },
   });
   if (!r.ok) { toast(r.error || "Could not create business", 4000); return; }
-  enter(r);
-};
+  await enter(r);
+});
 
 async function enter(session) {
   await healthReady;
@@ -934,7 +952,7 @@ async function loadSettings() {
   }
 }
 
-$("setSave").onclick = async (e) => {
+$("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   e.preventDefault();
   const j = await api("/api/settings", {
     method: "POST",
@@ -956,7 +974,7 @@ $("setSave").onclick = async (e) => {
       { ...saved, shop_name: j.name, lang: j.lang, vpa: j.vpa }));
   } catch (err) { /* private mode */ }
   toast(t("saved"));
-};
+});
 
 $("staffForm").onsubmit = async (e) => {
   e.preventDefault();
@@ -1128,7 +1146,7 @@ async function finalize() {
   } finally { $("finalize").disabled = false; }
 }
 
-$("finalize").onclick = finalize;
+$("finalize").onclick = () => withBusy($("finalize"), finalize);
 $("backToBill").onclick = () => show("main");
 
 /* Close the sale. `mobile` empty means the customer did not want a receipt. */
@@ -1163,13 +1181,13 @@ function showThanks(result) {
 }
 $("thanksTap").onclick = () => { clearTimeout(thanksTimer); newBill(); };
 
-$("sendReceipt").onclick = () => {
+$("sendReceipt").onclick = () => withBusy($("sendReceipt"), async () => {
   const mobile = digits($("custMobile").value);
   if (mobile.length < 10) { toast(t("noNumber"), 3200); $("custMobile").focus(); return; }
-  closeSale(mobile);
-};
+  await closeSale(mobile);
+});
 
-$("nextSale").onclick = () => closeSale("");
+$("nextSale").onclick = () => withBusy($("nextSale"), () => closeSale(""));
 
 /* "Chitti, cash received" — the shopkeeper stating a fact they witnessed. It is the only
    payment we will ever record from the handset: a UPI settlement has to be confirmed

@@ -411,7 +411,12 @@
       // Started before any await: Safari only honours start() inside the tap that caused
       // it, and awaiting anything at all ends that tap.
       startRecogniser();
-      if (gesture) loadWords();
+      // Always, not only when a thumb turned it on. Restoring the switch after a reload
+      // skipped this, so the live feature quietly ran on the built-in fallback list —
+      // without "hd", which is the only spelling this handset actually produces. It would
+      // have worked when toggled and failed after every reload, which is the worst of
+      // both: intermittent, and untraceable to the thing that changed.
+      loadWords();
     } else {
       stopRecogniser();
       endCapture();

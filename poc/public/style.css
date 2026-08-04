@@ -668,3 +668,42 @@ body.handsfree .talk.idle{
   color:var(--color-on-surface-variant);
   white-space:pre-wrap;word-break:break-word;max-height:280px;overflow-y:auto;
 }
+
+/* -- Tapped, and working ---------------------------------------
+   A tap that produces nothing visible for half a second reads as a tap that missed, so
+   the shopkeeper taps again — and a second tap on Finalise or Send receipt is not a
+   harmless thing. Every button gets an immediate press response, and any button that
+   starts work says so until the work is done.
+
+   The press is instant and local: the browser paints it without waiting for anything,
+   which is the point. The busy state is the opposite — it lasts exactly as long as the
+   request does, and while it lasts the button cannot be pressed again. */
+button{transition:transform var(--duration-short) var(--ease-standard),
+                  filter var(--duration-short) var(--ease-standard)}
+button:not(:disabled):active{transform:scale(.97)}
+
+button.busy{position:relative;pointer-events:none;color:transparent!important}
+button.busy > *{visibility:hidden}
+button.busy::after{
+  content:"";position:absolute;inset:0;margin:auto;
+  width:22px;height:22px;border-radius:var(--radius-full);
+  border:3px solid color-mix(in srgb,currentColor 30%,transparent);
+  border-top-color:currentColor;
+  animation:spin .7s linear infinite;
+}
+/* The spinner borrows the label's colour, which `color:transparent` above has taken away,
+   so it is restored just for the ring. */
+button.busy::after{color:var(--color-on-primary)}
+.finalize.busy::after,.primary.busy::after{color:var(--color-on-primary)}
+.mini.busy::after,.ghost.busy::after,.iconbtn.busy::after{
+  color:var(--color-primary);width:16px;height:16px;
+}
+button:disabled{opacity:.55}
+/* Busy is not the same as unavailable. A dimmed button says "you cannot", where this one
+   means "I am doing it" — so it keeps its full weight and only the label steps aside. */
+button.busy,button.busy:disabled{opacity:1}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  button:not(:disabled):active{transform:none;filter:brightness(.9)}
+  button.busy::after{animation-duration:1.6s}
+}
