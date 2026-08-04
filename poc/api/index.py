@@ -570,11 +570,13 @@ async def receipt(req: ReceiptRequest):
     mobile = db.shop_key(req.mobile) if req.mobile else ""
     wants = bool(mobile) and len(mobile) == 10
     status = "requested" if wants else "none"
-    await db.save_bill(req.shop_id, {
-        "id": req.bill_id, "total": 0, "items": [], "payment_state": "confirmed",
-        "customer_mobile": mobile if wants else "", "receipt_status": status,
+    error = await db.update_bill(req.shop_id, req.bill_id, {
+        "payment_state": "confirmed",
+        "customer_mobile": mobile if wants else "",
+        "receipt_status": status,
     })
-    return {"ok": True, "bill_id": req.bill_id, "receipt_status": status,
+    return {"ok": not error, "error": error, "bill_id": req.bill_id,
+            "receipt_status": status if not error else "none",
             "delivered": False, "mobile": mobile if wants else ""}
 
 

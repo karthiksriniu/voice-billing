@@ -355,7 +355,7 @@ function apply(data, roundTripMs) {
     asked++;
   }
 
-  if (!added && !asked) {
+  if (!added && !asked && !data.customer_mobile) {
     toast(data.transcript
       ? `“${data.transcript}” — ${t("couldNotParse")}`
       : t("notHeard"), 3200);
@@ -382,7 +382,6 @@ function addOrUpdate(line) {
 
 async function setCustomer(mobile) {
   state.customer = mobile;
-  $("shopLabel").innerHTML = `${state.shop.name}<span class="custtag">${mobile}</span>`;
   try {
     const j = await api(
       `/api/history?shop_id=${encodeURIComponent(state.shop.id)}` +
@@ -395,7 +394,6 @@ async function setCustomer(mobile) {
 function clearCustomer() {
   state.customer = "";
   state.history = [];
-  $("shopLabel").textContent = state.shop.name;
   renderHistory();
 }
 
@@ -411,9 +409,10 @@ function chipLabel(bill, index) {
 
 function renderHistory() {
   const row = $("histRow");
-  if (!state.customer || !state.history.length) { row.hidden = true; row.innerHTML = ""; return; }
+  if (!state.customer) { row.hidden = true; row.innerHTML = ""; return; }
   row.hidden = false;
-  row.innerHTML = state.history.slice(0, 5).map((b, i) =>
+  row.innerHTML = `<span class="custtag">${state.customer}</span>` +
+    state.history.slice(0, 5).map((b, i) =>
     `<button class="chip${i === 0 ? " last" : ""}" data-hist="${i}">${chipLabel(b, i)}
        <small>${b.items.length} - ${rupees(b.total)}</small></button>`).join("");
   row.querySelectorAll("[data-hist]").forEach((el) => {

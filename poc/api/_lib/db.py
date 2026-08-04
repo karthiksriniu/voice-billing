@@ -390,6 +390,26 @@ async def update_shop(shop_id: str, name: str, vpa: str, lang: str) -> str:
         return f"{type(exc).__name__}: {exc}"
 
 
+async def update_bill(shop_id: str, bill_id: str, fields: dict) -> str:
+    """Patch an existing bill. Deliberately not save_bill: that inserts, so a second write
+    for the same id conflicts and is thrown away — which is why a captured customer number
+    never reached the row. It also carries a whole bill body, so merging it would have
+    overwritten the real total and items with the placeholders the caller sent."""
+    if not configured():
+        for b in _memory.get("bills", []):
+            if b.get("id") == bill_id:
+                b.update(fields)
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.patch(f"{SUPABASE_URL}/rest/v1/bills", headers=_headers(),
+                              params={"id": f"eq.{bill_id}", "shop_id": f"eq.{shop_id}"},
+                              json=fields)
+        return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
+    except Exception as exc:                           # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"
+
+
 async def customer_bills(shop_id: str, mobile: str, limit: int = 5) -> list[dict]:
     """This customer's most recent bills, newest first. Scoped to the shop: one customer's
     history at one shop is that shop's own record, and must not leak across businesses."""

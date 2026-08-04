@@ -292,6 +292,6 @@ button{font-family:inherit;cursor:pointer;border:none}
 .chip.last{border-color:var(--go);color:#8fe0ac}
 .chip small{display:block;font-weight:500;font-size:12px;color:var(--dim);margin-top:1px}
 .custtag{
-  display:inline-block;margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.06em;
-  background:#17361f;color:#4ad07d;padding:3px 8px;border-radius:20px;vertical-align:middle;
+  flex:none;align-self:center;font-size:12px;font-weight:800;letter-spacing:.04em;
+  background:#17361f;color:#4ad07d;padding:8px 12px;border-radius:20px;white-space:nowrap;
 }
