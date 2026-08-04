@@ -76,6 +76,15 @@ create table if not exists bills (
 );
 create index if not exists bills_shop_time on bills (shop_id, created_at desc);
 
+-- Receipt delivery. The number is captured at the counter — by the customer on the
+-- shopkeeper's phone, which is what makes it acceptable at all (Principle 3: the
+-- shopkeeper never types). `receipt_status` is honest about what actually happened:
+--   none      — not asked for
+--   requested — number captured, nothing sent (no messaging provider is wired up)
+--   sent      — actually delivered
+alter table bills add column if not exists customer_mobile text default '';
+alter table bills add column if not exists receipt_status  text not null default 'none';
+
 -- Transcripts only. Never audio (D9). `was_corrected` marks the utterances worth the most
 -- to Phase 1: the shopkeeper has already looked at them and told us the truth.
 create table if not exists utterances (

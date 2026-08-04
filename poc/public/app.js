@@ -811,19 +811,50 @@ async function finalize() {
 $("finalize").onclick = finalize;
 $("backToBill").onclick = () => show("main");
 
-$("received").onclick = async () => {
+/* Close the sale. `mobile` empty means the customer did not want a receipt. */
+async function closeSale(mobile) {
+  let result = null;
   if (state.bill) {
-    const fd = new FormData();
-    fd.append("bill_id", state.bill.bill_id);
-    fd.append("shop_id", state.shop.id);
-    fetch("/api/confirm", { method: "POST", body: fd }).catch(() => {});
+    try {
+      result = await api("/api/receipt", {
+        method: "POST",
+        body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, mobile },
+      });
+    } catch (err) { /* the sale still ends; the record can catch up */ }
   }
+  showThanks(result);
+}
+
+/* The thank-you belongs to the customer, so it says nothing about totals, delivery or
+   anything they would have to act on. It clears itself and the phone comes back ready.
+   Whatever the shopkeeper needs to know is told to him afterwards, on his own screen. */
+let thanksTimer;
+function showThanks(result) {
+  $("paidAmount").textContent = rupees((state.bill && state.bill.total) || 0);
   show("receipt");
+  clearTimeout(thanksTimer);
+  thanksTimer = setTimeout(() => {
+    newBill();
+    // Said after the phone is back with the shopkeeper, not in front of the customer.
+    if (result && result.receipt_status === "requested" && !result.delivered) {
+      toast(t("receiptSavedNotSent"), 4000);
+    }
+  }, 3200);
+}
+$("thanksTap").onclick = () => { clearTimeout(thanksTimer); newBill(); };
+
+$("sendReceipt").onclick = () => {
+  const mobile = digits($("custMobile").value);
+  if (mobile.length < 10) { toast(t("noNumber"), 3200); $("custMobile").focus(); return; }
+  closeSale(mobile);
 };
+
+$("nextSale").onclick = () => closeSale("");
 
 function newBill() {
   state.items = [];
   state.bill = null;
+  $("custMobile").value = "";
   state.askingPrice = null;
   state.proposal = null;
   state.expanded = false;
@@ -831,4 +862,4 @@ function newBill() {
   setMode("billing");
   show("main");
 }
-$("nextCustomer").onclick = newBill;
+

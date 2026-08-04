@@ -187,6 +187,8 @@ async def save_bill(shop_id: str, bill: dict) -> str:
                     "items": bill["items"],
                     "payment_state": bill.get("payment_state", "pending"),
                     "upi_ref": bill.get("upi_ref", ""),
+                    "customer_mobile": bill.get("customer_mobile", ""),
+                    "receipt_status": bill.get("receipt_status", "none"),
                 },
             )
     except Exception:                                  # noqa: BLE001

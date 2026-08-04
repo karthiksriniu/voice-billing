@@ -537,11 +537,30 @@ async def finalize(req: FinalizeRequest):
     }
 
 
-@router.post("/confirm")
-async def confirm(bill_id: str = Form(...), shop_id: str = Form(DEFAULT_SHOP)):
-    await db.save_bill(shop_id, {"id": bill_id, "total": 0, "items": [],
-                                 "payment_state": "confirmed"})
-    return {"ok": True, "bill_id": bill_id}
+class ReceiptRequest(BaseModel):
+    bill_id: str
+    shop_id: str = DEFAULT_SHOP
+    mobile: str = ""
+
+
+@router.post("/receipt")
+async def receipt(req: ReceiptRequest):
+    """Close the sale, optionally capturing the customer's number for a receipt.
+
+    No messaging provider is configured, so a captured number is stored and reported as
+    `requested`, never `sent`. Saying "sent" when nothing left the building is the same
+    class of lie as a catalog write that reports success on a rejected row — and this one
+    would be told to a customer standing at the counter.
+    """
+    mobile = db.shop_key(req.mobile) if req.mobile else ""
+    wants = bool(mobile) and len(mobile) == 10
+    status = "requested" if wants else "none"
+    await db.save_bill(req.shop_id, {
+        "id": req.bill_id, "total": 0, "items": [], "payment_state": "confirmed",
+        "customer_mobile": mobile if wants else "", "receipt_status": status,
+    })
+    return {"ok": True, "bill_id": req.bill_id, "receipt_status": status,
+            "delivered": False, "mobile": mobile if wants else ""}
 
 
 for _prefix in ("/api", "/api/index", ""):

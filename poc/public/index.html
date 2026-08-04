@@ -159,19 +159,30 @@
     <div class="payamount" id="payAmount">₹0</div>
     <img id="qr" class="qr" alt="UPI QR code">
     <p class="fineprint" id="payRef"></p>
-    <button id="received" class="primary big" data-t="received">Received</button>
+    <!-- The customer types their own number, on a phone already in their hand. That is
+         what makes a receipt acceptable at all: the shopkeeper never types (Principle 3),
+         and the busiest moment of the interaction stays hands-free for him. -->
+    <label class="field payphone">
+      <span data-t="customerMobile">Customer mobile (optional)</span>
+      <input id="custMobile" type="tel" inputmode="numeric" maxlength="14" placeholder="98400 12345" autocomplete="off">
+    </label>
+    <button id="sendReceipt" class="primary big" data-t="sendReceipt">Send Receipt</button>
+    <button id="nextSale" class="primary ghostly" data-t="nextSale">Next Sale</button>
     <button id="backToBill" class="ghost wide" data-t="backToBill">Back to bill</button>
     <p class="fineprint dim" data-t="payNote">You confirm payment yourself.</p>
   </div>
 </section>
 
-<!-- Receipt -->
+<!-- Thank you. Customer-facing and nothing else: no totals to query, no buttons to press
+     by mistake. It clears itself, so the phone comes back to the shopkeeper ready. -->
 <section id="receipt" class="screen">
-  <div class="pad center">
+  <!-- Customer-facing and nothing else: no totals to query, no buttons to press by
+       mistake. It clears itself, so the phone comes back to the shopkeeper ready. -->
+  <div class="pad center" id="thanksTap">
     <div class="tick">✓</div>
+    <div class="thanks" data-t="thankYou">Thank you, visit again</div>
     <div class="payamount" id="paidAmount">₹0</div>
-    <p class="paylabel" data-t="received">Received</p>
-    <button id="nextCustomer" class="primary big" data-t="nextCustomer">Next customer</button>
+    <p class="fineprint dim" data-t="tapAnywhere">Starting the next sale…</p>
   </div>
 </section>
 

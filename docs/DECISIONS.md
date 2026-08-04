@@ -237,9 +237,22 @@ unrelated to the pilot. Printing matters for a different reason than customer re
 **the printed footer is the primary attribution surface**, which is why it is Phase 3 and not
 Phase 4, and why growth measurement can't start before it.
 
-The share link is rejected on a principle, not a cost: it requires the customer's phone
-number, which means the shopkeeper types. That violates principle 3 at the busiest moment of
-the interaction. Revisit only with a no-typing capture path.
+The share link was rejected on a principle, not a cost: it required the customer's phone
+number, which meant the shopkeeper types — violating principle 3 at the busiest moment of
+the interaction.
+
+**Updated.** That objection does not survive the obvious fix: the phone is already being
+handed to the customer to scan the QR, so *the customer* types their own number, on the
+screen in front of them. The shopkeeper still never types. The payment screen now captures
+an optional customer number beside the QR, and "Send Receipt" records it against the bill.
+
+What remains unresolved is delivery, and it is the same shape as D5. There is no messaging
+provider wired up, and adding one is not free: WhatsApp Business pricing is per-conversation
+and template approval is required, while SMS needs TRAI DLT registration. Both break the
+₹10/shop/month ceiling at 100 bills a day. So a captured number is stored as `requested`,
+never `sent`, and the shopkeeper is told so plainly. The cheapest honest delivery path is the
+phone's own share sheet into WhatsApp — no provider, no per-message cost, and the number
+never leaves the device — which is the next thing to try.
 
 **Pairing requirement (non-negotiable for Phase 3):** the printer must reconnect with zero
 user action after a phone restart, a printer power-cycle, and a day out of range. Bond once

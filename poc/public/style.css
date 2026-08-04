@@ -50,7 +50,7 @@ button{font-family:inherit;cursor:pointer;border:none}
   background:var(--go);color:#fff;
 }
 .primary:active{background:var(--go-dark)}
-.primary.big{padding:21px;font-size:21px;margin-top:6px}
+.primary.big{padding:21px;font-size:21px;margin-top:6px;max-width:420px}
 .ghost{background:none;color:var(--dim);font-size:16px;padding:12px}
 .ghost.wide{width:100%}
 .fineprint{font-size:13px;color:var(--dim);margin:10px 0 0;line-height:1.4}
@@ -267,3 +267,11 @@ button{font-family:inherit;cursor:pointer;border:none}
            border:1px solid var(--line);border-radius:var(--r)}
 .staffbody .staffform{margin-top:10px}
 #skuCount,#staffCount{color:var(--dim);font-weight:600}
+
+.payphone{width:100%;max-width:420px;margin:6px 0 2px;text-align:left}
+.payphone input{text-align:center;font-size:22px;letter-spacing:.04em}
+/* Secondary to Send Receipt, but still a full-width target: it is pressed all day by a
+   thumb, between customers, without looking. */
+.primary.ghostly{background:none;border:1px solid var(--line);color:var(--ink);max-width:420px}
+.primary.ghostly:active{background:var(--panel)}
+.thanks{font-size:27px;font-weight:800;line-height:1.25;max-width:16ch;margin:2px 0 6px}
