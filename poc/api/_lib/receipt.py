@@ -45,6 +45,22 @@ def rupees(n: float) -> str:
     return f"{n:,.2f}"
 
 
+def issued_when(row: dict) -> datetime | None:
+    """The moment the bill was finalised, read back from the stored row.
+
+    Reprinting has to reach for this rather than the clock: a receipt fetched again next
+    month must carry the date of the purchase, not the date somebody looked at it. Postgres
+    hands back UTC, and the shop reads its own receipts in IST.
+    """
+    raw = row.get("created_at") or ""
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(IST)
+    except ValueError:
+        return None
+
+
 def build(shop: dict, bill: dict, number: str, when: datetime | None = None) -> dict:
     """The document, as issued. Stored rather than recomputed later — prices move, shops
     are renamed, and a reprint must say what it said on the day."""

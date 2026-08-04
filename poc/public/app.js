@@ -1152,7 +1152,11 @@ async function finalize() {
     $("payAmount").textContent = rupees(d.total);
     $("paidAmount").textContent = rupees(d.total);
     $("qr").src = d.qr;
-    $("payRef").textContent = d.ref;
+    // The number and the moment, both fixed at finalise. Shown here as well as on the
+    // receipt so the shopkeeper can read them back to a customer without printing.
+    $("payRef").textContent = d.receipt_no
+      ? `${d.receipt_no} · ${stamp(d.receipt && d.receipt.issued_at)}`
+      : d.ref;
     show("payment");
   } catch (err) {
     toast(t("notSaved"));
@@ -1202,6 +1206,16 @@ $("sendReceipt").onclick = () => withBusy($("sendReceipt"), async () => {
 
 $("nextSale").onclick = () => withBusy($("nextSale"), () => closeSale(""));
 
+/* The purchase time, as the shop reads it. Formatted from the document rather than from
+   the clock: the two are the same at finalise and are not the same on a reprint. */
+function stamp(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ` +
+         `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 /* ---------- the document ---------- */
 
 /* Fetched, never rebuilt on the client. The receipt that matters is the one the server
@@ -1215,7 +1229,7 @@ async function openDoc() {
     state.doc = j;
     $("docText").textContent = j.text;
     $("docNote").textContent = j.receipt.number
-      ? `${j.receipt.title} ${j.receipt.number}`
+      ? `${j.receipt.title} ${j.receipt.number} · ${stamp(j.receipt.issued_at)}`
       : t("unnumbered");
     goScreen("billdoc");
   } catch (err) { toast(t("network"), 3000, true); }

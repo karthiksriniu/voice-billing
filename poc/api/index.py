@@ -734,7 +734,8 @@ async def receipt_get(bill_id: str, request: Request):
         # Bills issued before receipts existed. Rebuilt from what was kept, and honestly
         # unnumbered — inventing a serial after the fact would corrupt the series.
         shop = await db.get_shop(c["shop"]) or {}
-        doc = receipts.build(shop, row, row.get("receipt_no", ""))
+        doc = receipts.build(shop, row, row.get("receipt_no", ""),
+                             receipts.issued_when(row))
     return {"ok": True, "bill_id": bill_id, "receipt": doc,
             "text": receipts.as_text(doc), "message": receipts.as_whatsapp(doc)}
 
@@ -778,7 +779,8 @@ async def receipt_send(req: SendRequest, request: Request):
     if not row:
         return JSONResponse({"ok": False, "error": "No such bill"}, status_code=404)
     shop = await db.get_shop(c["shop"]) or {}
-    doc = row.get("receipt") or receipts.build(shop, row, row.get("receipt_no", ""))
+    doc = row.get("receipt") or receipts.build(shop, row, row.get("receipt_no", ""),
+                                               receipts.issued_when(row))
 
     payload = {
         "messaging_product": "whatsapp",
