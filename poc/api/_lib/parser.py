@@ -757,3 +757,27 @@ class Catalog:
                     best, best_score, best_form = p, score, form
 
         return (best, round(best_score, 3), best_form) if best_score >= 0.55 else (None, 0.0, "")
+
+    def candidates(self, query: str, lang: Lang, n: int = 3) -> list[dict]:
+        """The nearest few products to something we could not match, best first.
+
+        Offered when a spoken name is not in the catalog, so the shopkeeper can say "that
+        is the thing I already sell" instead of creating a second SKU for it. The score
+        bar is deliberately low — a genuine synonym scores near zero ("potato" against
+        "உருளைக்கிழங்கு" shares nothing at all), so this list is a shortcut for near
+        misses, never the whole answer. The picker behind it is.
+        """
+        q = norm(query)
+        if not q:
+            return []
+        qp = lang.phonetic(q)
+        scored = []
+        for p in self.products:
+            best = 0.0
+            for form, form_key in self._forms(p, lang):
+                best = max(best, SequenceMatcher(None, qp, form_key).ratio())
+            scored.append((best, p))
+        scored.sort(key=lambda x: -x[0])
+        return [{"id": p["id"], "name": p["name"], "unit": p["unit"],
+                 "unit_price": p["unit_price"], "score": round(sc, 3)}
+                for sc, p in scored[:n] if sc > 0.2]

@@ -25,6 +25,7 @@ const state = {
   askingPrice: null, proposal: null, queue: [],
   customer: "", history: [], picked: -1,
   debug: localStorage.getItem("boloDebug") === "1",
+  aliasing: null,
   expanded: false, products: [],
 };
 
@@ -381,6 +382,19 @@ function apply(data, roundTripMs) {
     toast(`${skipped} — ${t("noPriceSkipped")}`, 3200);
   }
 
+  // "Which item is this?" is answered by saying the name the shop already uses for it —
+  // the shopkeeper never types, and the catalog match we already have is exactly the
+  // right tool for turning that name into a product. Anything else abandons the question
+  // rather than leaving it stuck.
+  if (state.aliasing) {
+    const hit = (data.items || []).find((i) => i.product_id && i.verdict !== "reject");
+    if (hit) { linkAlias(hit.product_id); return; }
+    const dropped = state.aliasing.name;
+    state.aliasing = null;
+    hidePrompt();
+    toast(`${dropped} — ${t("notBilled")}`, 3200, true);
+  }
+
   // A customer number opens the bill against that person. Handled before items so one
   // utterance can carry both: "phone number 98400 12345, two kilo sugar".
   if (data.customer_mobile) setCustomer(data.customer_mobile);
@@ -427,11 +441,7 @@ function apply(data, roundTripMs) {
   // shopkeeper needs to know it was dropped, and one price prompt at a time is enough.
   const unknown = data.unmatched || [];
   if (unknown.length) {
-    const u = unknown[0];
-    askPrice({
-      product_id: null, name: u.name, qty: u.qty || 1, unit: u.unit || "piece",
-      unit_price: 0, amount: 0, price_led: false, isNew: true,
-    });
+    askWhichItem(unknown[0]);
     asked++;
   }
   const lost = unknown.slice(1).map((u) => u.name).concat(data.unparsed || []);
@@ -564,6 +574,91 @@ function pickBill(index) {
 }
 
 /* ---------- learning a price (D4) ---------- */
+
+/* A name the catalog has never heard. Before offering to create a product, ask whether it
+   is one the shop already sells under another name — because most of the time it is.
+   "பொட்டேட்டோ" and "உருளைக்கிழங்கு" are the same potato; no string metric will ever join
+   them, and answering "new item" mid-sale is how a shop ends up with two potatoes at two
+   prices. Saying so once teaches the catalog for good. */
+function askWhichItem(u) {
+  const item = {
+    product_id: null, name: u.name, qty: u.qty || 1, unit: u.unit || "piece",
+    unit_price: 0, amount: u.money || 0, price_led: u.money != null, isNew: true,
+  };
+  const near = (u.candidates || []).filter((c) => c.score >= 0.45).slice(0, 3);
+  if (!state.products.length) { askPrice(item); return; }   // nothing to be the same as
+
+  state.aliasing = item;
+  showPrompt({
+    kind: t("notInList"),
+    main: `“${u.name}” — ${t("whichItem")}`,
+    note: t("saySoldName"),
+    chips: near.map((c) => ({ label: c.name, id: c.id })),
+    extra: [{ label: t("pickFromList"), act: "pick" },
+            { label: t("itIsNew"), act: "new" }],
+    onChip: (id) => linkAlias(id),
+    onExtra: (act) => (act === "pick" ? openPicker() : startNewItem()),
+    onCancel: () => { state.aliasing = null; hidePrompt(); render(); },
+  });
+  setStatus(`${u.name} — ${t("whichItem")}`);
+}
+
+function startNewItem() {
+  const item = state.aliasing;
+  state.aliasing = null;
+  hidePrompt();
+  askPrice(item);
+}
+
+/* The whole catalog, tappable. The near misses above are a shortcut; a synonym scores
+   nothing at all against the name it means, so there has to be a way to just point. */
+function openPicker() {
+  const item = state.aliasing;
+  showPrompt({
+    kind: t("notInList"),
+    main: `“${item.name}” — ${t("whichItem")}`,
+    // The hint stays: even with the whole list on screen, saying the name is faster than
+    // finding it, and a shopkeeper who never learns that keeps scrolling forever.
+    note: t("saySoldName"),
+    chips: state.products.map((p) => ({ label: p.name, id: p.id })),
+    scroll: true,
+    extra: [{ label: t("itIsNew"), act: "new" }],
+    onChip: (id) => linkAlias(id),
+    onExtra: () => startNewItem(),
+    onCancel: () => { state.aliasing = null; hidePrompt(); render(); },
+  });
+}
+
+/* Attach the spoken name to a product the shop already sells, then bill it — the sale
+   never stops for the catalog. */
+async function linkAlias(productId) {
+  const item = state.aliasing;
+  const product = state.products.find((p) => p.id === productId);
+  state.aliasing = null;
+  hidePrompt();
+  if (!product) { render(); return; }
+  try {
+    const j = await api("/api/alias", {
+      method: "POST",
+      body: { product_id: productId, alias: item.name },
+    });
+    if (j.product) mergeProduct(j.product);
+  } catch (err) { toast(t("notSaved"), 3000); }
+
+  const price = Number(product.unit_price) || 0;
+  const qty = item.price_led && price > 0
+    ? +(item.amount / price).toFixed(3)
+    : item.qty;
+  addOrUpdate({
+    product_id: product.id, name: product.name, qty,
+    unit: product.unit, unit_price: price,
+    amount: +(item.price_led ? item.amount : qty * price).toFixed(2),
+    confidence: 1, verdict: "accept", price_led: item.price_led,
+    needs_price: price <= 0, pending: false,
+  });
+  speak(`${item.name} = ${product.name}`);
+  render();
+}
 
 function askPrice(item) {
   state.askingPrice = item;
@@ -704,7 +799,10 @@ function renderCatalog() {
   $("skuCount").textContent = `(${state.products.length})`;
   box.innerHTML = state.products.map((p, i) => `
     <div class="skurow${p.unit_price > 0 ? "" : " unpriced"}">
-      <span class="sku-n">${p.name}${p.description ? `<em>${p.description}</em>` : ""}</span>
+      <span class="sku-n">${p.name}${p.description ? `<em>${p.description}</em>` : ""}${
+        (p.aliases || []).length ? `<span class="aliases">${(p.aliases || []).map((a, k) =>
+          `<button class="alias" data-unalias="${i}:${k}" title="${t("removeAlias")}">${a}<i>×</i></button>`
+        ).join("")}</span>` : ""}</span>
       <span class="sku-u">${p.unit}</span>
       <span class="sku-p">${p.unit_price > 0 ? rupees(p.unit_price) : "—"}</span>
       <button class="sku-e" data-edit="${i}" aria-label="Edit">✎</button>
@@ -715,6 +813,25 @@ function renderCatalog() {
   });
   box.querySelectorAll("[data-del]").forEach((b) => {
     b.onclick = () => deleteSku(state.products[+b.dataset.del]);
+  });
+  // Every alias the shop has been taught, with a way to take it back. An alias that bills
+  // the wrong item is precisely the thing that has to be visible and undoable.
+  box.querySelectorAll("[data-unalias]").forEach((b) => {
+    b.onclick = async () => {
+      const [pi, ai] = b.dataset.unalias.split(":").map(Number);
+      const prod = state.products[pi];
+      const alias = (prod.aliases || [])[ai];
+      if (!prod || alias == null) return;
+      try {
+        const j = await api("/api/alias/remove", {
+          method: "POST", body: { product_id: prod.id, alias },
+        });
+        if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
+        mergeProduct(j.product);
+        renderCatalog();
+        toast(`${alias} — ${t("removed")}`);
+      } catch (err) { toast(t("network")); }
+    };
   });
 }
 
@@ -850,17 +967,31 @@ async function loadStaff() {
 
 const hidePrompt = () => { $("prompt").hidden = true; $("prompt").innerHTML = ""; };
 
-function showPrompt({ kind, main, note, warn, onOk, onCancel }) {
+function showPrompt({ kind, main, note, warn, onOk, onCancel,
+                     chips, extra, scroll, onChip, onExtra }) {
   const box = $("prompt");
   box.hidden = false;
+  const chipRow = (chips || []).length
+    ? `<div class="promptchips${scroll ? " tall" : ""}">${chips.map((c) =>
+        `<button class="chip" data-chip="${c.id}">${c.label}</button>`).join("")}</div>` : "";
+  const extraRow = (extra || []).length
+    ? `<div class="promptextra">${extra.map((e) =>
+        `<button class="ghost small" data-extra="${e.act}">${e.label}</button>`).join("")}</div>` : "";
   box.innerHTML = `<div class="promptbody"><b>${kind}</b>
       <div class="promptmain">${main}</div>
-      ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}</div>
+      ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}
+      ${chipRow}${extraRow}</div>
     <div class="promptacts">${onOk ? `<button class="yes" data-ok>${t("yes")}</button>` : ""}
       <button class="del" data-no aria-label="Cancel">✕</button></div>`;
   const ok = box.querySelector("[data-ok]");
   if (ok) ok.onclick = onOk;
   box.querySelector("[data-no]").onclick = onCancel;
+  box.querySelectorAll("[data-chip]").forEach((el) => {
+    el.onclick = () => onChip && onChip(el.dataset.chip);
+  });
+  box.querySelectorAll("[data-extra]").forEach((el) => {
+    el.onclick = () => onExtra && onExtra(el.dataset.extra);
+  });
 }
 
 /* ---------- billing list (accordion) ---------- */

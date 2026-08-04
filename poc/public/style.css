@@ -628,3 +628,29 @@ body.handsfree .talk.idle{
   .talk .talkicon{width:32px;height:32px}
   .talk.rec .talkicon{width:28px;height:28px}
 }
+
+/* -- Spoken aliases -------------------------------------------- */
+/* The other names a product answers to, sitting under its own name in the price list.
+   Small and quiet: they are a record of what the shop has been taught, not a control the
+   owner is meant to use often — but every one of them is removable, because an alias
+   pointing at the wrong product bills the wrong product. */
+.aliases{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-1)}
+.alias{
+  display:inline-flex;align-items:center;gap:var(--space-1);
+  padding:1px var(--space-2);border-radius:var(--radius-full);
+  background:var(--color-surface-container-high);color:var(--color-on-surface-variant);
+  font-size:var(--type-body-small-size);line-height:var(--type-body-small-line);
+}
+.alias i{font-style:normal;opacity:.6;font-size:13px}
+.alias:active{background:var(--color-error-container);color:var(--color-on-error-container)}
+
+.promptchips{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-3)}
+/* Clipping a row of chips in half reads as a rendering fault rather than as "there is
+   more below", so the box ends on whole rows and a fade says to keep scrolling. */
+.promptchips.tall{
+  max-height:184px;overflow-y:auto;padding-bottom:var(--space-2);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 20px),transparent);
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 20px),transparent);
+}
+.promptchips .chip{padding:var(--space-2) var(--space-3)}
+.promptextra{display:flex;gap:var(--space-4);margin-top:var(--space-3)}

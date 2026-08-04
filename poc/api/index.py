@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent / "_lib"))
 import auth                                            # noqa: E402
 import db                                              # noqa: E402
 from parser import (ADMIN_SAME_ITEM_THRESHOLD, Catalog, Lang,  # noqa: E402
-                    Parser)
+                    Parser, norm)
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
 
@@ -243,7 +243,7 @@ def admin_proposals(res) -> list[dict]:
     return out
 
 
-def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
+def result_payload(res, took_ms: int, mode: str = "billing", parser=None) -> dict:
     payload = {
         "transcript": res.transcript,
         "items": [serialise(i) for i in res.items],
@@ -253,7 +253,15 @@ def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
         # Names the grammar understood but the catalog has never heard of. With shops now
         # starting empty this is the common case, and dropping it server-side is what made
         # billing look deaf: perfect transcript, no line, no reason given.
-        "unmatched": res.unmatched,
+        #
+        # Each one carries the nearest things the shop really sells, so the answer to "we
+        # don't stock that" can be "did you mean this?" — which teaches the catalog a
+        # second name for one product instead of giving it a second product.
+        "unmatched": [
+            {**u, "candidates": (parser.catalog.candidates(u.get("name", ""), parser.lang)
+                                 if parser else [])}
+            for u in res.unmatched
+        ],
         "customer_mobile": res.customer_mobile,
         # Whether the phone was addressed by name. The client needs it to tell a hands-free
         # command from a button press that happened to contain the same words.
@@ -499,7 +507,7 @@ async def parse_text(req: ParseRequest):
     t0 = time.perf_counter()
     p = await parser_for(req.shop_id, req.lang)
     res = p.parse(req.text, asr_confidence=req.asr_confidence, mode=req.mode)
-    payload = result_payload(res, int((time.perf_counter() - t0) * 1000), req.mode)
+    payload = result_payload(res, int((time.perf_counter() - t0) * 1000), req.mode, p)
     await db.log_utterance(req.shop_id, req.text, payload)
     return payload
 
@@ -535,7 +543,7 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     t1 = time.perf_counter()
     p = await parser_for(shop_id, lang)
     res = p.parse(tr.text, asr_confidence=tr.confidence, mode=mode)
-    payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode)
+    payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode, p)
     payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw),
                 "lang": norm_lang(lang)}
     await db.log_utterance(shop_id, tr.text, payload)
@@ -568,6 +576,64 @@ async def lang_words(code: str = "en"):
     word the shopkeeper says out loud in a shop, and the listener needs them before any
     session exists. Served from the pack so a new language stays data, not code."""
     return {"code": norm_lang(code), "wake": lang_for(code).wake}
+
+
+class AliasRequest(BaseModel):
+    product_id: str
+    alias: str
+
+
+@router.post("/alias")
+async def add_alias(req: AliasRequest, request: Request):
+    """Teach the catalog another name for something it already sells.
+
+    This is the cure for the duplicate SKU. Without it, a shopkeeper who says
+    "பொட்டேட்டோ" for a product stored as "உருளைக்கிழங்கு" is offered a new item, says
+    yes because they are mid-sale, and the shop ends up with two potatoes at two prices.
+    No string metric can bridge a synonym; only being told can.
+
+    A worker may add one. They meet the unknown words all day, and refusing them leaves
+    the shop making duplicates instead. It changes no price, and the owner can see and
+    remove every alias in the price list — reversible, and visible, is what makes it safe.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    alias = (req.alias or "").strip()
+    if not alias:
+        return deny("Nothing to add", 400)
+    products = await db.get_products(c["shop"])
+    target = next((p for p in products if p["id"] == req.product_id), None)
+    if not target:
+        return deny("No such item", 404)
+    existing = [a for a in (target.get("aliases") or []) if a and a.strip()]
+    if any(norm(a) == norm(alias) for a in existing + [target["name"]]):
+        return {"ok": True, "product": target, "already": True}
+    payload = dict(target)
+    payload["aliases"] = existing + [alias]
+    product, error = await db.upsert_product(c["shop"], payload)
+    return JSONResponse({"ok": not error, "error": error, "product": product},
+                        status_code=200 if not error else 502)
+
+
+@router.post("/alias/remove")
+async def remove_alias(req: AliasRequest, request: Request):
+    """Owners only: an alias that bills the wrong item is exactly what has to be undoable."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    products = await db.get_products(c["shop"])
+    target = next((p for p in products if p["id"] == req.product_id), None)
+    if not target:
+        return deny("No such item", 404)
+    payload = dict(target)
+    payload["aliases"] = [a for a in (target.get("aliases") or [])
+                          if a and norm(a) != norm(req.alias)]
+    product, error = await db.upsert_product(c["shop"], payload)
+    return JSONResponse({"ok": not error, "error": error, "product": product},
+                        status_code=200 if not error else 502)
 
 
 class SettleRequest(BaseModel):
