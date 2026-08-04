@@ -33,7 +33,11 @@
 
 (function handsFree() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const SILENCE_MS = 3000;      // the pause that means "I have finished the sentence"
+  // The trace from a real handset stops counting his voice within 60ms of him stopping,
+  // so the wait afterwards is pure latency. Three seconds at a counter is an age; the
+  // clip closed at 8.7s in a rehearsal that only watched for 8 and was called a failure
+  // for it. This is the pause a shopkeeper leaves between items, not between customers.
+  const SILENCE_MS = 1700;
   const MAX_CLIP_MS = 12000;    // the worst case when the room wins, kept short
   const GIVE_UP_AFTER = 4;      // consecutive failed starts before we stop and say so
 
@@ -109,6 +113,12 @@
   }
   function forget() { recent = []; }
 
+  const alternatives = (result) => {
+    const out = [];
+    for (let k = 0; k < result.length; k++) out.push(result[k].transcript);
+    return out;
+  };
+
   let lastMiss = "";
   function heardName(text) {
     const clean = text.toLowerCase().replace(/[.,!?;:"'’]/g, " ").replace(/\s+/g, " ").trim();
@@ -124,8 +134,15 @@
     }
     let best = 0;
     for (const w of words) {
-      if (w.length < 3) continue;
       const bare = w.split(" ").filter((x) => !CARRIERS.includes(x)).join(" ") || w;
+      // A two-letter spelling has to be exactly that. "hd" is in the list because it is
+      // literally what Chrome returned for "Hey Chitti" four times over, but at two
+      // characters a distance test would match half the alphabet, so it only ever counts
+      // as a whole token. Anything longer gets the fuzzy treatment.
+      if (w.length < 3) {
+        if (toks.includes(w)) return true;
+        continue;
+      }
       for (const win of windows) {
         for (const target of new Set([w, bare])) {
           if (win.includes(target)) return true;
@@ -310,15 +327,20 @@
       rec = new SR();
       rec.continuous = true;
       rec.interimResults = true;
+      // Chrome's first guess at an unfamiliar name is often rubbish — it returned "HD"
+      // for "Hey Chitti" — but the runners-up are frequently closer. They cost nothing to
+      // ask for and are checked alongside it.
+      rec.maxAlternatives = 5;
       rec.lang = srLang();
       rec.onaudiostart = () => { hearing = true; fails = 0; armedLabel(); };
       rec.onresult = (e) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          const piece = e.results[i][0].transcript;
-          if (heardName(piece) || heardName(remember(piece))) {
-            forget();
-            beginCapture();
-            return;
+          for (const alt of alternatives(e.results[i])) {
+            if (heardName(alt) || heardName(remember(alt))) {
+              forget();
+              beginCapture();
+              return;
+            }
           }
         }
         if (state.debug) setStatus(`~ ${lastMiss}`);
@@ -418,6 +440,9 @@
     box.textContent = "";
     $("hfCopy").hidden = true;
 
+    // The live feature loads its wake words from the pack; the check was running on the
+    // built-in fallback, so it was not testing the same thing the shopkeeper uses.
+    await loadWords();
     say(`build ${window.BOLO_BUILD || "unknown"}`);
     say(`ua ${navigator.userAgent}`);
     say(`secure=${window.isSecureContext} standalone=${
@@ -459,10 +484,11 @@
       r.onstart = () => say(`session ${sessions}: start`);
       r.onaudiostart = () => { gotAudio++; say(`session ${sessions}: audio reaching it`); };
       r.onresult = (e) => {
-        const txt = e.results[e.results.length - 1][0].transcript.trim();
+        const alts = alternatives(e.results[e.results.length - 1]);
+        const txt = alts.join(" | ");
         // Matched exactly as the live path does — piece alone, then the running memory,
         // because Chrome splits "hey chitti" across sessions more often than not.
-        const hit = heardName(txt) || heardName(remember(txt));
+        const hit = alts.some((a) => heardName(a) || heardName(remember(a)));
         if (hit) { heard++; forget(); }
         say(`session ${sessions}: heard "${txt}"${
           hit ? "  <-- WAKE WORD MATCHED" : `  (best ${lastMiss.split(" ").pop()})`}`);
@@ -489,7 +515,8 @@
     // so the end-of-sentence decision is rehearsed on the real room: say a sentence, stop,
     // and the trace shows whether and when it would have closed the clip.
     say("");
-    say('NOW SAY A SENTENCE AND STOP — rehearsing the end of a clip (8s)');
+    say(`NOW SAY A SENTENCE AND STOP — rehearsing the end of a clip (12s, closes after ${
+      SILENCE_MS}ms of quiet)`);
     await openMic();
     if (!stream) { say("no microphone for the rehearsal"); return finish(); }
     listenToRoom();
@@ -498,7 +525,7 @@
     const began = Date.now();
     await new Promise((res) => {
       const iv = setInterval(() => {
-        if (!capturing || Date.now() - began > 8000) { clearInterval(iv); res(); }
+        if (!capturing || Date.now() - began > 12000) { clearInterval(iv); res(); }
       }, 100);
     });
     const ended = !capturing;
@@ -509,7 +536,7 @@
     say(`trace dB/peak/floor (S = counted as him speaking):`);
     say(window.handsFreeTrace());
     say(ended ? `clip would have closed after ${took}ms`
-              : "clip did NOT close in 8s — the room is holding it open");
+              : "clip did NOT close in 12s — the room is holding it open");
     finish();
 
     function finish() {
