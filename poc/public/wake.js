@@ -418,6 +418,7 @@
     box.textContent = "";
     $("hfCopy").hidden = true;
 
+    say(`build ${window.BOLO_BUILD || "unknown"}`);
     say(`ua ${navigator.userAgent}`);
     say(`secure=${window.isSecureContext} standalone=${
       !!(window.matchMedia("(display-mode: standalone)").matches || navigator.standalone)}`);
@@ -537,8 +538,9 @@
       // Sent rather than copied. Reading an audio fault out of somebody's phone by hand is
       // a poor way to debug one, and there is nothing personal in here.
       try {
-        await api("/api/diag", { method: "POST", body: { report: box.textContent } });
-        box.textContent += "\n(report sent)";
+        const j = await api("/api/diag", { method: "POST", body: { report: box.textContent } });
+        box.textContent += `\n\n===== REPORT CODE: ${j.code} =====`;
+        speak(`Report code ${(j.code || "").split("").join(" ")}`);
       } catch (e) { box.textContent += "\n(could not send — copy it instead)"; }
       $("hfCopy").hidden = false;
       $("hfRun").disabled = false;

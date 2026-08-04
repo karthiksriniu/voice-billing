@@ -348,13 +348,30 @@ async function handleClip() {
 }
 
 const talk = $("talk");
-talk.addEventListener("pointerdown", (e) => { e.preventDefault(); startRec(); });
+/* The press acquires the microphone if nothing is holding it.
+   It used to be held open from startup, so pressing could assume it was there. Hands-free
+   now gives it back between utterances — which quietly killed the button: startRec() bails
+   on a missing stream and says nothing, so after hands-free had run once, push-to-talk did
+   nothing at all until the page was reloaded. Taking the mic away was right; letting the
+   primary way of billing depend on somebody else having left it open was not.
+   `holding` covers the race, because acquiring takes a moment and a thumb can be gone
+   before it lands — without it that press would start a recording nobody ever stops. */
+let holding = false;
+talk.addEventListener("pointerdown", async (e) => {
+  e.preventDefault();
+  holding = true;
+  if (!stream) { setTalk("rec"); await openMic(); }
+  if (holding && stream) startRec();
+  else if (!stream) { setTalk("idle"); toast(t("voiceUnavailable"), 3000, true); }
+  else setTalk("idle");
+});
 // Release ends the utterance, wherever the finger lifts. pointerup only fires on the
 // element it started on, so lostpointercapture covers a thumb that slides off mid-press —
 // otherwise the recorder would run on with nobody watching it.
-talk.addEventListener("pointerup", (e) => { e.preventDefault(); stopRec(); });
-talk.addEventListener("pointercancel", stopRec);
-talk.addEventListener("lostpointercapture", stopRec);
+const release = () => { holding = false; stopRec(); };
+talk.addEventListener("pointerup", (e) => { e.preventDefault(); release(); });
+talk.addEventListener("pointercancel", release);
+talk.addEventListener("lostpointercapture", release);
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- results ---------- */

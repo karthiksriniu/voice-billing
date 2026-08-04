@@ -595,16 +595,35 @@ class DiagRequest(BaseModel):
 
 @router.post("/diag")
 async def diag(req: DiagRequest):
-    """Take the hands-free check's report and put it where I can read it.
+    """Take the hands-free check's report and keep it under a short code.
 
-    I cannot see the shopkeeper's handset, and asking somebody to copy a log out of a
-    phone and paste it back is a poor way to debug an audio problem. This prints it into
-    the runtime log instead. Nothing identifying goes in it — device, permissions, audio
-    levels and what the speech recogniser thought it heard, which is the shopkeeper saying
-    a wake word into their own phone on purpose.
+    Printing it to the runtime log was not enough: those logs are a live tail, so a report
+    is only visible to somebody already watching at that second, which is nobody. It is
+    stored instead and handed back a six-character code. Reading it needs that code, so
+    nothing is browsable by anyone who happens to guess the URL — and there is nothing
+    identifying in it either: device, permissions, audio levels, and what the speech
+    recogniser thought it heard while somebody said a wake word into their own phone.
     """
-    print("=== HANDS-FREE CHECK ===\n" + (req.report or "")[:6000] + "\n=== END ===")
-    return {"ok": True}
+    code = uuid.uuid4().hex[:6].upper()
+    print(f"=== HANDS-FREE CHECK {code} ===\n" + (req.report or "")[:6000] + "\n=== END ===")
+    await db.log_utterance(f"diag:{code}", (req.report or "")[:8000], {"kind": "hands-free"})
+    return {"ok": True, "code": code}
+
+
+@router.get("/diag")
+async def read_diag(code: str = ""):
+    """Fetch a report by its code. Without one there is nothing to see."""
+    code = (code or "").strip().upper()
+    if len(code) != 6:
+        return deny("A six-character code is needed", 400)
+    rows = await db._get("utterances", {
+        "shop_id": f"eq.diag:{code}", "select": "transcript,created_at",
+        "order": "created_at.desc", "limit": "1"})
+    if not rows:
+        return JSONResponse({"ok": False, "error": "No report with that code"},
+                            status_code=404)
+    return {"ok": True, "code": code, "at": rows[0]["created_at"],
+            "report": rows[0]["transcript"]}
 
 
 class AliasRequest(BaseModel):
