@@ -15,7 +15,7 @@
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 const $ = (id) => document.getElementById(id);
-const screens = ["auth", "main", "payment", "receipt"];
+const screens = ["auth", "main", "payment", "receipt", "settings", "staffScreen"];
 const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
@@ -23,7 +23,7 @@ const state = {
   token: "", shop: { id: "", name: "", vpa: "", lang: "en" }, role: "user",
   items: [], mode: "billing", bill: null,
   askingPrice: null, proposal: null, queue: [],
-  customer: "", history: [],
+  customer: "", history: [], picked: -1,
   expanded: false, products: [],
 };
 
@@ -160,24 +160,57 @@ async function enter(session) {
   // existing tester the moment they reload.
   try { localStorage.setItem("vaakku", JSON.stringify(session)); } catch (e) { /* private mode */ }
   $("shopLabel").textContent = state.shop.name;
-  // Staff bill and nothing else, so the switch simply isn't there for them.
-  $("modeSwitch").hidden = state.role !== "owner";
+  // Staff bill and nothing else, so neither the switch nor the account items are there
+  // for them. Signing out stays — it is theirs, not the shop's.
+  const owner = state.role === "owner";
+  $("modeSwitch").hidden = !owner;
+  $("miSettings").hidden = !owner;
+  $("miStaff").hidden = !owner;
+  $("miDiv").hidden = !owner;
   setMode("billing");
   show("main");
   applyAsrAvailability();
   if (health.asr_configured) await openMic();
 }
 
-$("signOut").onclick = () => {
-  try { localStorage.removeItem("vaakku"); } catch (e) { /* ignore */ }
-  location.reload();
-};
-
 // Resume a session so a reload mid-trade doesn't cost a sign-in.
 try {
   const saved = JSON.parse(localStorage.getItem("vaakku") || "null");
   if (saved && saved.token) setTimeout(() => enter(saved), 80);
 } catch (e) { /* ignore */ }
+
+/* ---------- hamburger menu ---------- */
+
+/* Settings, Add user and Sign out used to live in three different places: two buried in
+   an accordion inside Prices, one as a power glyph in the corner. They are all
+   "things you do to the account rather than to this bill", so they belong together —
+   and out of the way of a counter that is mid-sale. */
+function openMenu(open) {
+  $("scrim").classList.toggle("open", open);
+  $("menuBtn").setAttribute("aria-expanded", String(open));
+}
+$("menuBtn").onclick = () => openMenu(true);
+$("scrim").onclick = (e) => { if (e.target === $("scrim")) openMenu(false); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") openMenu(false); });
+
+/* Where the menu came from, so Back returns there rather than always to billing. */
+let returnScreen = "main";
+function goScreen(name) {
+  openMenu(false);
+  returnScreen = document.querySelector(".screen.active")?.id || "main";
+  show(name);
+}
+document.querySelectorAll("[data-back]").forEach((b) => {
+  b.onclick = () => show(returnScreen === "main" ? "main" : "main");
+});
+
+$("miSettings").onclick = () => { goScreen("settings"); loadSettings(); };
+$("miStaff").onclick = () => { goScreen("staffScreen"); loadStaff(); };
+$("miLogout").onclick = () => {
+  openMenu(false);
+  try { localStorage.removeItem("vaakku"); } catch (e) { /* ignore */ }
+  location.reload();
+};
 
 /* ---------- mode ---------- */
 
@@ -192,7 +225,7 @@ function setMode(mode) {
     .forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   $("typeInput").placeholder = admin ? "potato 1 kilo 100 rupees" : t("emptyBill");
   setStatus(admin ? t("sayItemPrice") : t("ready"));
-  if (admin) { loadCatalog(); loadStaff(); loadSettings(); } else render();
+  if (admin) loadCatalog(); else render();
 }
 
 document.querySelectorAll("#modeSwitch button").forEach((b) => {
@@ -382,6 +415,9 @@ function addOrUpdate(line) {
 
 async function setCustomer(mobile) {
   state.customer = mobile;
+  state.picked = -1;
+  $("custNum").textContent = mobile;
+  $("custBar").hidden = false;
   try {
     const j = await api(
       `/api/history?shop_id=${encodeURIComponent(state.shop.id)}` +
@@ -391,11 +427,19 @@ async function setCustomer(mobile) {
   renderHistory();
 }
 
+/* Removing the customer takes away the identity and the baskets, but NOT the bill.
+   A misheard digit does not mean the items are wrong, and clearing a half-built bill
+   because a number was mistyped would be its own small disaster. */
 function clearCustomer() {
   state.customer = "";
   state.history = [];
+  state.picked = -1;
+  $("custBar").hidden = true;
+  $("custNum").textContent = "";
+  $("custMobile").value = "";
   renderHistory();
 }
+$("custClear").onclick = () => { clearCustomer(); toast(t("customerRemoved")); };
 
 /* "Last" for the most recent, dd-mmm before that. The date is only a memory cue, so the
    year is left off — it would cost width and tell the shopkeeper nothing. */
@@ -409,36 +453,52 @@ function chipLabel(bill, index) {
 
 function renderHistory() {
   const row = $("histRow");
-  if (!state.customer) { row.hidden = true; row.innerHTML = ""; return; }
+  if (!state.customer || !state.history.length) { row.hidden = true; row.innerHTML = ""; return; }
   row.hidden = false;
-  row.innerHTML = `<span class="custtag">${state.customer}</span>` +
-    state.history.slice(0, 5).map((b, i) =>
-    `<button class="chip${i === 0 ? " last" : ""}" data-hist="${i}">${chipLabel(b, i)}
+  row.innerHTML = state.history.slice(0, 5).map((b, i) =>
+    `<button class="chip${i === state.picked ? " on" : ""}" data-hist="${i}">${chipLabel(b, i)}
        <small>${b.items.length} - ${rupees(b.total)}</small></button>`).join("");
   row.querySelectorAll("[data-hist]").forEach((el) => {
-    el.onclick = () => repeatBill(state.history[+el.dataset.hist]);
+    el.onclick = () => pickBill(+el.dataset.hist);
   });
 }
 
-/* Tapping a chip puts that basket back on the bill, priced from the catalog as it is
-   today rather than as it was then. Billing last month's price would be wrong, and
-   silently so — which is the one kind of error this product cannot afford. */
-function repeatBill(bill) {
+/* A chip REPLACES the bill rather than adding to it: picking a past basket means "the
+   same again", and tapping a second chip is a correction, not a second order. So the
+   cart is cleared each time — including anything spoken since, which the toast says
+   out loud so it is never a silent loss. Tapping the selected chip again clears it.
+   Prices come from the catalog as it stands today, never from the old bill: charging
+   last month's rate would be wrong, and silently so. */
+function pickBill(index) {
+  const bill = state.history[index];
   if (!bill) return;
-  let added = 0;
+  const had = state.items.length;
+
+  if (index === state.picked) {            // tap the selected one again to undo it
+    state.picked = -1;
+    state.items = [];
+    renderHistory();
+    render();
+    toast(t("cleared"));
+    return;
+  }
+
+  state.picked = index;
+  state.items = [];
   for (const it of bill.items || []) {
     if (!it.name || it.amount == null) continue;
     const current = state.products.find((p) => p.id === it.product_id);
     const unitPrice = current ? current.unit_price : it.unit_price;
     const qty = it.qty || 1;
-    addOrUpdate({
+    state.items.push({
       ...it, unit_price: unitPrice,
       amount: +(it.price_led ? it.amount : qty * unitPrice).toFixed(2),
       pending: false, needs_price: false,
     });
-    added++;
   }
-  if (added) { toast(`${added} ${t("added")}`); render(); }
+  renderHistory();
+  render();
+  toast(had ? `${state.items.length} ${t("loadedReplacing")}` : `${state.items.length} ${t("added")}`);
 }
 
 /* ---------- learning a price (D4) ---------- */
@@ -659,13 +719,6 @@ $("clearCatalogBtn").onclick = () => {
 
 /* ---------- settings ---------- */
 
-$("setHead").onclick = () => {
-  const b = $("setBody");
-  b.hidden = !b.hidden;
-  $("setChev").textContent = b.hidden ? "⌄" : "⌃";
-  if (!b.hidden) loadSettings();
-};
-
 (function buildSettingsLangPicker() {
   $("setLang").innerHTML = Object.entries(LANGS)
     .map(([c, l]) => `<option value="${c}">${l.native} — ${l.label}</option>`).join("");
@@ -683,12 +736,6 @@ async function loadSettings() {
   if (j.stored_lang && j.stored_lang !== j.lang) {
     $("setMobile").textContent += `  ·  stored “${j.stored_lang}” → ${j.lang}`;
   }
-  refreshSettingsSummary(j.name, j.lang);
-}
-
-function refreshSettingsSummary(name, lang) {
-  const l = LANGS[lang];
-  $("setSummary").textContent = `${name || ""}${l ? " · " + l.native : ""}`;
 }
 
 $("setSave").onclick = async (e) => {
@@ -707,19 +754,12 @@ $("setSave").onclick = async (e) => {
   setLang(j.lang);
   applyStrings();
   $("shopLabel").textContent = j.name;
-  refreshSettingsSummary(j.name, j.lang);
   try {
     const saved = JSON.parse(localStorage.getItem("vaakku") || "{}");
     localStorage.setItem("vaakku", JSON.stringify(
       { ...saved, shop_name: j.name, lang: j.lang, vpa: j.vpa }));
   } catch (err) { /* private mode */ }
   toast(t("saved"));
-};
-
-$("staffHead").onclick = () => {
-  const b = $("staffBody");
-  b.hidden = !b.hidden;
-  $("staffChev").textContent = b.hidden ? "⌄" : "⌃";
 };
 
 $("staffForm").onsubmit = async (e) => {
@@ -738,7 +778,7 @@ $("staffForm").onsubmit = async (e) => {
 async function loadStaff() {
   const j = await api("/api/staff");
   const rows = (j.staff || []).filter((s) => s.role !== "owner");
-  $("staffCount").textContent = rows.length ? `(${rows.length})` : "";
+  $("staffCount").textContent = rows.length ? `${rows.length}` : "";
   $("staffList").innerHTML = rows.length
     ? rows.map((s) => `<div class="staffrow"><b>${s.mobile}</b><span>${s.name || "—"}</span></div>`).join("")
     : `<p class="empty small">${t("noStaff")}</p>`;

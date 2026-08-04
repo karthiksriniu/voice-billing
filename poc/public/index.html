@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0d1117">
 <title>Bolo Bill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Roboto:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -64,13 +67,13 @@
 <!-- Main -->
 <section id="main" class="screen">
   <header class="bar">
+    <button id="menuBtn" class="iconbtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">☰</button>
     <b id="shopLabel">Shop</b>
     <!-- Owner only. Staff never see this: they bill, they don't set prices. -->
     <div id="modeSwitch" class="switch" hidden>
       <button data-mode="billing" class="on" data-t="billing">Bill</button>
       <button data-mode="admin" data-t="admin">Prices</button>
     </div>
-    <button id="signOut" class="ghost" title="Sign out">⏻</button>
   </header>
 
   <div id="asrBanner" class="banner" hidden></div>
@@ -78,8 +81,15 @@
 
   <!-- BILLING -->
   <div id="billPanel" class="panel">
-    <!-- Repeat-order chips. Visible only when a customer number was given AND this shop has
-         history for them, so an anonymous sale looks exactly as it does today. -->
+    <!-- The customer this bill is against. Its own row rather than a chip in the history
+         strip: it is not one of the baskets, and it needs a way out — a number is easy to
+         mishear, and the bill may simply not be for that person. -->
+    <div id="custBar" class="custbar" hidden>
+      <span class="custavatar" aria-hidden="true">👤</span>
+      <span class="custnum" id="custNum"></span>
+      <button id="custClear" class="ghost small" data-t="notThem">Not them? Remove</button>
+    </div>
+    <!-- Past baskets. Nothing is selected until the shopkeeper taps one. -->
     <div id="histRow" class="chips" hidden></div>
     <button id="accHead" class="acc" hidden>
       <span class="accsum"><b id="accCount">0 items</b><span id="accLast"></span></span>
@@ -92,41 +102,6 @@
 
   <!-- ADMIN -->
   <div id="adminPanel" class="panel" hidden>
-    <!-- Settings first: the business name and language live here, and getting the language
-         wrong silently breaks dictation, so it must be visible and changeable. -->
-    <button id="setHead" class="acc slim">
-      <span class="accsum"><b><span data-t="settingsHead">Settings</span></b>
-        <span id="setSummary"></span></span>
-      <span class="accright"><span id="setChev">⌄</span></span>
-    </button>
-    <div id="setBody" class="staffbody" hidden>
-      <label class="field"><span data-t="shopName">Shop name</span>
-        <input id="setName" type="text" autocomplete="organization"></label>
-      <label class="field"><span data-t="language">Language</span>
-        <select id="setLang"></select></label>
-      <label class="field"><span data-t="upiId">UPI ID</span>
-        <input id="setVpa" type="text" spellcheck="false" autocomplete="off"></label>
-      <p class="fineprint" id="setMobile"></p>
-      <div class="staffacts"><button id="setSave" class="mini go" data-t="save">Save</button></div>
-      <p class="fineprint dim" data-t="passcodeSoon">Changing the passcode comes next.</p>
-    </div>
-
-    <!-- Staff, collapsed. It is set up once and then barely touched, so it must not
-         push the item list — the thing actually being worked on — under the talk button. -->
-    <button id="staffHead" class="acc slim">
-      <span class="accsum"><b><span data-t="staffHead">Staff</span> <span id="staffCount"></span></b></span>
-      <span class="accright"><span id="staffChev">⌄</span></span>
-    </button>
-    <div id="staffBody" class="staffbody" hidden>
-      <div id="staffList" class="stafflist"></div>
-      <form id="staffForm" class="staffform">
-        <input id="staffMobile" type="tel" inputmode="numeric" maxlength="14" placeholder="Mobile number">
-        <input id="staffCode" type="password" inputmode="numeric" maxlength="6" placeholder="6-digit passcode">
-        <input id="staffName" type="text" placeholder="Name (optional)">
-        <div class="staffacts"><button type="submit" class="mini go" data-t="add">Add</button></div>
-      </form>
-    </div>
-
     <div class="hint" data-t="adminHint">Say: “potato 1 kilo 100 rupees”</div>
 
     <div class="sectionhead skuhead">
@@ -186,6 +161,62 @@
     <div class="thanks" data-t="thankYou">Thank you, visit again</div>
     <div class="payamount" id="paidAmount">₹0</div>
     <p class="fineprint dim" data-t="tapAnywhere">Starting the next sale…</p>
+  </div>
+</section>
+
+<!-- M3 menu on a scrim. Settings and Add user are owner-only; signing out is not,
+     so a staff member still gets a menu — with one item in it. -->
+<div id="scrim" class="scrim">
+  <div class="menu" role="menu" aria-labelledby="menuBtn">
+    <button id="miSettings" class="menuitem" role="menuitem">
+      <span class="mi">⚙</span><span data-t="settingsHead">Settings</span></button>
+    <button id="miStaff" class="menuitem" role="menuitem">
+      <span class="mi">＋</span><span data-t="addUser">Add user</span></button>
+    <div id="miDiv" class="menudiv"></div>
+    <button id="miLogout" class="menuitem danger" role="menuitem">
+      <span class="mi">⏻</span><span data-t="logout">Sign out</span></button>
+  </div>
+</div>
+
+<!-- Settings: its own screen, not a panel inside Prices. Getting the language wrong
+     silently breaks dictation, so it deserves a place you can find, not an accordion
+     you have to remember is there. -->
+<section id="settings" class="screen">
+  <header class="bar">
+    <button class="iconbtn" data-back aria-label="Back">←</button>
+    <b data-t="settingsHead">Settings</b>
+  </header>
+  <div class="pad">
+    <label class="field"><span data-t="shopName">Shop name</span>
+      <input id="setName" type="text" autocomplete="organization"></label>
+    <label class="field"><span data-t="language">Language</span>
+      <select id="setLang"></select></label>
+    <label class="field"><span data-t="upiId">UPI ID</span>
+      <input id="setVpa" type="text" spellcheck="false" autocomplete="off"></label>
+    <p class="fineprint" id="setMobile"></p>
+    <button id="setSave" class="primary" data-t="save">Save</button>
+    <p class="fineprint dim" data-t="passcodeSoon">Changing the passcode comes next.</p>
+  </div>
+</section>
+
+<!-- Add user: also its own screen. -->
+<section id="staffScreen" class="screen">
+  <header class="bar">
+    <button class="iconbtn" data-back aria-label="Back">←</button>
+    <b data-t="addUser">Add user</b>
+  </header>
+  <div class="pad">
+    <div class="sectionhead"><span data-t="staffHead">Staff</span><span id="staffCount"></span></div>
+    <div id="staffList" class="stafflist"></div>
+    <form id="staffForm" class="staffform">
+      <label class="field"><span data-t="mobile">Mobile number</span>
+        <input id="staffMobile" type="tel" inputmode="numeric" maxlength="14" placeholder="98400 12345"></label>
+      <label class="field"><span data-t="passcode">6-digit passcode</span>
+        <input id="staffCode" type="password" inputmode="numeric" maxlength="6" placeholder="••••••"></label>
+      <label class="field"><span data-t="personName">Name</span>
+        <input id="staffName" type="text" placeholder="Optional"></label>
+      <button type="submit" class="primary" data-t="add">Add</button>
+    </form>
   </div>
 </section>
 

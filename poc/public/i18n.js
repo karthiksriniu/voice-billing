@@ -14,6 +14,9 @@ const LANGS = {
 
 const STRINGS = {
   en: {
+    notThem: "Not them? Remove", customerRemoved: "Customer removed", loadedReplacing: "items loaded — earlier items cleared",
+    personName: "Name (optional)",
+    addUser: "Add user", logout: "Sign out", back: "Back",
     lastVisit: "Last",
     customerMobile: "Customer mobile (optional)", sendReceipt: "Send Receipt", nextSale: "Next Sale", thankYou: "Thank you, visit again", tapAnywhere: "Starting the next sale…", receiptSavedNotSent: "Number saved. Sending is not switched on yet.", noNumber: "Enter the customer number, or tap Next Sale",
     settingsHead: "Settings", passcodeSoon: "Changing the passcode comes in a later update.", signedInAs: "Signed in as",
@@ -60,6 +63,9 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
+    notThem: "இவங்க இல்லையா? நீக்கு", customerRemoved: "கஸ்டமர் நீக்கப்பட்டார்", loadedReplacing: "பொருள் ஏற்றப்பட்டது — முந்தையவை நீக்கப்பட்டன",
+    personName: "பெயர் (விருப்பம்)",
+    addUser: "ஆள் சேர்", logout: "வெளியேறு", back: "பின்",
     lastVisit: "கடைசி",
     customerMobile: "கஸ்டமர் நம்பர் (விருப்பம்)", sendReceipt: "ரசீது அனுப்பு", nextSale: "அடுத்த விற்பனை", thankYou: "நன்றி, மீண்டும் வாங்க", tapAnywhere: "அடுத்த பில் தொடங்குது…", receiptSavedNotSent: "நம்பர் சேமிச்சாச்சு. அனுப்புறது இன்னும் இல்லை.", noNumber: "நம்பர் போடுங்க, இல்லைனா அடுத்த விற்பனை தட்டுங்க",
     settingsHead: "அமைப்புகள்", passcodeSoon: "கடவுஎண் மாற்றம் அடுத்த பதிப்பில்.", signedInAs: "உள்நுழைந்தவர்",
@@ -106,6 +112,9 @@ const STRINGS = {
     alreadyEmpty: "ஏற்கனவே காலி", updated: "மாற்றப்பட்டது",
   },
   hi: {
+    notThem: "ये नहीं? हटाएँ", customerRemoved: "ग्राहक हटाया गया", loadedReplacing: "सामान लोड हुआ — पिछले हटाए गए",
+    personName: "नाम (वैकल्पिक)",
+    addUser: "उपयोगकर्ता जोड़ें", logout: "साइन आउट", back: "वापस",
     lastVisit: "पिछली",
     customerMobile: "ग्राहक का नंबर (वैकल्पिक)", sendReceipt: "रसीद भेजें", nextSale: "अगली बिक्री", thankYou: "धन्यवाद, फिर आइए", tapAnywhere: "अगला बिल शुरू हो रहा है…", receiptSavedNotSent: "नंबर सेव हुआ। भेजना अभी चालू नहीं है।", noNumber: "नंबर डालें, या अगली बिक्री दबाएँ",
     settingsHead: "सेटिंग्स", passcodeSoon: "पासकोड बदलना अगले अपडेट में आएगा।", signedInAs: "साइन इन",
@@ -152,6 +161,9 @@ const STRINGS = {
     alreadyEmpty: "पहले से खाली", updated: "बदल गया",
   },
   ml: {
+    notThem: "ഇവരല്ലേ? നീക്കുക", customerRemoved: "ഉപഭോക്താവിനെ നീക്കി", loadedReplacing: "സാധനങ്ങൾ ചേർത്തു — മുമ്പുള്ളവ നീക്കി",
+    personName: "പേര് (ഐച്ഛികം)",
+    addUser: "ഉപയോക്താവിനെ ചേർക്കുക", logout: "സൈൻ ഔട്ട്", back: "തിരികെ",
     lastVisit: "കഴിഞ്ഞ",
     customerMobile: "ഉപഭോക്താവിന്റെ നമ്പർ (ഐച്ഛികം)", sendReceipt: "രസീത് അയക്കുക", nextSale: "അടുത്ത വിൽപ്പന", thankYou: "നന്ദി, വീണ്ടും വരൂ", tapAnywhere: "അടുത്ത ബില്ല് തുടങ്ങുന്നു…", receiptSavedNotSent: "നമ്പർ സേവ് ചെയ്തു. അയക്കൽ ഇതുവരെ ഇല്ല.", noNumber: "നമ്പർ നൽകുക, അല്ലെങ്കിൽ അടുത്ത വിൽപ്പന അമർത്തുക",
     settingsHead: "ക്രമീകരണങ്ങൾ", passcodeSoon: "പാസ്‌കോഡ് മാറ്റം അടുത്ത അപ്ഡേറ്റിൽ.", signedInAs: "സൈൻ ഇൻ",
@@ -198,6 +210,9 @@ const STRINGS = {
     alreadyEmpty: "ഇതിനകം ഒഴിഞ്ഞു", updated: "മാറ്റി",
   },
   te: {
+    notThem: "వీరు కాదా? తీసివేయి", customerRemoved: "కస్టమర్ తీసివేయబడ్డారు", loadedReplacing: "సరుకులు లోడ్ అయ్యాయి — మునుపటివి తీసివేశాం",
+    personName: "పేరు (ఐచ్ఛికం)",
+    addUser: "వినియోగదారుని జోడించు", logout: "సైన్ అవుట్", back: "వెనక్కి",
     lastVisit: "గత",
     customerMobile: "కస్టమర్ నంబర్ (ఐచ్ఛికం)", sendReceipt: "రసీదు పంపు", nextSale: "తదుపరి అమ్మకం", thankYou: "ధన్యవాదాలు, మళ్లీ రండి", tapAnywhere: "తదుపరి బిల్లు మొదలవుతోంది…", receiptSavedNotSent: "నంబర్ సేవ్ అయింది. పంపడం ఇంకా లేదు.", noNumber: "నంబర్ ఇవ్వండి, లేదా తదుపరి అమ్మకం నొక్కండి",
     settingsHead: "సెట్టింగ్‌లు", passcodeSoon: "పాస్‌కోడ్ మార్పు తదుపరి అప్‌డేట్‌లో.", signedInAs: "సైన్ ఇన్",
@@ -244,6 +259,9 @@ const STRINGS = {
     alreadyEmpty: "ఇప్పటికే ఖాళీ", updated: "మార్చాం",
   },
   kn: {
+    notThem: "ಇವರಲ್ಲವೇ? ತೆಗೆದುಹಾಕಿ", customerRemoved: "ಗ್ರಾಹಕರನ್ನು ತೆಗೆದಿದೆ", loadedReplacing: "ಸಾಮಾನು ಲೋಡ್ ಆಗಿದೆ — ಹಿಂದಿನವು ತೆಗೆದಿದೆ",
+    personName: "ಹೆಸರು (ಐಚ್ಛಿಕ)",
+    addUser: "ಬಳಕೆದಾರರನ್ನು ಸೇರಿಸಿ", logout: "ಸೈನ್ ಔಟ್", back: "ಹಿಂದೆ",
     lastVisit: "ಕಳೆದ",
     customerMobile: "ಗ್ರಾಹಕರ ಸಂಖ್ಯೆ (ಐಚ್ಛಿಕ)", sendReceipt: "ರಸೀದಿ ಕಳುಹಿಸಿ", nextSale: "ಮುಂದಿನ ಮಾರಾಟ", thankYou: "ಧನ್ಯವಾದ, ಮತ್ತೆ ಬನ್ನಿ", tapAnywhere: "ಮುಂದಿನ ಬಿಲ್ ಶುರುವಾಗುತ್ತಿದೆ…", receiptSavedNotSent: "ಸಂಖ್ಯೆ ಉಳಿಸಲಾಗಿದೆ. ಕಳುಹಿಸುವುದು ಇನ್ನೂ ಇಲ್ಲ.", noNumber: "ಸಂಖ್ಯೆ ನಮೂದಿಸಿ, ಅಥವಾ ಮುಂದಿನ ಮಾರಾಟ ಒತ್ತಿ",
     settingsHead: "ಸೆಟ್ಟಿಂಗ್‌ಗಳು", passcodeSoon: "ಪಾಸ್‌ಕೋಡ್ ಬದಲಾವಣೆ ಮುಂದಿನ ನವೀಕರಣದಲ್ಲಿ.", signedInAs: "ಸೈನ್ ಇನ್",
