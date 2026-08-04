@@ -318,9 +318,20 @@ async def add_product(req: ProductRequest, request: Request):
     # The UOM box is free text, so "Kg", "KILO" and "கிலோ" all arrive as themselves.
     # Canonicalise on the way in: a unit the conversion table cannot recognise silently
     # skips the conversion, and "500 gram" against a "Kg" product bills 500 kilos.
+    # A write only replaces the fields it actually names. The catalog editor sends name,
+    # unit and price and nothing else, and the upsert rewrites the whole row — so fixing a
+    # typo in a product's name silently threw away every alias the shop had been taught
+    # and its description with them. Anything the caller did not mention is carried over
+    # from the stored row. A partial write must never be a destructive one.
+    sent = req.model_fields_set
     payload = req.model_dump()
+    if req.id:
+        existing = next((p for p in await db.get_products(shop_id) if p["id"] == req.id), None)
+        if existing:
+            payload = {**existing, **{k: v for k, v in payload.items() if k in sent}}
+            payload["id"] = req.id
     shop = await db.get_shop(shop_id) or {}
-    payload["unit"] = lang_for(shop.get("lang") or "en").canonical_unit(req.unit) or "piece"
+    payload["unit"] = lang_for(shop.get("lang") or "en").canonical_unit(payload.get("unit")) or "piece"
     product, error = await db.upsert_product(shop_id, payload)
     # The error is returned rather than swallowed. Previously a rejected write still came
     # back looking like a success, and the UI cheerfully announced a price change that had
