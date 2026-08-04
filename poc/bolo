@@ -18,7 +18,25 @@ case "${1:-dev}" in
 
   staging)
     ./stamp.sh
-    url="$(vercel deploy --yes | tail -1 | tr -d '[:space:]')"
+    # The CLI ends with a JSON summary, so the URL is read out of that rather than by
+    # taking the last line — which was "}" and got aliased, loudly and uselessly.
+    out="$(vercel deploy --yes 2>&1)"
+    url="$(printf '%s' "$out" | python3 -c '
+import json,re,sys
+raw = sys.stdin.read()
+m = re.search(r"\{[\s\S]*\}\s*$", raw)
+if m:
+    try:
+        d = json.loads(m.group(0))
+        u = (d.get("deployment") or {}).get("url") or d.get("url") or ""
+        if u:
+            print(u if u.startswith("http") else "https://" + u); sys.exit()
+    except Exception:
+        pass
+hits = re.findall(r"https://[a-z0-9-]+\.vercel\.app", raw)
+print(hits[-1] if hits else "")
+')"
+    if [ -z "$url" ]; then printf "%s\n" "$out" | tail -20; echo "could not find the deployment URL" >&2; exit 1; fi
     echo "deployed $url"
     vercel alias set "$url" bolo-bill-staging.vercel.app
     echo "staging is https://bolo-bill-staging.vercel.app"
