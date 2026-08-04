@@ -35,7 +35,6 @@
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const SILENCE_MS = 3000;      // the pause that means "I have finished the sentence"
   const MAX_CLIP_MS = 20000;    // nothing a shopkeeper says in one breath is longer
-  const CALIBRATE_MS = 600;     // how long we listen to the room before judging quiet
   const GIVE_UP_AFTER = 4;      // consecutive failed starts before we stop and say so
 
   // iOS ignores `continuous` and refuses to restart without a fresh tap, so the doorbell
@@ -49,7 +48,7 @@
   let capturing = false;        // a command clip is being recorded right now
   let hearing = false;          // the recogniser has actually got audio, not just started
   let fails = 0;
-  let audioCtx, analyser, data, vadTimer, floor = 0.02;
+  let audioCtx, analyser, data, vadTimer, watchdog;
   let words = ["chitti", "chithi", "chitty", "chiti"];
 
   const srLang = () => ({ en: "en-IN", ta: "ta-IN", hi: "hi-IN", ml: "ml-IN",
@@ -91,6 +90,24 @@
     }
     return 1 - prev[b.length] / Math.max(a.length, b.length);
   }
+
+  /* Chrome treats a short utterance as a whole sentence. Say "Hey Chitti" and it can
+     finalise on "hey", end the session, and hand "chitti" to the NEXT one — or lose it in
+     the gap between them. So adding the carrier made things worse, not better, which is
+     exactly what was reported.
+
+     The fix is to stop treating a session as a unit. Recent transcripts are kept for a
+     couple of seconds and matched as one running string, so "hey" and "chitti" arriving
+     separately still add up to the name. */
+  const MEMORY_MS = 2500;
+  let recent = [];
+  function remember(text) {
+    const now = Date.now();
+    recent.push({ at: now, text });
+    recent = recent.filter((r) => now - r.at < MEMORY_MS);
+    return recent.map((r) => r.text).join(" ");
+  }
+  function forget() { recent = []; }
 
   let lastMiss = "";
   function heardName(text) {
@@ -154,34 +171,80 @@
     return Math.sqrt(sum / data.length);
   }
 
-  /* A ceiling fan, a television and the road are all "silence" to the shopkeeper, so the
-     bar is set from the room itself at the moment recording starts, then speech has to
-     clear it by a healthy margin. An absolute threshold either never fires in a loud shop
-     or fires constantly in a quiet one. */
+  /* Knowing when the sentence has ended, in a room that is never quiet.
+   *
+   * Calibrating once at the start was the mistake. The shopkeeper starts talking
+   * immediately, so the "quiet" sample was often their own voice — and in a shop with a
+   * television and a conversation two feet away, a fixed multiple of that either ends the
+   * clip mid-word or never ends it at all. The reported symptom, a clip that runs on
+   * through background speech, is the second of those.
+   *
+   * Two changes. The floor is tracked continuously as the quietest thing heard recently,
+   * decaying so it follows the room rather than one moment of it. And the decision is in
+   * decibels, where the distance between a voice held near the phone and a voice across
+   * the shop is a stable ~12 dB whatever the absolute levels are — which is as close to
+   * telling the speakers apart as anything that fits on this hardware. It is near-field
+   * gating, not speaker recognition, and it should not be described as more than that.
+   */
+  const SPEECH_OVER_FLOOR_DB = 11;   // how far above the room the shopkeeper has to be
+  const MIN_SPEECH_MS = 400;         // never end before anything has actually been said
+  const dB = (rms) => 20 * Math.log10(Math.max(rms, 1e-5));
+
   function watchForSilence() {
     const startedAt = Date.now();
-    let quietSince = 0, samples = [];
+    let quietSince = 0, spokeFor = 0, lastAt = Date.now();
+    let floorDb = null;
     clearInterval(vadTimer);
     vadTimer = setInterval(() => {
       if (!capturing) { clearInterval(vadTimer); return; }
       const now = Date.now();
-      const rms = level();
-      if (now - startedAt < CALIBRATE_MS) { samples.push(rms); return; }
-      if (samples.length) {
-        floor = Math.max(0.008, samples.reduce((a, b) => a + b, 0) / samples.length);
-        samples = [];
+      const dt = now - lastAt;
+      lastAt = now;
+      const cur = dB(level());
+
+      // Fast down, slow up: the floor drops to any new quiet immediately and creeps back
+      // up at about 3 dB a second, so a long sentence cannot drag it along with it.
+      floorDb = floorDb == null ? cur
+        : cur < floorDb ? cur
+        : Math.min(cur, floorDb + 0.003 * dt);
+
+      const speaking = cur > floorDb + SPEECH_OVER_FLOOR_DB;
+      if (state.debug && now - startedAt > 300) {
+        setStatus(`${cur.toFixed(0)}dB floor ${floorDb.toFixed(0)} ${speaking ? "SPEECH" : "-"}`);
       }
-      if (rms > floor * 2.2) { quietSince = 0; return; }
+      if (speaking) { spokeFor += dt; quietSince = 0; return; }
+      if (spokeFor < MIN_SPEECH_MS) return;
       if (!quietSince) quietSince = now;
       if (now - quietSince >= SILENCE_MS || now - startedAt >= MAX_CLIP_MS) endCapture();
-    }, 100);
+    }, 60);
   }
 
   /* ---- the capture itself ---- */
 
+  /* A short tone, because the whole premise is that nobody is watching the screen. The
+     button turning red is no use to someone whose hands are in the rice. */
+  function tone(hz, ms) {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.frequency.value = hz;
+      g.gain.value = 0.09;
+      o.connect(g).connect(audioCtx.destination);
+      o.start();
+      o.stop(audioCtx.currentTime + ms / 1000);
+    } catch (err) { /* a courtesy, never the mechanism */ }
+  }
+
   async function beginCapture() {
     if (capturing || busy) return;
     capturing = true;
+    tone(880, 90);
+    // Nothing may leave this flag set. A capture that never ended used to make every
+    // later wake word a no-op, so the feature went quietly dead until a reload.
+    clearTimeout(watchdog);
+    watchdog = setTimeout(() => { if (capturing) endCapture(); }, MAX_CLIP_MS + 4000);
     // Hand the microphone over completely. The doorbell stops ringing before the order is
     // read, so the wake word cannot end up inside the order and the two never compete.
     stopRecogniser();
@@ -197,7 +260,9 @@
   function endCapture() {
     if (!capturing) return;
     capturing = false;
+    clearTimeout(watchdog);
     clearInterval(vadTimer);
+    tone(520, 70);
     stopRec();
     // handleClip is async and the recorder still owns the stream; the doorbell goes back
     // on once it has let go.
@@ -224,7 +289,12 @@
       rec.onaudiostart = () => { hearing = true; fails = 0; armedLabel(); };
       rec.onresult = (e) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (heardName(e.results[i][0].transcript)) { beginCapture(); return; }
+          const piece = e.results[i][0].transcript;
+          if (heardName(piece) || heardName(remember(piece))) {
+            forget();
+            beginCapture();
+            return;
+          }
         }
         if (state.debug) setStatus(`~ ${lastMiss}`);
       };
@@ -335,10 +405,22 @@
     }
     if (!SR) { say("STOP: this browser has no speech recognition"); return finish(); }
 
-    // The recorder side, tested on its own so a fault can be told from the doorbell's.
+    // The recorder side, tested on its own so a fault can be told from the doorbell's,
+    // and with it a read of the room — the numbers the end-of-sentence decision uses.
     await openMic();
     say(stream ? `getUserMedia ok, ${stream.getAudioTracks().length} track(s)`
                : "getUserMedia FAILED — no microphone");
+    if (stream) {
+      listenToRoom();
+      const reads = [];
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        reads.push(dB(level()));
+      }
+      const lo = Math.min(...reads), hi = Math.max(...reads);
+      say(`room ${lo.toFixed(0)}dB quiet .. ${hi.toFixed(0)}dB loud (speech needs floor+${
+        SPEECH_OVER_FLOOR_DB}dB)`);
+    }
     releaseMic();
 
     let sessions = 0, gotAudio = 0, heard = 0, stop = false;
@@ -351,8 +433,10 @@
       r.onaudiostart = () => { gotAudio++; say(`session ${sessions}: audio reaching it`); };
       r.onresult = (e) => {
         const txt = e.results[e.results.length - 1][0].transcript.trim();
-        const hit = heardName(txt);
-        if (hit) heard++;
+        // Matched exactly as the live path does — piece alone, then the running memory,
+        // because Chrome splits "hey chitti" across sessions more often than not.
+        const hit = heardName(txt) || heardName(remember(txt));
+        if (hit) { heard++; forget(); }
         say(`session ${sessions}: heard "${txt}"${
           hit ? "  <-- WAKE WORD MATCHED" : `  (best ${lastMiss.split(" ").pop()})`}`);
       };
