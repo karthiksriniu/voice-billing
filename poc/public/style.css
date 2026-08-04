@@ -217,7 +217,10 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
   letter-spacing:var(--type-label-large-tracking);text-align:left;
 }
 .menuitem:active{background:color-mix(in srgb,var(--color-on-surface) 12%,transparent)}
-.menuitem .mi{width:24px;text-align:center;font-size:17px;color:var(--color-on-surface-variant)}
+/* Drawn, not typed. ⚙ ＋ ⏻ are text glyphs an Android 10 budget phone may simply not
+   have — the power symbol especially — and a tofu box in the menu is worse than no icon
+   at all. SVG paths render the same on every device with no font to depend on. */
+.menuitem .mi{flex:none;width:24px;height:24px;color:var(--color-on-surface-variant)}
 .menuitem.danger{color:var(--color-error)}
 .menuitem.danger .mi{color:var(--color-error)}
 .menudiv{height:1px;background:var(--color-outline-variant);margin:var(--space-2) 0}
