@@ -120,9 +120,14 @@ create table if not exists receipt_counters (
 -- Allotted by the database, not by the application. Two finalises landing in the same
 -- millisecond on two serverless instances would otherwise read the same number and both
 -- use it; an atomic upsert-and-return is the only way this stays gapless under concurrency.
+-- search_path is pinned rather than inherited. A function that resolves its tables through
+-- whatever search_path the caller happens to have set can be pointed at a different table
+-- of the same name, and this one hands out invoice numbers.
 create or replace function next_receipt_no(p_shop text, p_fy text)
 returns integer
 language plpgsql
+security invoker
+set search_path = public, pg_temp
 as $$
 declare n integer;
 begin
@@ -167,12 +172,17 @@ create table if not exists stock_movements (
 
 -- RLS on with no public policy: anon traffic gets nothing, the service key bypasses it.
 -- The service key is used only from the serverless function. Never ship it to a client.
-alter table shops           enable row level security;
-alter table staff           enable row level security;
-alter table products        enable row level security;
-alter table bills           enable row level security;
-alter table utterances      enable row level security;
-alter table stock_movements enable row level security;
+alter table shops             enable row level security;
+alter table staff             enable row level security;
+alter table products          enable row level security;
+alter table bills             enable row level security;
+alter table utterances        enable row level security;
+alter table stock_movements   enable row level security;
+-- Added late and initially forgotten, which is exactly the kind of omission the Supabase
+-- linter exists to catch: a table without RLS is readable and writable by anyone holding
+-- the project's anon key, and a receipt counter that a stranger can advance puts gaps in
+-- a shop's invoice series.
+alter table receipt_counters  enable row level security;
 
 insert into shops (id, name) values ('demo', 'Demo Shop')
   on conflict (id) do nothing;
