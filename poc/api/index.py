@@ -589,6 +589,24 @@ async def lang_words(code: str = "en"):
     return {"code": norm_lang(code), "wake": lang_for(code).wake}
 
 
+class DiagRequest(BaseModel):
+    report: str = ""
+
+
+@router.post("/diag")
+async def diag(req: DiagRequest):
+    """Take the hands-free check's report and put it where I can read it.
+
+    I cannot see the shopkeeper's handset, and asking somebody to copy a log out of a
+    phone and paste it back is a poor way to debug an audio problem. This prints it into
+    the runtime log instead. Nothing identifying goes in it — device, permissions, audio
+    levels and what the speech recogniser thought it heard, which is the shopkeeper saying
+    a wake word into their own phone on purpose.
+    """
+    print("=== HANDS-FREE CHECK ===\n" + (req.report or "")[:6000] + "\n=== END ===")
+    return {"ok": True}
+
+
 class AliasRequest(BaseModel):
     product_id: str
     alias: str

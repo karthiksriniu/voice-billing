@@ -34,7 +34,7 @@
 (function handsFree() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const SILENCE_MS = 3000;      // the pause that means "I have finished the sentence"
-  const MAX_CLIP_MS = 20000;    // nothing a shopkeeper says in one breath is longer
+  const MAX_CLIP_MS = 12000;    // the worst case when the room wins, kept short
   const GIVE_UP_AFTER = 4;      // consecutive failed starts before we stop and say so
 
   // iOS ignores `continuous` and refuses to restart without a fresh tap, so the doorbell
@@ -186,14 +186,32 @@
    * telling the speakers apart as anything that fits on this hardware. It is near-field
    * gating, not speaker recognition, and it should not be described as more than that.
    */
-  const SPEECH_OVER_FLOOR_DB = 11;   // how far above the room the shopkeeper has to be
+  /* Judging "has he stopped talking?" against the room does not survive a television.
+     A podcast playing two feet away IS speech, energy-wise, and no threshold measured
+     against the room's quiet will ever say otherwise — which is why the clip ran on.
+   *
+   * So the reference is the speaker, not the room. The wake word guarantees the shopkeeper
+   * was talking when the clip opened, so the loudest thing in the clip is his own voice at
+   * arm's length. Everything is then judged relative to that: background chatter sits well
+   * below the person holding the phone, and falling more than DROP_DB under the clip's own
+   * peak is what "he has stopped" means. The peak decays slowly so it follows him rather
+   * than being pinned by one loud syllable.
+   *
+   * This is near-field gating and nothing more. If he says the wake word and then says
+   * nothing at all, the peak becomes the television and the clip runs to the cap — which
+   * is why the cap is now twelve seconds and not twenty. */
+  const DROP_DB = 10;                // how far under his own voice counts as stopped
+  const PEAK_DECAY_DB_S = 4;         // the peak follows the speaker, it does not stick
+  const OVER_FLOOR_DB = 6;           // a floor sanity check for a genuinely silent room
   const MIN_SPEECH_MS = 400;         // never end before anything has actually been said
   const dB = (rms) => 20 * Math.log10(Math.max(rms, 1e-5));
 
+  let vadTrace = [];
   function watchForSilence() {
     const startedAt = Date.now();
     let quietSince = 0, spokeFor = 0, lastAt = Date.now();
-    let floorDb = null;
+    let floorDb = null, peakDb = null;
+    vadTrace = [];
     clearInterval(vadTimer);
     vadTimer = setInterval(() => {
       if (!capturing) { clearInterval(vadTimer); return; }
@@ -202,15 +220,21 @@
       lastAt = now;
       const cur = dB(level());
 
-      // Fast down, slow up: the floor drops to any new quiet immediately and creeps back
-      // up at about 3 dB a second, so a long sentence cannot drag it along with it.
+      // Floor: drops to any new quiet at once, creeps back at ~3 dB a second.
       floorDb = floorDb == null ? cur
-        : cur < floorDb ? cur
-        : Math.min(cur, floorDb + 0.003 * dt);
+        : cur < floorDb ? cur : Math.min(cur, floorDb + 0.003 * dt);
+      // Peak: rises instantly to his voice, decays slowly so it stays his voice.
+      peakDb = peakDb == null ? cur
+        : cur > peakDb ? cur : Math.max(cur, peakDb - (PEAK_DECAY_DB_S / 1000) * dt);
 
-      const speaking = cur > floorDb + SPEECH_OVER_FLOOR_DB;
+      const speaking = cur > peakDb - DROP_DB && cur > floorDb + OVER_FLOOR_DB;
+      if (vadTrace.length < 220) {
+        vadTrace.push(`${now - startedAt}:${cur.toFixed(0)}/${peakDb.toFixed(0)}/${
+          floorDb.toFixed(0)}${speaking ? "S" : "."}`);
+      }
       if (state.debug && now - startedAt > 300) {
-        setStatus(`${cur.toFixed(0)}dB floor ${floorDb.toFixed(0)} ${speaking ? "SPEECH" : "-"}`);
+        setStatus(`${cur.toFixed(0)}dB peak ${peakDb.toFixed(0)} floor ${
+          floorDb.toFixed(0)} ${speaking ? "SPEECH" : "-"}`);
       }
       if (speaking) { spokeFor += dt; quietSince = 0; return; }
       if (spokeFor < MIN_SPEECH_MS) return;
@@ -218,6 +242,7 @@
       if (now - quietSince >= SILENCE_MS || now - startedAt >= MAX_CLIP_MS) endCapture();
     }, 60);
   }
+  window.handsFreeTrace = () => vadTrace.join(" ");
 
   /* ---- the capture itself ---- */
 
@@ -457,9 +482,41 @@
       : heard === 0
         ? "VERDICT: audio is reaching it but the wake word was not matched."
         : "VERDICT: working — the wake word was matched.");
+
+    // Then the other half. Knowing the wake word fires is no use if the clip never ends,
+    // so the end-of-sentence decision is rehearsed on the real room: say a sentence, stop,
+    // and the trace shows whether and when it would have closed the clip.
+    say("");
+    say('NOW SAY A SENTENCE AND STOP — rehearsing the end of a clip (8s)');
+    await openMic();
+    if (!stream) { say("no microphone for the rehearsal"); return finish(); }
+    listenToRoom();
+    capturing = true;
+    watchForSilence();
+    const began = Date.now();
+    await new Promise((res) => {
+      const iv = setInterval(() => {
+        if (!capturing || Date.now() - began > 8000) { clearInterval(iv); res(); }
+      }, 100);
+    });
+    const ended = !capturing;
+    const took = Date.now() - began;
+    capturing = false;
+    clearInterval(vadTimer);
+    releaseMic();
+    say(`trace dB/peak/floor (S = counted as him speaking):`);
+    say(window.handsFreeTrace());
+    say(ended ? `clip would have closed after ${took}ms`
+              : "clip did NOT close in 8s — the room is holding it open");
     finish();
 
-    function finish() {
+    async function finish() {
+      // Sent rather than copied. Reading an audio problem out of somebody's phone by hand
+      // is a poor way to debug one, and there is nothing personal in here.
+      try {
+        await api("/api/diag", { method: "POST", body: { report: box.textContent } });
+        say("(report sent)");
+      } catch (err) { say("(could not send report — copy it instead)"); }
       $("hfCopy").hidden = false;
       $("hfCopy").onclick = async () => {
         try { await navigator.clipboard.writeText(box.textContent); toast(t("copied"), 2000, true); }
