@@ -15,7 +15,8 @@
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 const $ = (id) => document.getElementById(id);
-const screens = ["auth", "main", "payment", "receipt", "settings", "staffScreen"];
+const screens = ["auth", "main", "payment", "receipt", "settings", "staffScreen",
+                 "billdoc"];
 const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
@@ -1142,7 +1143,8 @@ async function finalize() {
     const d = await api("/api/finalize", {
       method: "POST",
       body: { shop_id: state.shop.id, items: state.items,
-              vpa: state.shop.vpa, payee: state.shop.name },
+              vpa: state.shop.vpa, payee: state.shop.name,
+              customer_mobile: state.customer || "" },
     });
     state.bill = d;
     /* Already identified by voice at the start of the bill: no reason to ask again. */
@@ -1199,6 +1201,48 @@ $("sendReceipt").onclick = () => withBusy($("sendReceipt"), async () => {
 });
 
 $("nextSale").onclick = () => withBusy($("nextSale"), () => closeSale(""));
+
+/* ---------- the document ---------- */
+
+/* Fetched, never rebuilt on the client. The receipt that matters is the one the server
+   issued and stored under a number; a copy assembled here from whatever the screen happens
+   to be holding would be a different document wearing the same serial. */
+async function openDoc() {
+  if (!state.bill) { toast(t("noBillYet"), 3000, true); return; }
+  try {
+    const j = await api(`/api/receipt/${encodeURIComponent(state.bill.bill_id)}`);
+    if (!j.ok) { toast(j.error || t("notSaved"), 3500, true); return; }
+    state.doc = j;
+    $("docText").textContent = j.text;
+    $("docNote").textContent = j.receipt.number
+      ? `${j.receipt.title} ${j.receipt.number}`
+      : t("unnumbered");
+    goScreen("billdoc");
+  } catch (err) { toast(t("network"), 3000, true); }
+}
+$("printReceipt").onclick = openDoc;
+$("docPrint").onclick = () => window.print();
+
+/* WhatsApp without an API, an account or a rupee: the shopkeeper's own app opens with the
+   message already written and the customer already addressed, and they press send. It is
+   one tap rather than none, and it works for every shop on day one — which the Business
+   API does not, needing verification, an approved template and a per-message fee. */
+function waLink(mobile) {
+  if (!state.doc) return "";
+  const to = digits(mobile || "");
+  const text = encodeURIComponent(state.doc.message);
+  return to.length === 10 ? `https://wa.me/91${to}?text=${text}` : `https://wa.me/?text=${text}`;
+}
+$("waShare").onclick = async () => {
+  if (!state.doc) await openDoc();
+  window.open(waLink($("custMobile").value), "_blank", "noopener");
+};
+$("docWa").onclick = () => window.open(waLink($("custMobile").value), "_blank", "noopener");
+
+$("docBt").onclick = () => withBusy($("docBt"), async () => {
+  if (!state.doc) return;
+  await window.btPrint(state.doc.text);
+});
 
 /* "Chitti, cash received" — the shopkeeper stating a fact they witnessed. It is the only
    payment we will ever record from the handset: a UPI settlement has to be confirmed

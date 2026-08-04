@@ -170,6 +170,36 @@ async def upsert_shop(shop_id: str, name: str, vpa: str) -> str:
         return f"{type(exc).__name__}: {exc}"
 
 
+async def next_receipt_no(shop_id: str, fy: str) -> int:
+    """Ask the database for the next number in this shop's series for this financial year.
+
+    Deliberately not read-then-write from here: two finalises arriving together on two
+    serverless instances would read the same value and both use it. The increment and the
+    read are one statement inside Postgres, so the series cannot repeat or skip.
+    Returns 0 when there is no database, which the caller reads as "unnumbered".
+    """
+    if not configured():
+        key = f"{shop_id}:{fy}"
+        _memory.setdefault("receipt_no", {})
+        _memory["receipt_no"][key] = _memory["receipt_no"].get(key, 0) + 1
+        return _memory["receipt_no"][key]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(f"{SUPABASE_URL}/rest/v1/rpc/next_receipt_no",
+                             headers=_headers(), json={"p_shop": shop_id, "p_fy": fy})
+        if r.status_code < 400:
+            return int(r.json())
+    except Exception:                                  # noqa: BLE001
+        pass
+    return 0
+
+
+async def get_bill(shop_id: str, bill_id: str) -> dict | None:
+    rows = await _get("bills", {"id": f"eq.{bill_id}", "shop_id": f"eq.{shop_id}",
+                                "select": "*", "limit": "1"})
+    return rows[0] if rows else None
+
+
 async def save_bill(shop_id: str, bill: dict) -> str:
     bill_id = bill.get("id") or str(uuid.uuid4())
     if not configured():
@@ -189,6 +219,8 @@ async def save_bill(shop_id: str, bill: dict) -> str:
                     "upi_ref": bill.get("upi_ref", ""),
                     "customer_mobile": bill.get("customer_mobile", ""),
                     "receipt_status": bill.get("receipt_status", "none"),
+                    "receipt_no": bill.get("receipt_no", ""),
+                    "receipt": bill.get("receipt"),
                 },
             )
     except Exception:                                  # noqa: BLE001

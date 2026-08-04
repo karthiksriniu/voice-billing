@@ -8,7 +8,9 @@ python3 - "$V" <<'PY'
 import re, sys, pathlib
 v = sys.argv[1]
 p = pathlib.Path("public/index.html"); s = p.read_text()
-s = re.sub(r'(src|href)="/(app|wake|i18n)\.js(\?v=[^"]*)?"', rf'\1="/\2.js?v={v}"', s)
+# Every local script, not a list somebody has to remember to add to — print.js was
+# already shipping unstamped by the time anyone noticed.
+s = re.sub(r'(src|href)="/([a-z0-9_-]+)\.js(\?v=[^"]*)?"', rf'\1="/\2.js?v={v}"', s)
 s = re.sub(r'href="/(style|kiowa)\.css(\?v=[^"]*)?"', rf'href="/\1.css?v={v}"', s)
 s = re.sub(r'<script>window\.BOLO_BUILD=.*?</script>\n?', '', s)
 s = s.replace('<script src="/i18n.js', f'<script>window.BOLO_BUILD="{v}"</script>\n<script src="/i18n.js')

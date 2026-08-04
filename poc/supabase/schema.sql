@@ -102,6 +102,37 @@ alter table bills add column if not exists receipt_status  text not null default
 alter table bills add column if not exists payment_method text not null default '';
 alter table bills add column if not exists paid_at        timestamptz;
 
+-- The issued document. `receipt_no` is allotted once, at finalise, and never reused: a
+-- receipt series with a gap in it is an audit question, and one with a duplicate is worse.
+-- `receipt` holds the document as issued rather than as recomputed — prices and even the
+-- shop's name change, and a receipt reprinted next year must say what it said on the day.
+alter table bills add column if not exists receipt_no text not null default '';
+alter table bills add column if not exists receipt    jsonb;
+
+-- Serial numbers, one series per shop per financial year.
+create table if not exists receipt_counters (
+  shop_id  text not null,
+  fy       text not null,          -- "2026-27", April to March
+  next_no  integer not null default 0,
+  primary key (shop_id, fy)
+);
+
+-- Allotted by the database, not by the application. Two finalises landing in the same
+-- millisecond on two serverless instances would otherwise read the same number and both
+-- use it; an atomic upsert-and-return is the only way this stays gapless under concurrency.
+create or replace function next_receipt_no(p_shop text, p_fy text)
+returns integer
+language plpgsql
+as $$
+declare n integer;
+begin
+  insert into receipt_counters (shop_id, fy, next_no) values (p_shop, p_fy, 1)
+  on conflict (shop_id, fy) do update set next_no = receipt_counters.next_no + 1
+  returning next_no into n;
+  return n;
+end;
+$$;
+
 -- Repeat-order history: "phone number 98400 12345" at the start of a bill pulls this
 -- customer's last few purchases. Scoped by shop, newest first.
 create index if not exists bills_customer

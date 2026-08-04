@@ -714,3 +714,46 @@ button.busy,button.busy:disabled{opacity:1}
   color:var(--color-on-surface-variant);
   font-size:var(--type-label-medium-size);letter-spacing:var(--type-label-medium-tracking);
 }
+
+/* -- The roll -------------------------------------------------- */
+/* 58mm paper is 32 characters at Font A on every ESC/POS printer worth buying, so the
+   preview is monospaced and clamped to exactly that. A preview at any other width is a
+   preview of a different document. */
+/* Exactly 32 characters plus its padding, measured in the very font it is set in — the
+   roll is 32 columns and a preview that clips at 30 is showing a receipt nobody will
+   ever get. Sized in ch rather than pixels so it stays right if the font falls back. */
+#billdoc .roll{
+  margin:0 auto;padding:var(--space-4) var(--space-3);
+  /* As wide as the widest line and no wider. Sized in `ch` this collapsed to nothing on
+     a browser where `ch` resolved to zero for the ui-monospace stack — and a receipt
+     preview clipped to 24 pixels is worse than useless. max-content cannot do that: it
+     asks the text how wide it is. The paper is still 32 columns; @page decides print. */
+  width:max-content;
+  max-width:100%;
+  background:#fff;color:#111;
+  font-family:ui-monospace,Menlo,"Courier New",monospace;
+  font-size:12px;line-height:1.45;white-space:pre;overflow-x:auto;
+  border-radius:var(--radius-xs);box-shadow:var(--elevation-1);
+}
+/* The pad is a flex item in a column screen and was collapsing to its own padding —
+   40px wide — which then clamped the roll to nothing through max-width:100%. Stretching
+   it is what lets the receipt be as wide as the paper. */
+#billdoc .pad{display:block;width:100%;align-self:stretch}
+#billdoc .docacts{
+  display:flex;flex-direction:column;gap:var(--space-3);
+  margin:var(--space-5) auto 0;width:min(100%,420px);
+}
+#billdoc .docacts button{width:100%}
+#billdoc #docNote{text-align:center;margin-top:var(--space-4)}
+.payacts{display:flex;gap:var(--space-3);width:100%;max-width:420px;margin:var(--space-2) 0}
+.payacts .ghost{flex:1}
+
+/* Printing sends the roll and nothing else. A thermal printer given a page of app
+   furniture prints the furniture. */
+@media print{
+  body{background:#fff}
+  .screen:not(#billdoc),.bar,.docacts,.fineprint{display:none!important}
+  #billdoc{display:block!important}
+  .roll{width:58mm;box-shadow:none;padding:0;font-size:11px}
+  @page{size:58mm auto;margin:2mm}
+}

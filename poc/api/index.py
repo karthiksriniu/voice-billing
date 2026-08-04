@@ -23,11 +23,13 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).parent / "_lib"))
 
+import httpx                                           # noqa: E402
 import auth                                            # noqa: E402
 import db                                              # noqa: E402
 from parser import (ADMIN_SAME_ITEM_THRESHOLD, Catalog, Lang,  # noqa: E402
                     Parser, norm)
 import gst                                             # noqa: E402
+import receipt as receipts                            # noqa: E402
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
 
@@ -146,6 +148,7 @@ class FinalizeRequest(BaseModel):
     items: list[dict]
     vpa: str
     payee: str = "Shop"
+    customer_mobile: str = ""
 
 
 class ProductRequest(BaseModel):
@@ -589,13 +592,25 @@ async def finalize(req: FinalizeRequest):
     # "Bill" tells the customer nothing and costs ~10 characters.
     ref = f"VK{uuid.uuid4().hex[:8].upper()}"
     uri = build_uri(req.vpa, req.payee, total, ref=ref)
-    bill_id = await db.save_bill(
-        req.shop_id,
-        {"total": total, "items": req.items, "upi_ref": ref, "payment_state": "pending"},
-    )
+
+    # The number is allotted here, at the moment the bill is issued, and the document is
+    # stored as issued rather than rebuilt on demand — prices move and shops get renamed,
+    # and a reprint next year has to say what it said on the day.
+    shop = await db.get_shop(req.shop_id) or {}
+    now = datetime.now(receipts.IST)
+    fy = receipts.financial_year(now)
+    n = await db.next_receipt_no(req.shop_id, fy)
+    number = receipts.serial(fy, n) if n else ""
+    bill = {"total": total, "items": req.items, "upi_ref": ref,
+            "payment_state": "pending", "customer_mobile": req.customer_mobile}
+    doc = receipts.build(shop, bill, number, now)
+    bill_id = await db.save_bill(req.shop_id, {**bill, "receipt_no": number,
+                                               "receipt": doc})
     return {
         "bill_id": bill_id, "total": total, "ref": ref,
         "upi_uri": uri, "qr": qr_data_uri(uri),
+        "receipt_no": number, "receipt": doc,
+        "receipt_text": receipts.as_text(doc),
         # Stated plainly because the demo must not imply we detect payment (D5).
         "confirmation": "manual",
     }
@@ -702,6 +717,101 @@ async def remove_alias(req: AliasRequest, request: Request):
     product, error = await db.upsert_product(c["shop"], payload)
     return JSONResponse({"ok": not error, "error": error, "product": product},
                         status_code=200 if not error else 502)
+
+
+@router.get("/receipt/{bill_id}")
+async def receipt_get(bill_id: str, request: Request):
+    """The stored document, in the three shapes it is needed in: structured for the
+    screen, 32-column text for a 58mm roll, and prose for a message."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    row = await db.get_bill(c["shop"], bill_id)
+    if not row:
+        return JSONResponse({"ok": False, "error": "No such bill"}, status_code=404)
+    doc = row.get("receipt")
+    if not doc:
+        # Bills issued before receipts existed. Rebuilt from what was kept, and honestly
+        # unnumbered — inventing a serial after the fact would corrupt the series.
+        shop = await db.get_shop(c["shop"]) or {}
+        doc = receipts.build(shop, row, row.get("receipt_no", ""))
+    return {"ok": True, "bill_id": bill_id, "receipt": doc,
+            "text": receipts.as_text(doc), "message": receipts.as_whatsapp(doc)}
+
+
+class SendRequest(BaseModel):
+    bill_id: str
+    mobile: str
+
+
+@router.post("/receipt/send")
+async def receipt_send(req: SendRequest, request: Request):
+    """Send a stored receipt over the WhatsApp Business Cloud API.
+
+    Unconfigured by default, and it says so rather than pretending. Sending needs four
+    things that belong to the shop and cannot be invented here: a Meta app with a WhatsApp
+    Business Account, the phone number id of the verified sender, a permanent access
+    token, and an approved utility template — Meta does not allow arbitrary text to a
+    customer who has not messaged first.
+
+    It also costs money. Utility conversations in India bill per conversation, so a shop
+    sending a few hundred receipts a month is well past the 10-rupee marginal ceiling in
+    CLAUDE.md. This is a premium-tier path (DECISIONS.md), and the free one — a wa.me link
+    the shopkeeper taps — is what the app uses by default.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    token = os.environ.get("WHATSAPP_TOKEN", "")
+    phone_id = os.environ.get("WHATSAPP_PHONE_ID", "")
+    template = os.environ.get("WHATSAPP_TEMPLATE", "")
+    if not (token and phone_id and template):
+        return JSONResponse(
+            {"ok": False, "configured": False,
+             "error": "WhatsApp sending is not set up for this deployment"},
+            status_code=501)
+
+    mobile = db.shop_key(req.mobile)
+    if len(mobile) != 10:
+        return deny("A 10-digit number is needed", 400)
+    row = await db.get_bill(c["shop"], req.bill_id)
+    if not row:
+        return JSONResponse({"ok": False, "error": "No such bill"}, status_code=404)
+    shop = await db.get_shop(c["shop"]) or {}
+    doc = row.get("receipt") or receipts.build(shop, row, row.get("receipt_no", ""))
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": f"91{mobile}",
+        "type": "template",
+        "template": {
+            "name": template,
+            "language": {"code": "en"},
+            # Positional variables, in the order the approved template declares them.
+            "components": [{"type": "body", "parameters": [
+                {"type": "text", "text": shop.get("name", "")},
+                {"type": "text", "text": doc.get("number", "")},
+                {"type": "text", "text": f"{doc.get('total', 0):.2f}"},
+            ]}],
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            r = await client.post(
+                f"https://graph.facebook.com/v21.0/{phone_id}/messages",
+                headers={"Authorization": f"Bearer {token}"}, json=payload)
+    except Exception as exc:                           # noqa: BLE001
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+                            status_code=502)
+    sent = r.status_code < 400
+    # Recorded either way. "requested" already means captured-but-not-delivered, and a
+    # receipt that failed to send must not read as one that arrived.
+    await db.update_bill(c["shop"], req.bill_id,
+                         {"receipt_status": "sent" if sent else "requested",
+                          "customer_mobile": mobile})
+    return JSONResponse({"ok": sent, "configured": True,
+                         "error": "" if sent else r.text[:300]},
+                        status_code=200 if sent else 502)
 
 
 class SettleRequest(BaseModel):
