@@ -493,6 +493,8 @@
       "ellam vendaam"
     ],
     "total": [
+      "bill close",
+      "close bill",
       "close the bill",
       "finalise",
       "finalise bill",
@@ -507,6 +509,7 @@
       "மொத்தம்",
       "ఫైనలైజ్",
       "ఫైనలైజ్ ద బిల్",
+      "బిల్ క్లోస్",
       "బిల్లు ముగించు",
       "మొత్తం"
     ],
@@ -517,15 +520,12 @@
       "நீக்கு"
     ],
     "new_bill": [
-      "bill me",
-      "bill start",
       "kotha bill",
       "new bill",
       "next bill",
       "start bill",
       "కొత్త బిల్లు",
-      "న్యూ బిల్",
-      "బిల్ మీ"
+      "న్యూ బిల్"
     ],
     "add_item": [
       "add item",
@@ -787,6 +787,12 @@
     "chiti",
     "chitti",
     "chitty",
-    "చిట్టి"
+    "hey chithi",
+    "hey chiti",
+    "hey chitti",
+    "hey chitty",
+    "చిట్టి",
+    "హే చిట్టి",
+    "హేయ్ చిట్టి"
   ]
 }

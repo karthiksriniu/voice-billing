@@ -506,6 +506,8 @@
     ],
     "total": [
       "bill band karo",
+      "bill close",
+      "close bill",
       "close the bill",
       "finalise",
       "finalise bill",
@@ -519,6 +521,7 @@
       "कुल",
       "फाइनलाइज",
       "फाइनलाइज द बिल",
+      "बिल क्लोज",
       "बिल बंद करो",
       "டோட்டல்",
       "மொத்தம்"
@@ -530,15 +533,12 @@
       "நீக்கு"
     ],
     "new_bill": [
-      "bill me",
-      "bill start",
       "naya bill",
       "new bill",
       "next bill",
       "start bill",
       "नया बिल",
-      "न्यू बिल",
-      "बिल मी"
+      "न्यू बिल"
     ],
     "add_item": [
       "add item",
@@ -799,7 +799,13 @@
     "chiti",
     "chitti",
     "chitty",
+    "hey chithi",
+    "hey chiti",
+    "hey chitti",
+    "hey chitty",
     "चिट्टि",
-    "चिट्टी"
+    "चिट्टी",
+    "हे चिट्टी",
+    "हेय चिट्टी"
   ]
 }

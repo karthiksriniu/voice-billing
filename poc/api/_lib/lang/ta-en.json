@@ -440,6 +440,9 @@
       "ellam vendaam"
     ],
     "total": [
+      "bill close",
+      "bill close pannu",
+      "close bill",
       "close the bill",
       "finalise",
       "finalise bill",
@@ -453,7 +456,10 @@
       "ஃபினலைஸ்",
       "ஃபைனலைஸ்",
       "ஃபைனலைஸ் த பில்",
+      "க்ளோஸ் த பில்",
       "டோட்டல்",
+      "பில் க்ளோஸ்",
+      "பில் க்ளோஸ் பண்ணு",
       "மொத்தம்"
     ],
     "remove_item": [
@@ -463,16 +469,14 @@
       "நீக்கு"
     ],
     "new_bill": [
-      "bill me",
       "bill podu",
-      "bill start",
       "new bill",
       "next bill",
+      "pudhiya bill",
       "pudhu bill",
       "start bill",
       "நியூ பில்",
-      "பில் மீ",
-      "பில்மீ",
+      "புதிய பில்",
       "புது பில்"
     ],
     "add_item": [
@@ -734,7 +738,15 @@
     "chiti",
     "chitti",
     "chitty",
+    "hai chitti",
+    "hey chithi",
+    "hey chiti",
+    "hey chitti",
+    "hey chitty",
     "சிட்டி",
-    "சித்தி"
+    "சித்தி",
+    "ஹே சிட்டி",
+    "ஹே சித்தி",
+    "ஹேய் சிட்டி"
   ]
 }

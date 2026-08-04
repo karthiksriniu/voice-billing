@@ -65,9 +65,70 @@
     } catch (err) { /* the built-in list is a fine fallback */ }
   }
 
-  const heardName = (text) => {
-    const s = ` ${text.toLowerCase().replace(/[.,!?]/g, " ")} `;
-    return words.some((w) => w.length > 2 && s.includes(` ${w}`));
+  /* Chrome does not hand back the word that was said, it hands back its best guess at it,
+     and for a name it has never met that guess wanders: chitty, chithi, cheeti, city,
+     chetty, and something else again in Tamil script. Exact substring matching caught a
+     fraction of them, which is precisely what "works, but not consistently" feels like.
+
+     So the match is by distance, and the bar is deliberately lower than the one commands
+     get. The two mistakes are not equal: a false wake records a clip of shop noise that
+     Sarvam returns nothing for and no line is billed, while a missed wake makes the
+     shopkeeper say it again and stop trusting the feature. Cheap versus corrosive. */
+  const WAKE_THRESHOLD = 0.7;
+  const CARRIERS = ["hey", "hay", "hai", "hi", "ok", "okay", "a", "the"];
+
+  function ratio(a, b) {
+    if (a === b) return 1;
+    if (!a.length || !b.length) return 0;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const row = [i];
+      for (let j = 1; j <= b.length; j++) {
+        row[j] = Math.min(prev[j] + 1, row[j - 1] + 1,
+                          prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = row;
+    }
+    return 1 - prev[b.length] / Math.max(a.length, b.length);
+  }
+
+  let lastMiss = "";
+  function heardName(text) {
+    const clean = text.toLowerCase().replace(/[.,!?;:"'’]/g, " ").replace(/\s+/g, " ").trim();
+    if (!clean) return false;
+    const toks = clean.split(" ");
+    // "hey chitti" and a bare "chitti" are the same summons; the carrier only ever adds
+    // audio for the recogniser to work with, so it is matched with and without.
+    const windows = [];
+    for (let i = 0; i < toks.length; i++) {
+      windows.push(toks[i]);
+      if (i + 1 < toks.length) windows.push(`${toks[i]} ${toks[i + 1]}`);
+      if (CARRIERS.includes(toks[i]) && i + 1 < toks.length) windows.push(toks[i + 1]);
+    }
+    let best = 0;
+    for (const w of words) {
+      if (w.length < 3) continue;
+      const bare = w.split(" ").filter((x) => !CARRIERS.includes(x)).join(" ") || w;
+      for (const win of windows) {
+        for (const target of new Set([w, bare])) {
+          if (win.includes(target)) return true;
+          best = Math.max(best, ratio(win, target));
+          if (best >= WAKE_THRESHOLD) return true;
+        }
+      }
+    }
+    // Kept so the check and debug mode can show what it nearly was. A name the recogniser
+    // keeps producing belongs in the pack, not behind a lower threshold.
+    lastMiss = `${clean} (${best.toFixed(2)})`;
+    return false;
+  }
+  window.handsFreeLastMiss = () => lastMiss;
+  // Exposed so the matcher can be exercised against real transcripts. It decides whether
+  // the feature works at all; it should not be the one thing here that cannot be tested.
+  window.handsFreeMatch = (text, list) => {
+    const keep = words;
+    if (list) words = list;
+    try { return { hit: heardName(text), miss: lastMiss }; } finally { words = keep; }
   };
 
   /* ---- deciding when the sentence has ended ---- */
@@ -165,6 +226,7 @@
         for (let i = e.resultIndex; i < e.results.length; i++) {
           if (heardName(e.results[i][0].transcript)) { beginCapture(); return; }
         }
+        if (state.debug) setStatus(`~ ${lastMiss}`);
       };
       // Chrome ends a continuous session on its own every minute or so, and on any silence
       // it decides is long enough. Restarting is the normal path, not error handling — but
@@ -175,7 +237,10 @@
         if (!on || capturing) return;
         if (!hearing && ++fails >= GIVE_UP_AFTER) { fail(t("handsFreeNo")); return; }
         hearing = false;
-        setTimeout(startRecogniser, 400);
+        // Android Chrome ends a session on every pause, so this gap is repeated all day
+        // and anything said inside it is simply not heard. It is the difference between
+        // "works" and "works sometimes", so it is as short as the API will tolerate.
+        setTimeout(startRecogniser, 120);
       };
       rec.onerror = (e) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -190,6 +255,7 @@
       rec.start();
     } catch (err) {
       if (++fails >= GIVE_UP_AFTER) fail(t("handsFreeNo"));
+      else setTimeout(startRecogniser, 300);
     }
   }
 
@@ -287,14 +353,15 @@
         const txt = e.results[e.results.length - 1][0].transcript.trim();
         const hit = heardName(txt);
         if (hit) heard++;
-        say(`session ${sessions}: heard "${txt}"${hit ? "  <-- WAKE WORD MATCHED" : ""}`);
+        say(`session ${sessions}: heard "${txt}"${
+          hit ? "  <-- WAKE WORD MATCHED" : `  (best ${lastMiss.split(" ").pop()})`}`);
       };
       r.onerror = (e) => say(`session ${sessions}: error ${e.error}`);
       r.onend = () => { say(`session ${sessions}: end`); if (!stop) setTimeout(spin, 400); };
       try { r.start(); } catch (err) { say(`session ${sessions}: start threw ${err.name}`); }
       window.__hfRec = r;
     };
-    say('SAY "CHITTI" NOW — listening for 12 seconds');
+    say('SAY "HEY CHITTI" NOW — listening for 12 seconds');
     spin();
 
     await new Promise((res) => setTimeout(res, 12000));

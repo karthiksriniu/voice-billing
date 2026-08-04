@@ -489,6 +489,8 @@
       "ellam vendaam"
     ],
     "total": [
+      "bill close",
+      "close bill",
       "close the bill",
       "finalise",
       "finalise bill",
@@ -504,6 +506,7 @@
       "ಒಟ್ಟು",
       "ಫೈನಲೈಸ್",
       "ಫೈನಲೈಸ್ ದ ಬಿಲ್",
+      "ಬಿಲ್ ಕ್ಲೋಸ್",
       "ಬಿಲ್ ಮುಗಿಸು"
     ],
     "remove_item": [
@@ -513,14 +516,11 @@
       "நீக்கு"
     ],
     "new_bill": [
-      "bill me",
-      "bill start",
       "hosa bill",
       "new bill",
       "next bill",
       "start bill",
       "ನ್ಯೂ ಬಿಲ್",
-      "ಬಿಲ್ ಮೀ",
       "ಹೊಸ ಬಿಲ್"
     ],
     "add_item": [
@@ -783,6 +783,12 @@
     "chiti",
     "chitti",
     "chitty",
-    "ಚಿಟ್ಟಿ"
+    "hey chithi",
+    "hey chiti",
+    "hey chitti",
+    "hey chitty",
+    "ಚಿಟ್ಟಿ",
+    "ಹೇ ಚಿಟ್ಟಿ",
+    "ಹೇಯ್ ಚಿಟ್ಟಿ"
   ]
 }
