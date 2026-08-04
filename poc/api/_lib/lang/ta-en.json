@@ -421,8 +421,7 @@
     "billing": [
       "billing mode",
       "user mode",
-      "பில் மோட்",
-      "bill mode"
+      "பில் மோட்"
     ]
   },
   "commands": {
@@ -441,17 +440,68 @@
       "ellam vendaam"
     ],
     "total": [
-      "total",
-      "மொத்தம்",
+      "close the bill",
+      "finalise",
+      "finalise bill",
+      "finalise the bill",
+      "finalize",
+      "finalize bill",
+      "finalize the bill",
       "motham",
+      "total",
       "total podu",
-      "டோட்டல்"
+      "ஃபினலைஸ்",
+      "ஃபைனலைஸ்",
+      "ஃபைனலைஸ் த பில்",
+      "டோட்டல்",
+      "மொத்தம்"
     ],
     "remove_item": [
       "remove",
       "delete",
       "எடு",
       "நீக்கு"
+    ],
+    "new_bill": [
+      "bill me",
+      "bill podu",
+      "bill start",
+      "new bill",
+      "next bill",
+      "pudhu bill",
+      "start bill",
+      "நியூ பில்",
+      "பில் மீ",
+      "பில்மீ",
+      "புது பில்"
+    ],
+    "add_item": [
+      "add item",
+      "add product",
+      "add sku",
+      "item serku",
+      "new item",
+      "pudhu item",
+      "அட் ஐட்டம்",
+      "ஆட் ஐட்டம்",
+      "புது ஐட்டம்"
+    ],
+    "cash_paid": [
+      "cash paid",
+      "cash payment",
+      "cash received",
+      "kaasu vandhuchu",
+      "paid by cash",
+      "panam vandhuchu",
+      "received cash",
+      "காசு வந்தது",
+      "காஷ் பெய்ட்",
+      "காஷ் ரிசீவ்ட்",
+      "கேஷ் பெய்ட்",
+      "கேஷ் பேட்",
+      "கேஷ் ரிசீவ்",
+      "கேஷ் ரிசீவ்ட்",
+      "பணம் வந்தது"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",
@@ -677,5 +727,14 @@
     "நம்பர்",
     "போன் நம்பர்",
     "மொபைல் நம்பர்"
+  ],
+  "_comment_wake": "Hands-free trigger. The shopkeeper's hands are full, so the phone is addressed by name. Stripped before parsing so it can never become an item.",
+  "wake": [
+    "chithi",
+    "chiti",
+    "chitti",
+    "chitty",
+    "சிட்டி",
+    "சித்தி"
   ]
 }

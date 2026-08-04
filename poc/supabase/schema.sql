@@ -85,6 +85,14 @@ create index if not exists bills_shop_time on bills (shop_id, created_at desc);
 alter table bills add column if not exists customer_mobile text default '';
 alter table bills add column if not exists receipt_status  text not null default 'none';
 
+-- How the bill was settled, and when. `payment_method` is the honest record of what we
+-- actually know: 'cash' is the shopkeeper telling us so, which is first-hand. 'upi' is
+-- only ever set by a server-side confirmation from the payment provider — never by
+-- watching the phone, which is both outside a web app's reach and a Play policy
+-- violation for our use case (see CLAUDE.md and DECISIONS.md D5).
+alter table bills add column if not exists payment_method text not null default '';
+alter table bills add column if not exists paid_at        timestamptz;
+
 -- Repeat-order history: "phone number 98400 12345" at the start of a bill pulls this
 -- customer's last few purchases. Scoped by shop, newest first.
 create index if not exists bills_customer

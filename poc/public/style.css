@@ -414,8 +414,8 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
 
 /* -- Talk button ----------------------------------------------- */
 .controls{
-  padding:var(--space-1) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
-  display:flex;flex-direction:column;align-items:center;gap:var(--space-3);
+  padding:var(--space-1) var(--space-5) calc(var(--space-3) + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;gap:var(--space-2);
 }
 .status{
   margin:0;font-size:var(--type-body-small-size);
@@ -423,7 +423,11 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
   color:var(--color-on-surface-variant);min-height:20px;text-align:center;
 }
 .talk{
-  width:158px;height:158px;border-radius:var(--radius-full);flex:none;
+  /* Was 158px, which ate a third of an iPhone screen and pushed the bill — the thing the
+     shopkeeper actually reads — off the top. 104px still clears the 48dp touch target
+     twice over, so it is found by thumb without looking, and the wake word carries most
+     of the traffic now anyway. The space goes back to the item list. */
+  width:104px;height:104px;border-radius:var(--radius-full);flex:none;
   display:flex;align-items:center;justify-content:center;
   transition:background var(--duration-short) var(--ease-standard),
              transform var(--duration-short) var(--ease-standard),
@@ -432,7 +436,7 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
 }
 .talk:active{transform:scale(.96)}
 .talk .talkicon{
-  width:56px;height:56px;border-radius:var(--radius-full);
+  width:38px;height:38px;border-radius:var(--radius-full);
   background:currentColor;flex:none;
   transition:border-radius var(--duration-medium) var(--ease-emphasized),
              width var(--duration-medium) var(--ease-emphasized),
@@ -445,7 +449,7 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
   background:var(--color-error);color:var(--color-on-error);
   animation:pulse 1.15s ease-in-out infinite;
 }
-.talk.rec .talkicon{border-radius:var(--radius-sm);width:46px;height:46px}
+.talk.rec .talkicon{border-radius:var(--radius-sm);width:32px;height:32px}
 .talk.busy{
   background:var(--color-surface-container-highest);color:var(--color-on-surface-variant);
   animation:none;box-shadow:none;
@@ -456,8 +460,8 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
 }
 .talklabel{
   margin:0;text-align:center;
-  font-size:var(--type-title-medium-size);font-weight:var(--weight-medium);
-  line-height:var(--type-title-medium-line);color:var(--color-on-surface);
+  font-size:var(--type-label-large-size);font-weight:var(--weight-medium);
+  line-height:var(--type-label-large-line);color:var(--color-on-surface-variant);
 }
 .talklabel small{
   display:block;font-size:var(--type-body-small-size);font-weight:var(--weight-regular);
@@ -465,7 +469,7 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
 }
 @keyframes pulse{
   0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--color-error) 45%,transparent)}
-  50%{box-shadow:0 0 0 22px transparent}
+  50%{box-shadow:0 0 0 16px transparent}
 }
 @media (prefers-reduced-motion:reduce){.talk.rec{animation:none}}
 
@@ -599,4 +603,28 @@ body:not(.debug) .hint{display:none}
 }
 .menuitem[aria-checked="true"] .mistate{
   background:var(--color-primary-container);color:var(--color-on-primary-container);
+}
+
+/* -- Hands-free ------------------------------------------------ */
+/* Armed but not recording: a slow breath around the button, so a glance from across the
+   counter says the phone is listening without a word on screen. */
+body.handsfree .talk.idle{
+  box-shadow:0 0 0 0 color-mix(in srgb,var(--color-primary) 45%,transparent);
+  animation:armed 2.4s var(--ease-standard) infinite;
+}
+@keyframes armed{
+  0%  {box-shadow:0 0 0 0   color-mix(in srgb,var(--color-primary) 40%,transparent)}
+  70% {box-shadow:0 0 0 14px color-mix(in srgb,var(--color-primary) 0%,transparent)}
+  100%{box-shadow:0 0 0 0   color-mix(in srgb,var(--color-primary) 0%,transparent)}
+}
+@media (prefers-reduced-motion:reduce){
+  body.handsfree .talk.idle{animation:none;box-shadow:0 0 0 3px var(--color-primary-container)}
+}
+.menuitem.dim{opacity:.5}
+
+/* A 667pt iPhone has no room to spare. The button shrinks before the list does. */
+@media (max-height:700px){
+  .talk{width:88px;height:88px}
+  .talk .talkicon{width:32px;height:32px}
+  .talk.rec .talkicon{width:28px;height:28px}
 }

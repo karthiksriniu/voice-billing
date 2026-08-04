@@ -14,6 +14,7 @@ const LANGS = {
 
 const STRINGS = {
   en: {
+    newBillReady: "New bill, go ahead", noBillYet: "No bill to close yet", cashClosed: "Closed, cash", ownerOnly: "Owner only", listening: "Listening", sayChitti: "Say “Chitti”", handsFree: "Hands-free (Chitti)", handsFreeNo: "Hands-free needs Chrome",
     debugInfo: "Debug info", on: "On", off: "Off", notBilled: "Not billed", notThem: "Not them? Remove", customerRemoved: "Customer removed", loadedReplacing: "items loaded — earlier items cleared",
     personName: "Name (optional)",
     addUser: "Add user", logout: "Sign out", back: "Back",
@@ -63,6 +64,7 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
+    newBillReady: "புது பில், சொல்லுங்க", noBillYet: "இன்னும் பில் இல்லை", cashClosed: "முடிஞ்சது, ரொக்கம்", ownerOnly: "முதலாளி மட்டும்", listening: "கேட்குது", sayChitti: "“சிட்டி”ன்னு சொல்லுங்க", handsFree: "கை இல்லாம (சிட்டி)", handsFreeNo: "இதுக்கு Chrome வேணும்",
     debugInfo: "டீபக் தகவல்", on: "ஆன்", off: "ஆஃப்", notBilled: "பில்லில் சேரவில்லை", notThem: "இவங்க இல்லையா? நீக்கு", customerRemoved: "கஸ்டமர் நீக்கப்பட்டார்", loadedReplacing: "பொருள் ஏற்றப்பட்டது — முந்தையவை நீக்கப்பட்டன",
     personName: "பெயர் (விருப்பம்)",
     addUser: "ஆள் சேர்", logout: "வெளியேறு", back: "பின்",
@@ -112,6 +114,7 @@ const STRINGS = {
     alreadyEmpty: "ஏற்கனவே காலி", updated: "மாற்றப்பட்டது",
   },
   hi: {
+    newBillReady: "नया बिल, बोलिए", noBillYet: "अभी कोई बिल नहीं", cashClosed: "बंद, नकद", ownerOnly: "सिर्फ़ मालिक", listening: "सुन रहा हूँ", sayChitti: "“चिट्टी” बोलिए", handsFree: "बिना हाथ (चिट्टी)", handsFreeNo: "इसके लिए Chrome चाहिए",
     debugInfo: "डीबग जानकारी", on: "चालू", off: "बंद", notBilled: "बिल में नहीं जुड़ा", notThem: "ये नहीं? हटाएँ", customerRemoved: "ग्राहक हटाया गया", loadedReplacing: "सामान लोड हुआ — पिछले हटाए गए",
     personName: "नाम (वैकल्पिक)",
     addUser: "उपयोगकर्ता जोड़ें", logout: "साइन आउट", back: "वापस",
@@ -161,6 +164,7 @@ const STRINGS = {
     alreadyEmpty: "पहले से खाली", updated: "बदल गया",
   },
   ml: {
+    newBillReady: "പുതിയ ബില്ല്, പറയൂ", noBillYet: "ബില്ല് ഇല്ല", cashClosed: "അടച്ചു, പണം", ownerOnly: "ഉടമ മാത്രം", listening: "കേൾക്കുന്നു", sayChitti: "“ചിട്ടി” എന്ന് പറയൂ", handsFree: "കൈ വേണ്ട (ചിട്ടി)", handsFreeNo: "Chrome വേണം",
     debugInfo: "ഡീബഗ് വിവരം", on: "ഓൺ", off: "ഓഫ്", notBilled: "ബില്ലിൽ ചേർത്തില്ല", notThem: "ഇവരല്ലേ? നീക്കുക", customerRemoved: "ഉപഭോക്താവിനെ നീക്കി", loadedReplacing: "സാധനങ്ങൾ ചേർത്തു — മുമ്പുള്ളവ നീക്കി",
     personName: "പേര് (ഐച്ഛികം)",
     addUser: "ഉപയോക്താവിനെ ചേർക്കുക", logout: "സൈൻ ഔട്ട്", back: "തിരികെ",
@@ -210,6 +214,7 @@ const STRINGS = {
     alreadyEmpty: "ഇതിനകം ഒഴിഞ്ഞു", updated: "മാറ്റി",
   },
   te: {
+    newBillReady: "కొత్త బిల్లు, చెప్పండి", noBillYet: "బిల్లు లేదు", cashClosed: "ముగిసింది, నగదు", ownerOnly: "యజమాని మాత్రమే", listening: "వింటున్నా", sayChitti: "“చిట్టి” అనండి", handsFree: "చేతులు వద్దు (చిట్టి)", handsFreeNo: "Chrome కావాలి",
     debugInfo: "డీబగ్ సమాచారం", on: "ఆన్", off: "ఆఫ్", notBilled: "బిల్లులో చేరలేదు", notThem: "వీరు కాదా? తీసివేయి", customerRemoved: "కస్టమర్ తీసివేయబడ్డారు", loadedReplacing: "సరుకులు లోడ్ అయ్యాయి — మునుపటివి తీసివేశాం",
     personName: "పేరు (ఐచ్ఛికం)",
     addUser: "వినియోగదారుని జోడించు", logout: "సైన్ అవుట్", back: "వెనక్కి",
@@ -259,6 +264,7 @@ const STRINGS = {
     alreadyEmpty: "ఇప్పటికే ఖాళీ", updated: "మార్చాం",
   },
   kn: {
+    newBillReady: "ಹೊಸ ಬಿಲ್, ಹೇಳಿ", noBillYet: "ಬಿಲ್ ಇಲ್ಲ", cashClosed: "ಮುಗಿಯಿತು, ನಗದು", ownerOnly: "ಮಾಲೀಕರಿಗೆ ಮಾತ್ರ", listening: "ಕೇಳುತ್ತಿದೆ", sayChitti: "“ಚಿಟ್ಟಿ” ಎನ್ನಿ", handsFree: "ಕೈ ಬೇಡ (ಚಿಟ್ಟಿ)", handsFreeNo: "Chrome ಬೇಕು",
     debugInfo: "ಡೀಬಗ್ ಮಾಹಿತಿ", on: "ಆನ್", off: "ಆಫ್", notBilled: "ಬಿಲ್‌ಗೆ ಸೇರಿಸಿಲ್ಲ", notThem: "ಇವರಲ್ಲವೇ? ತೆಗೆದುಹಾಕಿ", customerRemoved: "ಗ್ರಾಹಕರನ್ನು ತೆಗೆದಿದೆ", loadedReplacing: "ಸಾಮಾನು ಲೋಡ್ ಆಗಿದೆ — ಹಿಂದಿನವು ತೆಗೆದಿದೆ",
     personName: "ಹೆಸರು (ಐಚ್ಛಿಕ)",
     addUser: "ಬಳಕೆದಾರರನ್ನು ಸೇರಿಸಿ", logout: "ಸೈನ್ ಔಟ್", back: "ಹಿಂದೆ",

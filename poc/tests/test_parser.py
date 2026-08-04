@@ -337,6 +337,47 @@ def run():
         check(f"unit {stored!r}", it and it[0].qty == 0.5 and it[0].amount == 25.0,
               f"-> {[(i.qty, i.amount) for i in it]} (want 0.5 kg, Rs25)")
 
+    print("wake word and command matrix, every language")
+    from parser import Catalog as _C6
+    import json as _json
+    MATRIX_CAT = [
+        {"id": "P1", "name": "Potato", "unit": "kg", "unit_price": 25},
+        {"id": "P2", "name": "Tomato", "unit": "kg", "unit_price": 30},
+        {"id": "P3", "name": "Filter Coffee", "unit": "piece", "unit_price": 20},
+        {"id": "P4", "name": "Milk", "unit": "packet", "unit_price": 22},
+        # Named to collide on purpose: a shop really can sell bill paper, cashew and
+        # chutney, and none of them may fire a command.
+        {"id": "P5", "name": "Bill Paper", "unit": "piece", "unit_price": 5},
+        {"id": "P6", "name": "Cashew", "unit": "kg", "unit_price": 800},
+        {"id": "P7", "name": "Chutney", "unit": "piece", "unit_price": 15},
+    ]
+    for code in ("ta-en", "ml-en", "hi-en", "te-en", "kn-en"):
+        pack = _json.loads((ROOT / "api" / "_lib" / "lang" / f"{code}.json")
+                           .read_text(encoding="utf-8"))
+        pl = Parser(Lang(code), _C6(MATRIX_CAT))
+        for cmd, aliases in sorted(pack["commands"].items()):
+            for a in aliases:
+                for prefix in ("", "chitti ", "சிட்டி "):
+                    r = pl.parse(prefix + a)
+                    check(f"{code} {prefix}{a}", r.command == cmd,
+                          f"-> {r.command}/{r.mode_switch} (want {cmd})")
+        for mode, aliases in sorted(pack["modes"].items()):
+            for a in aliases:
+                check(f"{code} mode {a}", pl.parse(a).mode_switch == mode,
+                      f"-> {pl.parse(a).mode_switch} (want {mode})")
+        for w in pack["wake"]:
+            r = pl.parse(f"{w} two kilo potato")
+            check(f"{code} wake {w}",
+                  r.woke and r.items and r.items[0].product_id == "P1",
+                  f"woke={r.woke} items={[i.name for i in r.items]}")
+            hit, sc, _ = _C6(MATRIX_CAT).match(w, Lang(code))
+            check(f"{code} wake {w} is not an item", hit is None, f"matched {hit}")
+        for prod in MATRIX_CAT:
+            for phrase in (f"two {prod['name']}", f"one kilo {prod['name']}"):
+                r = pl.parse(phrase)
+                check(f"{code} {phrase}", not r.command and not r.mode_switch,
+                      f"-> {r.command}/{r.mode_switch}")
+
     print("similar SKU names resolve to the one spoken")
     from parser import Catalog as _C3
     sim = _C3(SIMILAR_CATALOG)

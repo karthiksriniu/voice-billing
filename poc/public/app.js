@@ -46,6 +46,25 @@ function toast(msg, ms = 2400, always = false) {
 }
 const setStatus = (t) => { $("status").textContent = t; };
 
+/* Hands-free means nobody is looking at the screen, so anything that would have been a
+   glance has to be said out loud. SpeechSynthesis is on-device and free, which matters:
+   the cost ceiling rules out anything that bills per utterance. The toast still shows —
+   a loud shop swallows a phone speaker, and it is marked `always` so it survives debug
+   mode being off. */
+const SPEAK_LANG = { en: "en-IN", ta: "ta-IN", hi: "hi-IN", ml: "ml-IN",
+                     te: "te-IN", kn: "kn-IN" };
+function speak(msg) {
+  toast(msg, 3600, true);
+  if (!window.speechSynthesis) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(msg);
+    u.lang = SPEAK_LANG[state.shop && state.shop.lang] || "en-IN";
+    u.rate = 1.05;
+    speechSynthesis.speak(u);
+  } catch (err) { /* speaking is a courtesy, never the mechanism */ }
+}
+
 async function api(path, { method = "GET", body } = {}) {
   const res = await fetch(path, {
     method,
@@ -158,6 +177,9 @@ async function enter(session) {
   await healthReady;
   state.token = session.token;
   state.role = session.role;
+  // After the passcode, never before: the microphone prompt in front of a sign-in screen
+  // reads as an app asking for something it has not earned yet.
+  setTimeout(() => window.handsFreeRestore && window.handsFreeRestore(), 400);
   state.shop = { id: session.shop_id, name: session.shop_name || "Shop",
                  vpa: session.vpa || "", lang: session.lang || "en" };
   setLang(state.shop.lang);
@@ -271,6 +293,8 @@ function setTalk(mode) {
     l.innerHTML = `${t("recording")}<br><small>${t("releaseToStop")}</small>`;
   } else if (mode === "busy") {
     l.innerHTML = t("working");
+  } else if (window.handsFreeActive && window.handsFreeActive()) {
+    l.innerHTML = `${t("sayChitti")}<br><small>${t("holdToSpeak")}</small>`;
   } else {
     l.innerHTML = t("holdToSpeak");
   }
@@ -367,6 +391,17 @@ function apply(data, roundTripMs) {
     return;
   }
   if (data.mode_switch && !data.items.length && !data.command) return;
+
+  /* ---- hands-free commands ----
+     These arrive by voice with the phone untouched, so each one says out loud what it
+     did. A command that acts silently is unusable when nobody is looking at the screen. */
+  if (data.command === "new_bill") {
+    newBill();
+    if (!data.items.length) { speak(t("newBillReady")); render(); return; }
+    // fall through: "bill me one filter coffee" starts the bill AND fills it
+  }
+  if (data.command === "cash_paid") { cashReceived(); return; }
+  if (data.command === "add_item") { addItemByVoice(data); return; }
 
   if (data.command === "cancel_last" && state.items.length) {
     toast(`${t("removed")} ${state.items.pop().name}`);
@@ -987,6 +1022,45 @@ $("sendReceipt").onclick = () => {
 };
 
 $("nextSale").onclick = () => closeSale("");
+
+/* "Chitti, cash received" — the shopkeeper stating a fact they witnessed. It is the only
+   payment we will ever record from the handset: a UPI settlement has to be confirmed
+   server-side by the provider, never inferred from this phone. */
+async function cashReceived() {
+  if (!state.bill) { speak(t("noBillYet")); return; }
+  try {
+    await api("/api/settle", {
+      method: "POST",
+      body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, method: "cash" },
+    });
+    speak(`${t("cashClosed")} ${rupees(state.bill.total)}`);
+  } catch (err) {
+    speak(t("notSaved"));
+    return;
+  }
+  closeSale(digits($("custMobile").value).length >= 10 ? digits($("custMobile").value) : "");
+}
+
+/* "Chitti, add item lemonade 50 rupees". Prices are the owner's to set — a worker who
+   bills all day must not be able to reprice the shop by speaking. */
+async function addItemByVoice(data) {
+  if (state.role !== "owner") { speak(t("ownerOnly")); return; }
+  const u = (data.unmatched || [])[0];
+  const heard = u || (data.items || [])[0];
+  if (!heard) { speak(t("sayItemPrice")); return; }
+  const price = u ? u.money : heard.amount;
+  const name = u ? u.name : heard.name;
+  if (!price) { speak(t("sayItemPrice")); return; }
+  try {
+    await api("/api/catalog", {
+      method: "POST",
+      body: { shop_id: state.shop.id, name, unit: (u && u.unit) || "piece",
+              unit_price: price },
+    });
+    await loadCatalog();
+    speak(`${name} ${rupees(price)} — ${t("saved")}`);
+  } catch (err) { speak(t("notSaved")); }
+}
 
 function newBill() {
   state.items = [];

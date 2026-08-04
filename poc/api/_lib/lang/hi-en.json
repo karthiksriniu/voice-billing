@@ -485,8 +485,7 @@
     "billing": [
       "billing mode",
       "user mode",
-      "பில் மோட்",
-      "bill mode"
+      "பில் மோட்"
     ]
   },
   "commands": {
@@ -506,10 +505,21 @@
       "ellam vendaam"
     ],
     "total": [
+      "bill band karo",
+      "close the bill",
+      "finalise",
+      "finalise bill",
+      "finalise the bill",
+      "finalize",
+      "finalize bill",
+      "finalize the bill",
       "motham",
       "total",
       "total podu",
       "कुल",
+      "फाइनलाइज",
+      "फाइनलाइज द बिल",
+      "बिल बंद करो",
       "டோட்டல்",
       "மொத்தம்"
     ],
@@ -518,6 +528,41 @@
       "delete",
       "எடு",
       "நீக்கு"
+    ],
+    "new_bill": [
+      "bill me",
+      "bill start",
+      "naya bill",
+      "new bill",
+      "next bill",
+      "start bill",
+      "नया बिल",
+      "न्यू बिल",
+      "बिल मी"
+    ],
+    "add_item": [
+      "add item",
+      "add product",
+      "add sku",
+      "naya item",
+      "new item",
+      "एड आइटम",
+      "ऐड आइटम",
+      "नया आइटम"
+    ],
+    "cash_paid": [
+      "cash mila",
+      "cash paid",
+      "cash payment",
+      "cash received",
+      "paid by cash",
+      "paise mile",
+      "received cash",
+      "कैश पेड",
+      "कैश पेड़",
+      "कैश मिला",
+      "कैश रिसीव्ड",
+      "नकद मिला"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",
@@ -747,5 +792,14 @@
     "नंबर",
     "फोन नंबर",
     "मोबाइल नंबर"
+  ],
+  "_comment_wake": "Hands-free trigger. The shopkeeper's hands are full, so the phone is addressed by name. Stripped before parsing so it can never become an item.",
+  "wake": [
+    "chithi",
+    "chiti",
+    "chitti",
+    "chitty",
+    "चिट्टि",
+    "चिट्टी"
   ]
 }

@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from urllib.parse import parse_qs, urlencode
@@ -254,6 +255,9 @@ def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
         # billing look deaf: perfect transcript, no line, no reason given.
         "unmatched": res.unmatched,
         "customer_mobile": res.customer_mobile,
+        # Whether the phone was addressed by name. The client needs it to tell a hands-free
+        # command from a button press that happened to contain the same words.
+        "woke": res.woke,
         "number": res.number,
         "took_ms": took_ms,
     }
@@ -556,6 +560,43 @@ async def finalize(req: FinalizeRequest):
         # Stated plainly because the demo must not imply we detect payment (D5).
         "confirmation": "manual",
     }
+
+
+@router.get("/lang")
+async def lang_words(code: str = "en"):
+    """The wake words for a language. Public on purpose — there is nothing secret in a
+    word the shopkeeper says out loud in a shop, and the listener needs them before any
+    session exists. Served from the pack so a new language stays data, not code."""
+    return {"code": norm_lang(code), "wake": lang_for(code).wake}
+
+
+class SettleRequest(BaseModel):
+    bill_id: str
+    shop_id: str = DEFAULT_SHOP
+    method: str = "cash"
+
+
+@router.post("/settle")
+async def settle(req: SettleRequest, request: Request):
+    """Close a bill as paid.
+
+    Only 'cash' can be claimed from the counter, and only by someone signed in to the
+    shop: it is the shopkeeper stating a fact they witnessed. A UPI settlement has to
+    come from the payment provider server-side — we never infer it from the handset, so
+    the endpoint refuses to record one on the client's say-so.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if req.method != "cash":
+        return deny("Only a cash payment can be closed here", 400)
+    error = await db.update_bill(c["shop"], req.bill_id, {
+        "payment_state": "confirmed",
+        "payment_method": "cash",
+        "paid_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return JSONResponse({"ok": not error, "error": error},
+                        status_code=200 if not error else 502)
 
 
 class ReceiptRequest(BaseModel):

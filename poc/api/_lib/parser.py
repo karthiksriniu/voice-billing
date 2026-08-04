@@ -64,6 +64,7 @@ class ParseResult:
     number: float | None = None     # utterance was just a number — an answer to "what price?"
     match_score: float = 0.0        # strength of the best catalog match, for admin decisions
     unmatched: list[dict] = field(default_factory=list)   # named, priced, but not in catalog
+    woke: bool = False              # the utterance was addressed to us by name
     customer_mobile: str = ""       # "phone number 98400 12345" — opens the bill against a
                                     # customer so their history can be pulled up
 
@@ -149,6 +150,7 @@ class Lang:
         self.numeral_sounds = {k: v.pop() for k, v in strict.items() if len(v) == 1}
         self.numeral_sounds_loose = {k: v.pop() for k, v in loose.items() if len(v) == 1}
 
+        self.wake = sorted(_keys(self.data.get("wake", [])), key=len, reverse=True)
         self.join = _keys(self.data.get("join", []))
         self.customer_trigger = sorted(_keys(self.data.get("customer_trigger", [])),
                                        key=len, reverse=True)
@@ -251,10 +253,55 @@ def cut_phrase(text: str, phrase: str, repl: str = " ") -> str:
     return f" {text} ".replace(f" {phrase} ", f" {repl} ").strip()
 
 
+# How close a spoken phrase has to sound to a command before we act on it. Commands are a
+# tiny closed set and acting on the wrong one is cheap to undo, so this sits below the
+# catalog's bar — but not so low that an item name can trip a command.
+PHRASE_THRESHOLD = 0.84
+
+
 class Parser:
     def __init__(self, lang: Lang, catalog):
         self.lang = lang
         self.catalog = catalog
+
+    def _find_spoken(self, text: str, phrases: dict) -> tuple[str, object] | None:
+        """Locate a fixed phrase in the utterance by how it SOUNDS, not how it is spelt.
+
+        Item names have been matched phonetically from the start; commands, modes and the
+        wake word were compared as exact strings, and in a regional shop that made every
+        one of them dead. Sarvam is told the shop's language, so an English command spoken
+        in a Tamil shop comes back in Tamil script: "cash received" arrives as
+        "கேஷ் ரிசீவ்ட்" and "finalize the bill" as "ஃபைனலைஸ் த பில்". Neither can ever
+        equal its Latin alias. Folding both sides through the same phonetic key is what
+        the catalog already does; this brings the fixed phrases up to the same footing.
+
+        Longest phrase first, so "billing mode" is not shadowed by "bill".
+        """
+        toks = text.split()
+        if not toks:
+            return None
+        scored = []
+        for phrase in sorted(phrases, key=len, reverse=True):
+            if find_phrase(text, phrase):                 # exact wins, and costs nothing
+                return phrase, phrases[phrase]
+            want = self.lang.phonetic(phrase)
+            n = len(phrase.split())
+            for i in range(len(toks) - n + 1):
+                window = " ".join(toks[i:i + n])
+                score = SequenceMatcher(None, want, self.lang.phonetic(window)).ratio()
+                if score >= PHRASE_THRESHOLD:
+                    scored.append((score, window, phrases[phrase]))
+        if not scored:
+            return None
+        scored.sort(key=lambda x: -x[0])
+        best = scored[0]
+        # Two different commands that sound equally like what was said is not a close call
+        # to be broken by a hundredth of a similarity score — "bill me" and "bill mudi"
+        # (close the bill) are one vowel apart and mean opposite things. Refuse instead.
+        rival = next((s for s in scored if s[2] != best[2]), None)
+        if rival and best[0] - rival[0] < 0.06:
+            return None
+        return best[1], best[2]
 
     # -- number handling ----------------------------------------------------
 
@@ -311,6 +358,22 @@ class Parser:
         if not text:
             return res
 
+        # "Chitti, two kilo sugar" — the name is how the shopkeeper gets the phone's
+        # attention with both hands full. It carries no meaning past that, and left in
+        # place it would be matched against the catalog like any other word, so it comes
+        # out first. Anywhere in the utterance, not just the front: the recorder often
+        # opens mid-word and catches the tail of it.
+        wake_table = {w: True for w in self.lang.wake}
+        while True:
+            hit = self._find_spoken(text, wake_table)
+            if not hit:
+                break
+            res.woke = True
+            text = cut_phrase(text, hit[0])
+        text = text.strip(f" {SEP}").strip()
+        if not text:
+            return res
+
         # Longest phrase first, so "billing mode" is not shadowed by a shorter alias.
         # A customer number is read before anything else: it is not an item, and leaving
         # its digits in the text would have the grammar bill ten kilos of something.
@@ -318,17 +381,27 @@ class Parser:
         if res.customer_mobile and not text.strip():
             return res
 
-        for phrase in sorted(self.lang.modes, key=len, reverse=True):
-            if find_phrase(text, phrase):
-                res.mode_switch = self.lang.modes[phrase]
-                text = cut_phrase(text, phrase)
-                break
+        # Modes and commands compete in ONE contest rather than one after the other.
+        # Run separately, a fuzzy mode match consumed the words before an EXACT command
+        # ever got to look at them: "bill me" scored 0.857 against the mode "bill mode"
+        # and was swallowed, so the command that starts a bill did nothing at all. Which
+        # table a phrase came from is not evidence about what was said.
+        table = {p: ("mode", v) for p, v in self.lang.modes.items()}
+        table |= {p: ("command", v) for p, v in self.lang.commands.items()}
+        hit = self._find_spoken(text, table)
+        if hit:
+            kind, value = hit[1]
+            if kind == "mode":
+                res.mode_switch = value
+            else:
+                res.command = value
+            text = cut_phrase(text, hit[0])
 
-        for phrase in sorted(self.lang.commands, key=len, reverse=True):
-            if find_phrase(text, phrase):
-                res.command = self.lang.commands[phrase]
-                text = cut_phrase(text, phrase)
-                break
+        # "add item lemonade 50 rupees" names the thing before its price, which is admin
+        # word order regardless of which screen is open. Parsing it as billing would read
+        # the 50 as a quantity and split the entry in half.
+        if res.command == "add_item":
+            mode = "admin"
 
         if not text:
             return res
