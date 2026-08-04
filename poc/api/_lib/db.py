@@ -373,18 +373,27 @@ async def find_shops(name_like: str) -> list[dict]:
     return await _get("shops", {"name": f"ilike.*{name_like}*"})
 
 
-async def update_shop(shop_id: str, name: str, vpa: str, lang: str) -> str:
-    """Change the business name, UPI ID or language. Passcode is deliberately not touched
-    here — changing it needs the old one, which is a separate flow."""
+async def update_shop(shop_id: str, name: str, vpa: str, lang: str,
+                      wa_number: str | None = None, gstin: str | None = None) -> str:
+    """Change the business name, UPI ID, language, WhatsApp line or GST number. Passcode is
+    deliberately not touched here — changing it needs the old one, which is a separate flow.
+
+    Fields left as None are not written, so a caller that knows nothing about GST cannot
+    blank it by omission."""
+    fields = {"name": name, "upi_vpa": vpa, "lang": lang}
+    if wa_number is not None:
+        fields["wa_number"] = wa_number
+    if gstin is not None:
+        fields["gstin"] = gstin
     if not configured():
         row = _local_shops.setdefault(shop_id, {"id": shop_id})
-        row.update({"name": name, "upi_vpa": vpa, "lang": lang})
+        row.update(fields)
         return ""
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.patch(f"{SUPABASE_URL}/rest/v1/shops",
                               headers=_headers(), params={"id": f"eq.{shop_id}"},
-                              json={"name": name, "upi_vpa": vpa, "lang": lang})
+                              json=fields)
         return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
     except Exception as exc:                           # noqa: BLE001
         return f"{type(exc).__name__}: {exc}"

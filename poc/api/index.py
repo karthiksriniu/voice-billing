@@ -27,6 +27,7 @@ import auth                                            # noqa: E402
 import db                                              # noqa: E402
 from parser import (ADMIN_SAME_ITEM_THRESHOLD, Catalog, Lang,  # noqa: E402
                     Parser, norm)
+import gst                                             # noqa: E402
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
 
@@ -126,6 +127,8 @@ class SettingsRequest(BaseModel):
     name: str = ""
     lang: str = ""
     vpa: str = ""
+    wa_number: str = ""
+    gstin: str = ""
 
 
 class DeleteRequest(BaseModel):
@@ -454,8 +457,11 @@ async def settings_get(request: Request):
     if not c or c["role"] != "owner":
         return deny("Owner only")
     shop = await db.get_shop(c["shop"]) or {}
+    gstin = shop.get("gstin", "")
     return {"ok": True, "mobile": c["shop"], "name": shop.get("name", ""),
             "lang": norm_lang(shop.get("lang")), "vpa": shop.get("upi_vpa", ""),
+            "wa_number": shop.get("wa_number", ""), "gstin": gstin,
+            "gst_state": gst.state_of(gstin),
             "stored_lang": shop.get("lang", "")}
 
 
@@ -468,9 +474,23 @@ async def settings_set(req: SettingsRequest, request: Request):
     name = req.name.strip() or shop.get("name", "")
     lang = norm_lang(req.lang or shop.get("lang"))
     vpa = req.vpa.strip() or shop.get("upi_vpa", "")
-    error = await db.update_shop(c["shop"], name, vpa, lang)
-    return JSONResponse({"ok": not error, "error": error,
-                         "name": name, "lang": lang, "vpa": vpa},
+
+    # The WhatsApp line is the shop's, not the owner's sign-in number, so it is stored
+    # separately and may be cleared. A blank is a deliberate answer here, not an omission.
+    wa = db.shop_key(req.wa_number) if req.wa_number.strip() else ""
+    if req.wa_number.strip() and len(wa) != 10:
+        return deny("A WhatsApp number is 10 digits", 400)
+
+    # Rejected loudly rather than stored hopefully. A wrong GST number on every receipt is
+    # a compliance problem discovered by somebody else, months later.
+    gstin, bad = gst.check(req.gstin)
+    if bad:
+        return deny(bad, 400)
+
+    error = await db.update_shop(c["shop"], name, vpa, lang, wa_number=wa, gstin=gstin)
+    return JSONResponse({"ok": not error, "error": error, "name": name, "lang": lang,
+                         "vpa": vpa, "wa_number": wa, "gstin": gstin,
+                         "gst_state": gst.state_of(gstin)},
                         status_code=200 if not error else 502)
 
 

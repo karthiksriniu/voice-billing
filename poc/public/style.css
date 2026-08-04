@@ -707,3 +707,10 @@ button.busy,button.busy:disabled{opacity:1}
   button:not(:disabled):active{transform:none;filter:brightness(.9)}
   button.busy::after{animation-duration:1.6s}
 }
+
+.opt{
+  font-style:normal;margin-left:var(--space-2);padding:1px var(--space-2);
+  border-radius:var(--radius-full);background:var(--color-surface-container-high);
+  color:var(--color-on-surface-variant);
+  font-size:var(--type-label-medium-size);letter-spacing:var(--type-label-medium-tracking);
+}

@@ -943,6 +943,9 @@ async function loadSettings() {
   if (!j.ok) { toast(j.error || t("signInRequired"), 3500); return; }
   $("setName").value = j.name || "";
   $("setVpa").value = j.vpa || "";
+  $("setWa").value = j.wa_number || "";
+  $("setGstin").value = j.gstin || "";
+  $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   $("setLang").value = j.lang;
   $("setMobile").textContent = `${t("signedInAs")} ${j.mobile}`;
   // A stored value that isn't a language code is what broke dictation for a shop whose
@@ -957,14 +960,22 @@ $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   const j = await api("/api/settings", {
     method: "POST",
     body: { name: $("setName").value.trim(), lang: $("setLang").value,
-            vpa: $("setVpa").value.trim() },
+            vpa: $("setVpa").value.trim(),
+            wa_number: digits($("setWa").value),
+            gstin: $("setGstin").value.trim().toUpperCase() },
   });
-  if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
+  // The GST number is checked to its last character before it is stored, so a rejection
+  // here is a real one and worth showing on the field rather than in a passing toast.
+  if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4500); return; }
   // Apply immediately: language drives the interface, the parser pack and the ASR locale,
   // so it must take effect on the very next utterance rather than at the next sign-in.
   state.shop.name = j.name;
   state.shop.lang = j.lang;
   state.shop.vpa = j.vpa;
+  state.shop.wa_number = j.wa_number;
+  state.shop.gstin = j.gstin;
+  $("setGstin").value = j.gstin || "";
+  $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   setLang(j.lang);
   applyStrings();
   $("shopLabel").textContent = j.name;

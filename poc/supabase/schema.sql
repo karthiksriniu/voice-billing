@@ -27,6 +27,15 @@ create table if not exists shops (
 -- convenience, not security — see api/_lib/auth.py for what that does and does not buy.
 alter table shops add column if not exists passcode_hash text not null default '';
 
+-- The number receipts are sent FROM, and the registration they are issued under.
+-- `wa_number` is the shop's WhatsApp Business line — not the sign-in mobile, which is only
+-- an identifier and is often a personal number.
+-- `gstin` is optional and stays optional: most tier-1 paper-billing shops are under the
+-- registration threshold, and a receipt that invents a GST number is a worse document than
+-- one that has none.
+alter table shops add column if not exists wa_number text not null default '';
+alter table shops add column if not exists gstin     text not null default '';
+
 -- Owner vs staff. The owner sees the billing/admin switch; staff only ever bill.
 create table if not exists staff (
   id             text primary key,          -- '<shop_id>:<mobile>'
