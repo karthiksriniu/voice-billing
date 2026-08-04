@@ -23,6 +23,7 @@ const state = {
   token: "", shop: { id: "", name: "", vpa: "", lang: "en" }, role: "user",
   items: [], mode: "billing", bill: null,
   askingPrice: null, proposal: null, queue: [],
+  customer: "", history: [],
   expanded: false, products: [],
 };
 
@@ -317,6 +318,10 @@ function apply(data, roundTripMs) {
     toast(`${skipped} — ${t("noPriceSkipped")}`, 3200);
   }
 
+  // A customer number opens the bill against that person. Handled before items so one
+  // utterance can carry both: "phone number 98400 12345, two kilo sugar".
+  if (data.customer_mobile) setCustomer(data.customer_mobile);
+
   if (data.admin && data.admin.length) { queueChanges(data.admin); return; }
   if (state.mode === "admin") {
     toast(t("sayItemPrice"));
@@ -371,6 +376,70 @@ function addOrUpdate(line) {
   state.items[i] = line;
   if (was !== line.amount) toast(`${line.name} — ${t("updated")} ${rupees(line.amount)}`);
   return true;
+}
+
+/* ---------- customer + repeat-order history ---------- */
+
+async function setCustomer(mobile) {
+  state.customer = mobile;
+  $("shopLabel").innerHTML = `${state.shop.name}<span class="custtag">${mobile}</span>`;
+  try {
+    const j = await api(
+      `/api/history?shop_id=${encodeURIComponent(state.shop.id)}` +
+      `&mobile=${encodeURIComponent(mobile)}&limit=5`);
+    state.history = (j.bills || []).filter((b) => (b.items || []).length);
+  } catch (err) { state.history = []; }
+  renderHistory();
+}
+
+function clearCustomer() {
+  state.customer = "";
+  state.history = [];
+  $("shopLabel").textContent = state.shop.name;
+  renderHistory();
+}
+
+/* "Last" for the most recent, dd-mmm before that. The date is only a memory cue, so the
+   year is left off — it would cost width and tell the shopkeeper nothing. */
+function chipLabel(bill, index) {
+  if (index === 0) return t("lastVisit");
+  const d = new Date(bill.created_at);
+  if (isNaN(d)) return "-";
+  const mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+  return `${String(d.getDate()).padStart(2, "0")}-${mon}`;
+}
+
+function renderHistory() {
+  const row = $("histRow");
+  if (!state.customer || !state.history.length) { row.hidden = true; row.innerHTML = ""; return; }
+  row.hidden = false;
+  row.innerHTML = state.history.slice(0, 5).map((b, i) =>
+    `<button class="chip${i === 0 ? " last" : ""}" data-hist="${i}">${chipLabel(b, i)}
+       <small>${b.items.length} - ${rupees(b.total)}</small></button>`).join("");
+  row.querySelectorAll("[data-hist]").forEach((el) => {
+    el.onclick = () => repeatBill(state.history[+el.dataset.hist]);
+  });
+}
+
+/* Tapping a chip puts that basket back on the bill, priced from the catalog as it is
+   today rather than as it was then. Billing last month's price would be wrong, and
+   silently so — which is the one kind of error this product cannot afford. */
+function repeatBill(bill) {
+  if (!bill) return;
+  let added = 0;
+  for (const it of bill.items || []) {
+    if (!it.name || it.amount == null) continue;
+    const current = state.products.find((p) => p.id === it.product_id);
+    const unitPrice = current ? current.unit_price : it.unit_price;
+    const qty = it.qty || 1;
+    addOrUpdate({
+      ...it, unit_price: unitPrice,
+      amount: +(it.price_led ? it.amount : qty * unitPrice).toFixed(2),
+      pending: false, needs_price: false,
+    });
+    added++;
+  }
+  if (added) { toast(`${added} ${t("added")}`); render(); }
 }
 
 /* ---------- learning a price (D4) ---------- */
@@ -798,6 +867,8 @@ async function finalize() {
               vpa: state.shop.vpa, payee: state.shop.name },
     });
     state.bill = d;
+    /* Already identified by voice at the start of the bill: no reason to ask again. */
+    if (state.customer) $("custMobile").value = state.customer;
     $("payAmount").textContent = rupees(d.total);
     $("paidAmount").textContent = rupees(d.total);
     $("qr").src = d.qr;
@@ -855,6 +926,7 @@ function newBill() {
   state.items = [];
   state.bill = null;
   $("custMobile").value = "";
+  clearCustomer();
   state.askingPrice = null;
   state.proposal = null;
   state.expanded = false;

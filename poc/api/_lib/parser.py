@@ -64,6 +64,8 @@ class ParseResult:
     number: float | None = None     # utterance was just a number — an answer to "what price?"
     match_score: float = 0.0        # strength of the best catalog match, for admin decisions
     unmatched: list[dict] = field(default_factory=list)   # named, priced, but not in catalog
+    customer_mobile: str = ""       # "phone number 98400 12345" — opens the bill against a
+                                    # customer so their history can be pulled up
 
 
 class Lang:
@@ -100,6 +102,8 @@ class Lang:
             norm(a): cmd for cmd, al in self.data["commands"].items() for a in al
         }
         self.join = {norm(a) for a in self.data.get("join", [])}
+        self.customer_trigger = sorted(
+            (norm(a) for a in self.data.get("customer_trigger", [])), key=len, reverse=True)
 
     @staticmethod
     def _reverse(table: dict, cast) -> dict:
@@ -233,6 +237,12 @@ class Parser:
             return res
 
         # Longest phrase first, so "billing mode" is not shadowed by a shorter alias.
+        # A customer number is read before anything else: it is not an item, and leaving
+        # its digits in the text would have the grammar bill ten kilos of something.
+        text, res.customer_mobile = self._take_customer(text)
+        if res.customer_mobile and not text.strip():
+            return res
+
         for phrase in sorted(self.lang.modes, key=len, reverse=True):
             if find_phrase(text, phrase):
                 res.mode_switch = self.lang.modes[phrase]
@@ -280,6 +290,38 @@ class Parser:
             elif chunk.strip():
                 res.unparsed.append(chunk.strip())
         return res
+
+    def _take_customer(self, text: str) -> tuple[str, str]:
+        """Pull "phone number 98400 12345" out of the utterance, returning the rest.
+
+        Requires the trigger *and* ten digits: "number" is also the unit alias for pieces,
+        so a bare mention must never open a customer. Digits are concatenated because ASR
+        groups them ("98400 12345") and, being spoken aloud, they can also arrive as
+        separate words. The digits must be removed from the text — left in place, the
+        grammar would happily bill ten kilos of something.
+        """
+        for phrase in self.lang.customer_trigger:
+            if not find_phrase(text, phrase):
+                continue
+            before, after = f" {text} ".split(f" {phrase} ", 1)
+            toks, digits, used = after.split(), "", 0
+            for i, tok in enumerate(toks):
+                if tok.isdigit():
+                    digits += tok
+                else:
+                    val = self._value(tok)
+                    if val is None or not float(val).is_integer() or not 0 <= val <= 9:
+                        break
+                    digits += str(int(val))
+                used = i + 1
+                if len(digits) >= 10:
+                    break
+            if len(digits) < 10:
+                continue
+            mobile = digits[2:12] if digits.startswith("91") and len(digits) >= 12 else digits[-10:]
+            rest = (before + " " + " ".join(toks[used:])).strip()
+            return rest, mobile
+        return text, ""
 
     def _has_join(self, chunk: str) -> bool:
         return any(f" {j} " in f" {chunk} " for j in self.lang.join)

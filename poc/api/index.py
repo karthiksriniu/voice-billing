@@ -253,6 +253,7 @@ def result_payload(res, took_ms: int, mode: str = "billing") -> dict:
         # starting empty this is the common case, and dropping it server-side is what made
         # billing look deaf: perfect transcript, no line, no reason given.
         "unmatched": res.unmatched,
+        "customer_mobile": res.customer_mobile,
         "number": res.number,
         "took_ms": took_ms,
     }
@@ -442,6 +443,20 @@ async def settings_set(req: SettingsRequest, request: Request):
     return JSONResponse({"ok": not error, "error": error,
                          "name": name, "lang": lang, "vpa": vpa},
                         status_code=200 if not error else 502)
+
+
+@router.get("/history")
+async def history(shop_id: str = DEFAULT_SHOP, mobile: str = "", limit: int = 5):
+    """The last few bills for one customer at this shop, for the repeat-order chips."""
+    mobile = db.shop_key(mobile) if mobile else ""
+    if len(mobile) != 10:
+        return {"ok": True, "bills": []}
+    rows = await db.customer_bills(shop_id, mobile, max(1, min(limit, 10)))
+    return {"ok": True, "mobile": mobile, "bills": [
+        {"id": r.get("id"), "total": float(r.get("total") or 0),
+         "created_at": r.get("created_at"),
+         "items": [i for i in (r.get("items") or []) if i.get("name")]}
+        for r in rows]}
 
 
 @router.get("/shops")

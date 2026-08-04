@@ -697,5 +697,13 @@
     "பிளஸ்",
     "కలిపి",
     "మరియు"
+  ],
+  "_comment_customer": "Opens a bill against a customer: 'phone number 98400 12345'. Bare 'number' is listed but only fires when 10+ digits follow, because 'number' is also a unit alias for pieces.",
+  "customer_trigger": [
+    "mobile number",
+    "phone number",
+    "నంబర్",
+    "ఫోన్ నంబర్",
+    "మొబైల్ నంబర్"
   ]
 }

@@ -199,6 +199,21 @@ NOT_COMBOS = [
 ]
 
 
+# "phone number 98400 12345" opens a bill against a customer. Needs the trigger AND ten
+# digits, because "number" is also the unit alias for pieces — and the digits must be
+# consumed, or the grammar bills ten kilos of whatever follows.
+CUSTOMER = [
+    ("phone number 9840012345",                    "9840012345", 0),
+    ("phone number 98400 12345",                   "9840012345", 0),
+    ("mobile number 9840012345 two kilo sugar",    "9840012345", 1),
+    ("போன் நம்பர் 9840012345",                      "9840012345", 0),
+    ("phone number 919840012345",                  "9840012345", 0),
+    ("phone number 98400",                         "",           0),   # too few digits
+    ("one number biscuit",                         "",           1),   # unit, not a customer
+    ("two kilo sugar",                             "",           1),
+]
+
+
 def run():
     passed = failed = 0
 
@@ -301,6 +316,14 @@ def run():
         items = cp.parse(text, mode="billing").items
         check(text, len(items) == 2 and not any(i.combo for i in items),
               f"-> {len(items)} lines, combos={[bool(i.combo) for i in items]}")
+
+    print("customer number opens a bill")
+    for text, want_mobile, want_items in CUSTOMER:
+        r = P.parse(text)
+        check(text, r.customer_mobile == want_mobile,
+              f"-> mobile {r.customer_mobile!r} (want {want_mobile!r})")
+        check(text, len(r.items) == want_items,
+              f"-> {len(r.items)} items (want {want_items})")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:

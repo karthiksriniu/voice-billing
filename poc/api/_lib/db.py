@@ -388,3 +388,22 @@ async def update_shop(shop_id: str, name: str, vpa: str, lang: str) -> str:
         return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
     except Exception as exc:                           # noqa: BLE001
         return f"{type(exc).__name__}: {exc}"
+
+
+async def customer_bills(shop_id: str, mobile: str, limit: int = 5) -> list[dict]:
+    """This customer's most recent bills, newest first. Scoped to the shop: one customer's
+    history at one shop is that shop's own record, and must not leak across businesses."""
+    if not configured() or not mobile:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(
+                f"{SUPABASE_URL}/rest/v1/bills",
+                headers=_headers(),
+                params={"shop_id": f"eq.{shop_id}", "customer_mobile": f"eq.{mobile}",
+                        "select": "id,total,items,created_at",
+                        "order": "created_at.desc", "limit": str(limit)},
+            )
+        return r.json() if r.status_code < 400 else []
+    except Exception:                                  # noqa: BLE001
+        return []

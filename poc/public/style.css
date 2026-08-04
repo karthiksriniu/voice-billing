@@ -275,3 +275,23 @@ button{font-family:inherit;cursor:pointer;border:none}
 .primary.ghostly{background:none;border:1px solid var(--line);color:var(--ink);max-width:420px}
 .primary.ghostly:active{background:var(--panel)}
 .thanks{font-size:27px;font-weight:800;line-height:1.25;max-width:16ch;margin:2px 0 6px}
+
+/* Repeat-order chips: one tap puts a past basket back on the bill. Scrolls sideways rather
+   than wrapping, so the row never pushes the item list down the screen. */
+.chips{
+  display:flex;gap:8px;padding:10px 12px 2px;overflow-x:auto;flex:none;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  border-radius:20px;padding:9px 14px;font-size:14px;font-weight:600;
+  white-space:nowrap;text-align:left;
+}
+.chip:active{background:#1b2430}
+.chip.last{border-color:var(--go);color:#8fe0ac}
+.chip small{display:block;font-weight:500;font-size:12px;color:var(--dim);margin-top:1px}
+.custtag{
+  display:inline-block;margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.06em;
+  background:#17361f;color:#4ad07d;padding:3px 8px;border-radius:20px;vertical-align:middle;
+}

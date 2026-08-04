@@ -85,6 +85,11 @@ create index if not exists bills_shop_time on bills (shop_id, created_at desc);
 alter table bills add column if not exists customer_mobile text default '';
 alter table bills add column if not exists receipt_status  text not null default 'none';
 
+-- Repeat-order history: "phone number 98400 12345" at the start of a bill pulls this
+-- customer's last few purchases. Scoped by shop, newest first.
+create index if not exists bills_customer
+  on bills (shop_id, customer_mobile, created_at desc);
+
 -- Transcripts only. Never audio (D9). `was_corrected` marks the utterances worth the most
 -- to Phase 1: the shopkeeper has already looked at them and told us the truth.
 create table if not exists utterances (

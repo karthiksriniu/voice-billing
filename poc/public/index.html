@@ -78,6 +78,9 @@
 
   <!-- BILLING -->
   <div id="billPanel" class="panel">
+    <!-- Repeat-order chips. Visible only when a customer number was given AND this shop has
+         history for them, so an anonymous sale looks exactly as it does today. -->
+    <div id="histRow" class="chips" hidden></div>
     <button id="accHead" class="acc" hidden>
       <span class="accsum"><b id="accCount">0 items</b><span id="accLast"></span></span>
       <span class="accright"><b id="accTotal">₹0</b><span id="accChev">⌄</span></span>
