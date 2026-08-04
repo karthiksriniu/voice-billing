@@ -1,26 +1,56 @@
 #!/usr/bin/env bash
 # Wrapper so node/vercel are on PATH without touching your shell profile.
-# Usage:  ./vaakku dev            run locally on :8077
-#         ./vaakku deploy         deploy to production
-#         ./vaakku env            add the API keys (prompts; nothing is echoed)
-#         ./vaakku test           run the parser fixtures
-#         ./vaakku login          authenticate the GitHub CLI (one time, interactive)
+#
+#   ./bolo dev        run locally on :8077
+#   ./bolo staging    deploy this branch to bolo-bill-staging.vercel.app
+#   ./bolo deploy     deploy to production (main branch only)
+#   ./bolo env        add the API keys (prompts; nothing is echoed)
+#   ./bolo test       run the parser fixtures
+#   ./bolo login      authenticate the GitHub CLI (one time, interactive)
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$PWD/.tools/node/bin:$PWD/.tools/gh/bin:$PATH"
 
+branch() { git rev-parse --abbrev-ref HEAD; }
+
 case "${1:-dev}" in
   dev)    exec .venv/bin/uvicorn api.index:app --reload --host 0.0.0.0 --port 8077 ;;
-  deploy) exec vercel deploy --prod --yes ;;
-  test)   exec python3 tests/test_parser.py ;;
+
+  staging)
+    ./stamp.sh
+    url="$(vercel deploy --yes | tail -1 | tr -d '[:space:]')"
+    echo "deployed $url"
+    vercel alias set "$url" bolo-bill-staging.vercel.app
+    echo "staging is https://bolo-bill-staging.vercel.app"
+    ;;
+
+  deploy)
+    # Production is deployed from main and nowhere else. Shipping a half-finished branch
+    # to the shops is a single mistyped word away otherwise, and there is no undo that the
+    # shopkeeper does not see.
+    if [ "$(branch)" != "main" ]; then
+      echo "On $(branch), not main. Merge to main first, or use: ./bolo staging" >&2
+      exit 1
+    fi
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "Uncommitted changes. Production deploys only what is in git." >&2
+      exit 1
+    fi
+    ./stamp.sh
+    exec vercel deploy --prod --yes
+    ;;
+
   env)
     echo "Paste each value at the prompt. Nothing is written to shell history."
+    echo "Choose the environments when asked — Preview too, if staging should be usable."
     for v in SARVAM_API_KEY SUPABASE_URL SUPABASE_SERVICE_KEY; do
       echo "--- $v ---"
-      vercel env add "$v" production || true
+      vercel env add "$v" || true
     done
-    echo "Now redeploy so the new values take effect:  ./vaakku deploy"
+    echo "Then redeploy:  ./bolo deploy   (and/or)   ./bolo staging"
     ;;
+
+  test)   exec .venv/bin/python tests/test_parser.py ;;
   login)  exec gh auth login ;;
-  *) echo "usage: ./vaakku {dev|deploy|env|test|login}"; exit 1 ;;
+  *) echo "usage: ./bolo {dev|staging|deploy|env|test|login}"; exit 1 ;;
 esac
