@@ -611,6 +611,7 @@ async def finalize(req: FinalizeRequest):
         "upi_uri": uri, "qr": qr_data_uri(uri),
         "receipt_no": number, "receipt": doc,
         "receipt_text": receipts.as_text(doc),
+        "receipt_message": receipts.as_whatsapp(doc),
         # Stated plainly because the demo must not imply we detect payment (D5).
         "confirmation": "manual",
     }

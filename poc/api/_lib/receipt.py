@@ -158,6 +158,12 @@ def _wrap(text: str) -> list[str]:
     return out
 
 
+# A wa.me link carries its message in the URL, and Android's intent handler quietly drops
+# one that grows too long — the tap appears to do nothing at all. A bill of forty items
+# would get there, so a long one is summarised rather than truncated mid-word.
+WA_MAX = 1200
+
+
 def as_whatsapp(doc: dict) -> str:
     """The same document as a message. WhatsApp has no monospace in the compose field that
     survives every client, so this is written as prose rather than as columns that would
@@ -168,6 +174,8 @@ def as_whatsapp(doc: dict) -> str:
     for it in doc["items"]:
         qty = f"{it['qty']:g} {it['unit']}".strip()
         lines.append(f"{it['name']} — {qty} — ₹{rupees(it['amount'])}")
+    if sum(len(x) for x in lines) > WA_MAX:
+        lines = lines[:4] + [f"{len(doc['items'])} items"]
     lines += ["", f"*Total ₹{rupees(doc['total'])}*"]
     if doc["shop"].get("gstin"):
         lines.append(f"GSTIN {doc['shop']['gstin']}")

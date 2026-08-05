@@ -1147,6 +1147,10 @@ async function finalize() {
               customer_mobile: state.customer || "" },
     });
     state.bill = d;
+    // Held from the finalise response, not fetched on demand. Opening WhatsApp has to
+    // happen in the same tick as the tap, and anything awaited first ends the gesture —
+    // which is exactly why the button appeared to do nothing.
+    state.doc = { receipt: d.receipt, text: d.receipt_text, message: d.receipt_message };
     /* Already identified by voice at the start of the bill: no reason to ask again. */
     if (state.customer) $("custMobile").value = state.customer;
     $("payAmount").textContent = rupees(d.total);
@@ -1198,11 +1202,16 @@ function showThanks(result) {
 }
 $("thanksTap").onclick = () => { clearTimeout(thanksTimer); newBill(); };
 
-$("sendReceipt").onclick = () => withBusy($("sendReceipt"), async () => {
+/* The button said Send receipt and sent nothing — it recorded the number and moved on.
+   WhatsApp opens first, in the same tick as the tap, because that is the only moment the
+   browser will allow it; the sale is then closed behind it. If WhatsApp cannot be opened
+   the number is still recorded, so the sale is never lost to a failed hand-off. */
+$("sendReceipt").onclick = () => {
   const mobile = digits($("custMobile").value);
   if (mobile.length < 10) { toast(t("noNumber"), 3200); $("custMobile").focus(); return; }
-  await closeSale(mobile);
-});
+  openWhatsApp(mobile);
+  withBusy($("sendReceipt"), () => closeSale(mobile));
+};
 
 $("nextSale").onclick = () => withBusy($("nextSale"), () => closeSale(""));
 
@@ -1242,16 +1251,31 @@ $("docPrint").onclick = () => window.print();
    one tap rather than none, and it works for every shop on day one — which the Business
    API does not, needing verification, an approved template and a per-message fee. */
 function waLink(mobile) {
-  if (!state.doc) return "";
+  const msg = (state.doc && state.doc.message) || "";
+  if (!msg) return "";
   const to = digits(mobile || "");
-  const text = encodeURIComponent(state.doc.message);
+  const text = encodeURIComponent(msg);
   return to.length === 10 ? `https://wa.me/91${to}?text=${text}` : `https://wa.me/?text=${text}`;
 }
-$("waShare").onclick = async () => {
-  if (!state.doc) await openDoc();
-  window.open(waLink($("custMobile").value), "_blank", "noopener");
-};
-$("docWa").onclick = () => window.open(waLink($("custMobile").value), "_blank", "noopener");
+
+/* Navigating by clicking a real anchor rather than calling window.open(): a popup opened
+   from script is blocked on mobile unless the browser can see it came straight from a tap,
+   and "straight from" does not survive an await. Nothing is awaited on this path now, but
+   the anchor is the belt to that braces. */
+function openWhatsApp(mobile) {
+  const href = waLink(mobile);
+  if (!href) { toast(t("noBillYet"), 3000, true); return false; }
+  const a = document.createElement("a");
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  return true;
+}
+$("waShare").onclick = () => openWhatsApp($("custMobile").value);
+$("docWa").onclick = () => openWhatsApp($("custMobile").value);
 
 $("docBt").onclick = () => withBusy($("docBt"), async () => {
   if (!state.doc) return;
