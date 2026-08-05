@@ -542,6 +542,18 @@
       "ಕ್ಯಾಶ್ ಪೇಯ್ಡ್",
       "ಕ್ಯಾಶ್ ರಿಸೀವ್ಡ್",
       "ನಗದು ಬಂತು"
+    ],
+    "send_receipt": [
+      "receipt kalisi",
+      "send bill",
+      "send receipt",
+      "send the bill",
+      "send the receipt",
+      "share receipt",
+      "whatsapp receipt",
+      "ಬಿಲ್ ಕಳಿಸಿ",
+      "ರಸೀದಿ ಕಳಿಸಿ",
+      "ಸೆಂಡ್ ರಸೀದಿ"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

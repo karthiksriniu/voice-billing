@@ -451,6 +451,7 @@ function apply(data, roundTripMs) {
     // fall through: "bill me one filter coffee" starts the bill AND fills it
   }
   if (data.command === "cash_paid") { cashReceived(); return; }
+  if (data.command === "send_receipt") { sendReceiptByVoice(data.customer_mobile); return; }
   if (data.command === "add_item") { addItemByVoice(data); return; }
 
   if (data.command === "cancel_last" && state.items.length) {
@@ -1262,9 +1263,18 @@ function waLink(mobile) {
    from script is blocked on mobile unless the browser can see it came straight from a tap,
    and "straight from" does not survive an await. Nothing is awaited on this path now, but
    the anchor is the belt to that braces. */
-function openWhatsApp(mobile) {
+function openWhatsApp(mobile, spoken) {
   const href = waLink(mobile);
   if (!href) { toast(t("noBillYet"), 3000, true); return false; }
+  if (spoken) {
+    // A voice command is not a tap, and a browser will not open a second tab for one —
+    // an anchor click without a gesture behind it is blocked exactly like a popup. So the
+    // spoken path navigates this tab instead, which is never blocked. The session is in
+    // localStorage, so coming back from WhatsApp lands on a signed-in app rather than a
+    // sign-in screen.
+    window.location.href = href;
+    return true;
+  }
   const a = document.createElement("a");
   a.href = href;
   a.target = "_blank";
@@ -1273,6 +1283,28 @@ function openWhatsApp(mobile) {
   a.click();
   a.remove();
   return true;
+}
+
+/* "Chitti, send receipt" — and if the customer was never named, "Chitti, phone number
+   98400 12345, send receipt" in one breath. The number is taken from whichever of those
+   the shopkeeper actually gave: the one just spoken, the one that opened the bill, or the
+   one the customer typed on the payment screen.
+
+   The sale is recorded BEFORE the hand-off, not after. The spoken path leaves this page,
+   and a request in flight when that happens does not necessarily arrive. */
+async function sendReceiptByVoice(spokenMobile) {
+  if (!state.bill) { speak(t("noBillYet")); return; }
+  const mobile = digits(spokenMobile || state.customer || $("custMobile").value || "");
+  if (mobile.length !== 10) { speak(t("needNumberToSend")); return; }
+  $("custMobile").value = mobile;
+  speak(`${t("sendingTo")} ${mobile}`);
+  try {
+    await api("/api/receipt", {
+      method: "POST",
+      body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, mobile },
+    });
+  } catch (err) { /* the hand-off still goes ahead; the record can catch up */ }
+  openWhatsApp(mobile, true);
 }
 $("waShare").onclick = () => openWhatsApp($("custMobile").value);
 $("docWa").onclick = () => openWhatsApp($("custMobile").value);

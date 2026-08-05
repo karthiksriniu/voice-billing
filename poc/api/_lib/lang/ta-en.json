@@ -506,6 +506,21 @@
       "கேஷ் ரிசீவ்",
       "கேஷ் ரிசீவ்ட்",
       "பணம் வந்தது"
+    ],
+    "send_receipt": [
+      "bill anuppu",
+      "rasidhu anuppu",
+      "send bill",
+      "send receipt",
+      "send the bill",
+      "send the receipt",
+      "share receipt",
+      "whatsapp receipt",
+      "செண்ட் ரசீட்",
+      "செண்ட் ரிசீட்",
+      "பில் அனுப்பு",
+      "ரசீது அனுப்பு",
+      "ரிசீட் அனுப்பு"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

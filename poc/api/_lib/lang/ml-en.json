@@ -572,6 +572,18 @@
       "ക്യാഷ് കിട്ടി",
       "ക്യാഷ് പെയ്ഡ്",
       "പണം കിട്ടി"
+    ],
+    "send_receipt": [
+      "receipt ayakku",
+      "send bill",
+      "send receipt",
+      "send the bill",
+      "send the receipt",
+      "share receipt",
+      "whatsapp receipt",
+      "ബിൽ അയക്കൂ",
+      "രസീത് അയക്കൂ",
+      "സെൻഡ് റസീറ്റ്"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

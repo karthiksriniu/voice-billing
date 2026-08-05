@@ -563,6 +563,18 @@
       "कैश मिला",
       "कैश रिसीव्ड",
       "नकद मिला"
+    ],
+    "send_receipt": [
+      "receipt bhejo",
+      "send bill",
+      "send receipt",
+      "send the bill",
+      "send the receipt",
+      "share receipt",
+      "whatsapp receipt",
+      "बिल भेजो",
+      "रसीद भेजो",
+      "सेंड रसीद"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",
