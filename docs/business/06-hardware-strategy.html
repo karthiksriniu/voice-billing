@@ -1,0 +1,86 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<h1>Hardware strategy</h1>
+<p class="sub">We do not make hardware, hold stock, or warrant anyone else's. This note sets out what that buys,
+what it costs us, and what we are honestly accepting in exchange.</p>
+
+<h2>The cost comparison, stated so it survives being checked</h2>
+<table>
+<tr><th style="width:34%">Approach</th><th style="width:34%">Components</th><th style="width:20%">Cost</th><th>Note</th></tr>
+<tr><td rowspan="3"><b>Dedicated terminal</b><br>(the incumbent model)</td><td>Android/Windows POS terminal</td><td>₹52,990 – 92,190</td><td rowspan="3">The stack WeP quotes for a serious counter</td></tr>
+<tr><td>Billing printer</td><td>₹15,490 – 25,190</td></tr>
+<tr><td>Barcode scanner</td><td>~₹4,500</td></tr>
+<tr style="background:#fdf0f0"><td colspan="2"><b>Total dedicated stack</b></td><td><b>₹70,000 – 1,20,000+</b></td><td></td></tr>
+
+<tr><td rowspan="3"><b>Entry billing machine</b><br><b>← the honest denominator</b></td><td>WeP BP Joy Pro</td><td>₹9,990</td><td rowspan="3"><b>This is what a single-counter shop is actually offered</b>, and what our comparison must beat</td></tr>
+<tr><td>WeP BP Joy Plus / BP 2000</td><td>₹11,999 – 13,500</td></tr>
+<tr><td>WeP BP 2100</td><td>₹25,500</td></tr>
+
+<tr><td rowspan="3"><b>Bolo Bill</b></td><td>Android phone — usually already owned</td><td>₹0 (or ₹10–15k)</td><td rowspan="3">Camera does the scanning; no scanner to buy</td></tr>
+<tr><td>Bluetooth thermal printer</td><td>₹2,500 – 6,000</td></tr>
+<tr><td>Barcode scanning (software)</td><td>₹0</td></tr>
+<tr class="us"><td colspan="2"><b>Total incremental spend</b></td><td><b>₹0 – 6,000</b></td><td>₹0 where a printer already exists</td></tr>
+</table>
+
+<div class="flag"><b>Use the second comparison, not the first.</b> Against the ₹70k–1.2L terminal stack the saving
+is 92–100% and sounds too good to be true — because for a one-counter shop it is: nobody was selling them that.
+Against the ₹9,990 billing machine the saving is <b>40–100%</b>, and it is unarguable. The weaker-sounding number
+is the stronger claim, because it is the one that holds when an investor opens wepmyshop.com in the meeting.</div>
+
+<h2>What we are accepting in exchange — and what we do about it</h2>
+<table>
+<tr><th style="width:26%">Trade-off</th><th style="width:37%">The honest problem</th><th>Mitigation</th></tr>
+
+<tr><td><b>Durability</b></td><td>A consumer phone at a counter meets flour, oil, wet hands and a two-foot drop
+onto a stone floor. A purpose-built terminal is sealed and expects this.</td>
+<td>A ₹300 splash case in the curated kit. Beyond that we accept it: the phone is replaceable and the data is not
+on it. This is a genuine advantage of a device-agnostic design — a broken phone costs a phone, not a POS.</td></tr>
+
+<tr><td><b>Battery under load</b></td><td>Continuous mic plus screen-on billing through a lunch rush will flatten
+a mid-range phone in a few hours. On-device ASR increases this, not reduces it.</td>
+<td>A ₹200 counter charging stand in the kit and a documented expectation that the phone is on charge while
+billing. <span class="a">VALIDATE</span> real drain per hour — measurable, and not yet measured.</td></tr>
+
+<tr><td><b>BYOD and shared phones</b></td><td>The counter phone may be the owner's personal one. Staff billing on
+the owner's phone is awkward; staff billing on their own phone raises who-sees-what.</td>
+<td>Staff accounts with their own passcodes exist already, and staff cannot see or change prices. The unsolved
+part is a shop whose only phone leaves when the owner does — for those, the ₹10–15k second phone is a real cost
+and should be quoted as such rather than hidden.</td></tr>
+
+<tr><td><b>No single warranty</b></td><td>WeP sells one box with one number to call. We sell software and point
+at a printer somebody else made. When the printer fails, the shopkeeper's first call is to us.</td>
+<td><b>The hardest trade-off and the one most likely to cost us in support.</b> Curate <i>one</i> printer model we
+have tested, resold at near cost, so support answers one set of questions rather than fifty. Accept the support
+load as a real line in the cost model rather than assuming it away.</td></tr>
+
+<tr><td><b>Thermal print under sustained load</b></td><td>A ₹2,500 printer is not specified for hundreds of
+receipts a day; print heads fade and paper feeds jam.</td>
+<td>Honest tiering: the cheap printer suits Tier 1 volumes. Growing and Chain tiers should be quoted a ₹6,000+
+unit. Not a problem to solve, a specification to state.</td></tr>
+
+<tr><td><b>Bluetooth Classic</b></td><td>Most cheap ESC/POS printers speak Bluetooth Classic over SPP, which a
+browser cannot open at any price. The PoC can only reach BLE printers.</td>
+<td>Solved by the Android app, not by more browser work — a few lines against BluetoothSocket. Until then, printing
+goes through Android's own print service. This is a concrete reason the app is Phase 1, not a nice-to-have.</td></tr>
+</table>
+
+<h2>The kit — curated, not manufactured</h2>
+<p>One tested printer, a roll of paper, a splash case and a charging stand, sold as a "shop kit" at or near cost —
+around <b>₹3,500–4,500</b> <span class="a">VALIDATE</span>. It is an adoption lever and a support-cost control,
+not a revenue line. The moment it becomes a margin line we start carrying inventory, and carrying inventory is the
+thing this whole strategy exists to avoid.</p>
+<p>What we will not do: manufacture, hold stock, or private-label. A hardware business has different economics,
+different capital needs and a different investor. Saying so plainly in the deck is a feature — it is what makes a
+solo founder's capital efficiency credible rather than optimistic.</p>
+
+<h2>Why this is strategically load-bearing, not just cheap</h2>
+<p>The capex delta is the reason a shop can <b>try</b> us. A ₹9,990 machine is a decision that needs a spouse
+consulted and a week's thought; a free app on the phone in your hand is a decision made during a quiet hour. That
+difference is the entire top of our funnel, and it is why the pricing model must treat hardware capex as a
+customer-acquisition variable rather than a footnote.</p>
+<p>It is also the reason we can lose gracefully. A shop that stops paying keeps its phone and its printer and has
+lost nothing — which makes trying us nearly free, and that asymmetry is worth more at this stage than the
+switching cost we would gain by locking them into a box.</p>
+
+<p class="meta">Bolo Bill · Hardware strategy · WeP pricing spot-checked against public listings, August 2026 ·
+kit pricing and battery figures <span class="a">VALIDATE</span> before quoting</p>

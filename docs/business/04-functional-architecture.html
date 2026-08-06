@@ -1,0 +1,71 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<h1>Functional architecture</h1>
+<p class="sub">Nine verticals, sequenced — not designed as if they ship together. Status is against the working
+system, not the roadmap.</p>
+
+<div class="good"><b>The organising principle, in the founder's words.</b> A doctor should be looking at the
+patient, not the screen; a retailer should be looking at the customer, not the gadget. Every module below is
+judged by whether it takes attention <i>away</i> from the counter. That is why voice is the interaction model
+rather than a feature, and why the analytics layer is <b>not</b> a dashboard — a shop owner who has neither the
+time nor the training to read one currently outsources understanding of their own business to an auditor once a
+quarter. Being able to <i>ask</i> the shop a question, in their own language, is the same idea as billing by
+voice: remove the interface between the owner and their own trade.</div>
+
+<div class="layer"><div class="lh">INTERACTION — the only layer the shopkeeper meets</div>
+<div class="mods">
+<div class="mod"><b>Wake word</b>"Hey Chitti" — hands stay on the goods<span class="st part">Unstable</span></div>
+<div class="mod"><b>Push-to-talk</b>Hold, speak, release. The fallback that always works<span class="st built">Built</span></div>
+<div class="mod"><b>Spoken confirmation</b>Totals and errors read aloud — nobody is watching the screen<span class="st built">Built</span></div>
+<div class="mod"><b>Touch / type</b>Never the default. Correction and edge cases only<span class="st built">Built</span></div>
+</div></div>
+
+<div class="layer"><div class="lh">DOMAIN MODULES — sequenced by tier</div>
+<div class="mods">
+<div class="mod"><b>1 · Voice billing core</b>Multi-item in one breath · confidence gate · price-led and quantity-led · combos<span class="st built">Built · T1</span></div>
+<div class="mod"><b>2 · Order management</b>Queues, modifiers, split/merge tickets. F&amp;B depth — deliberately deferred<span class="st none">Not built · T2</span></div>
+<div class="mod"><b>3 · Inventory &amp; replenishment</b>Schema exists; no deduction logic. Predictive reorder is T3<span class="st none">Not built · T2/T3</span></div>
+<div class="mod"><b>4 · Analytics &amp; insights</b>Ask in your own language. <b>Promoted to core</b> — see above<span class="st none">Not built · T1</span></div>
+<div class="mod"><b>5 · CRM &amp; loyalty</b>Customer identity by spoken number + repeat-basket recall built. Depth comes from RAGaaS<span class="st part">Partial · T1</span></div>
+<div class="mod"><b>6 · Payments</b>UPI deep link + exact-amount QR; cash settled on the shopkeeper's word. We never hold funds<span class="st built">Built · T1</span></div>
+<div class="mod"><b>7 · Compliance</b>Numbered Bill of Supply, gapless per FY. Tax invoice needs HSN + rate + scheme<span class="st part">Partial · T1</span></div>
+<div class="mod"><b>8 · Multi-store</b>HQ reporting and control<span class="st none">Not built · T2/T3</span></div>
+<div class="mod"><b>9 · Marketplace</b>ONDC, WhatsApp ordering, aggregators<span class="st none">Not built · T2</span></div>
+<div class="mod"><b>Receipt &amp; delivery</b>58mm thermal render, WhatsApp hand-off, print<span class="st part">Partial · T1</span></div>
+<div class="mod"><b>Catalog &amp; aliases</b>Voice SKU entry; per-shop spoken aliases — the compounding asset<span class="st built">Built · T1</span></div>
+</div></div>
+
+<div class="layer"><div class="lh">DATA — shop-partitioned throughout</div>
+<div class="mods">
+<div class="mod"><b>Catalog</b>SKUs, units, prices, aliases<span class="st built">Built</span></div>
+<div class="mod"><b>Bills &amp; receipts</b>Document stored as issued, not recomputed<span class="st built">Built</span></div>
+<div class="mod"><b>Utterance log</b>Transcripts only, never audio. Corrections flagged<span class="st built">Built</span></div>
+<div class="mod"><b>Local-first store</b>Offline billing. <b>The gating dependency</b><span class="st none">Not built</span></div>
+</div></div>
+
+<p class="lg"><span><i class="sw built" style="background:#d6f0ea"></i>Built and in use</span>
+<span><i class="sw part" style="background:#fdf0d5"></i>Partial</span>
+<span><i class="sw none" style="background:#eceff0"></i>Not built</span></p>
+
+<h2>What the status table actually says</h2>
+<p>Of nine verticals, <b>one is complete</b> (voice billing), three are partial, five are untouched. That is the
+correct shape for a pre-seed prototype and the deck should present it as deliberate sequencing rather than let it
+read as thin coverage. The sequencing logic is: <b>anything that does not serve a single counter on day one waits.</b></p>
+
+<h3>Two decisions worth defending</h3>
+<p><b>Analytics moves to Tier 1.</b> Conventional sequencing puts dashboards at Tier 2+. The founder's point
+inverts it: the owner who most needs to understand their own numbers is precisely the one who cannot read a
+dashboard and cannot afford a consultant. A natural-language question — <i>"how much did I sell of coffee powder
+last week"</i>, asked aloud in Tamil — costs almost nothing to build on top of a schema this small, and is a
+sharper differentiator than any feature Petpooja has. It is also the only module where an LLM clearly earns its
+place (see the technical note).</p>
+<p><b>Order management is deferred, not scheduled.</b> Modifiers, KDS and aggregator integration are where
+Petpooja has a decade of depth. Building toward them means competing on their ground with a tenth of the
+resources. The beachhead is provision and kirana counters, where order management is one line and a total.</p>
+
+<h3>Where RAGaaS attaches</h3>
+<p>VBS knows <b>what was sold and to whom</b>. RAGaaS knows <b>the conversation with that customer</b>. The join is
+the mobile number already captured at the counter — no new identity system, no new data model. That makes module 5
+an integration rather than a build, and it is the only reason a solo founder can credibly show a CRM story at all.</p>
+
+<p class="meta">Bolo Bill · Functional architecture · status verified against the running system, August 2026</p>

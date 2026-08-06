@@ -43,6 +43,7 @@ Numerals, units, aliases and phonetic rules are data files, not code.</div>
 <tr><td>It survives real ASR output, not clean text</td><td>Tested by generating Tamil/Hindi/Kannada speech and passing it through the live Sarvam endpoint. This found four <b>silent mispricing</b> classes that clean-text tests missed.</td></tr>
 <tr><td>Multi-item dictation works</td><td>4 items, mixed units, one breath, Tamil → 4 correct priced lines.</td></tr>
 <tr><td>Receipt numbering is gapless under load</td><td>8 simultaneous finalises → 8 distinct sequential numbers, no duplicates, no gaps.</td></tr>
+<tr><td><b>A real shop used it, and moved up the interaction ladder</b></td><td>Ragas Coffee ran ~50 bills in a week and <b>progressed from press-to-talk to the wake word within that week</b>. Small numbers, but the direction is the signal: given a hands-free option, the operator took it. That is the product thesis surviving one week of contact with a real counter.</td></tr>
 <tr><td>Six languages are genuinely configured</td><td>Numeral tables filled for all six; ~170 aliases added after discovering the non-Tamil packs were Tamil tables with a few native words sprinkled in.</td></tr>
 </table>
 <div class="good"><b>The silent-error work is the strongest technical signal.</b> Three real defects found and fixed:
@@ -54,7 +55,7 @@ discipline the product's core promise depends on.</div>
 <div class="bad"><b>These go in the deck's risk slide, not buried.</b> A diligence process finds them either way.</div>
 <table>
 <tr><th style="width:30%">Gap</th><th>Status</th></tr>
-<tr><td><b>Real-shop volume</b></td><td>Ragas Coffee (24 SKUs) is a genuine business and has used it. <span class="a">FILL IN</span> transaction count, period, and who operated it — owner or staff. Everything the deck can claim about adoption rests on this number.</td></tr>
+<tr><td><b>Real-shop volume</b></td><td><b>Ragas Coffee: ~50 bills over one week</b>, a genuine café with a 24-SKU catalog. Enough to prove the loop closes in a real shop; too few and too short to claim retention, or accuracy at a statistically useful confidence. <span class="a">VALIDATE</span> whether staff or owner operated it, and capture error rate — the app is not yet instrumented to report either.</td></tr>
 <tr><td><b>Unit cost — the central one</b></td><td>Target is ₹10/shop/month with <b>₹0 cloud inference</b>. The PoC calls a paid cloud ASR on every utterance. At ~24,000 utterances/shop/month this is the constraint the whole business model turns on, and it is <b>not met today</b>. <span class="a">VALIDATE</span> Sarvam per-second rate.</td></tr>
 <tr><td><b>Latency</b></td><td>Target p95 speech-end → line on screen is 1,150 ms. Measured ASR round trip is <b>~2,200 ms</b> plus parse. Not met. Cloud round trip is the cause; on-device ASR is the answer.</td></tr>
 <tr><td><b>Noisy environment</b></td><td>Only tested against a podcast played deliberately (background −45 dB vs voice −13 dB). Not tested in a real shop at 70–80 dB(A) with customers.</td></tr>
@@ -66,7 +67,7 @@ discipline the product's core promise depends on.</div>
 </table>
 
 <h2>5. What this baseline means for the raise</h2>
-<p><b>This is a working prototype with one live design partner, not a pilot with traction.</b> Positioned honestly
+<p><b>This is a working prototype with one week of real use at one design partner, not a pilot with traction.</b> Positioned honestly
 it is still a strong pre-seed artifact: six languages, a tested grammar, a real receipt series and a live URL, built
 solo. Positioned as traction it will not survive a technical diligence call.</p>
 <p>The two questions a competent investor asks first are the two in the register above: <i>what does an utterance
