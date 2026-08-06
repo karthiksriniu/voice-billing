@@ -1,0 +1,136 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<h1>Business Model Canvas — Bolo Bill</h1>
+<p class="sub">Tiers: <b>Single</b> (1 counter) · <b>Growing</b> (2–10) · <b>Chain</b> (10+). VBS is the wedge;
+RAGaaS supplies the CRM layer. Solo technical founder, self-funded.</p>
+
+<div class="canvas">
+  <div class="bx r2"><h4>Key partners</h4><ul>
+    <li><b>Sarvam AI</b> — ASR today. A dependency, not a partnership <span class="a">RISK</span></li>
+    <li>Thermal printer distributors — curated kit, resold at near cost</li>
+    <li>UPI PSPs — collection rails; we never hold funds</li>
+    <li>FMCG distributors — the van already visits weekly</li>
+    <li>ONDC / DigiDukaan — distribution, not just context</li>
+    <li>Android OEM/telco bundles <span class="a">VALIDATE</span></li>
+  </ul></div>
+
+  <div class="bx"><h4>Key activities</h4><ul>
+    <li>Driving cost per utterance toward zero — on-device ASR</li>
+    <li>Grammar + language packs (data, not code)</li>
+    <li>Offline-first rebuild on Android</li>
+    <li>Low-touch onboarding that survives no field force</li>
+    <li>Silent-error suppression as a standing discipline</li>
+  </ul></div>
+
+  <div class="bx r2"><h4>Value propositions</h4>
+    <p style="margin:0 0 1mm"><b>To the shop</b></p><ul>
+    <li><b>Speak instead of type.</b> Removes the literacy and typing-speed gate on who can staff a counter</li>
+    <li><b>Near-zero capex</b> — their phone + a ₹2.5–6k printer</li>
+    <li>Six languages, code-mixed, the way people actually speak</li>
+    <li>Learns the shop's own words for its own goods</li>
+    <li>Faster than paper, or it does not ship</li>
+    </ul><p style="margin:1.5mm 0 1mm"><b>To us</b></p><ul>
+    <li>No hardware to manufacture, stock or warranty</li>
+    <li>A correction corpus that compounds with every shop</li>
+  </ul></div>
+
+  <div class="bx"><h4>Customer relationships</h4><ul>
+    <li>Founder-led onboarding while it teaches us something</li>
+    <li>Then self-serve: install → first bill under 5 min</li>
+    <li>Support in the shop's own language, over WhatsApp</li>
+    <li>RAGaaS agent absorbs routine support</li>
+  </ul></div>
+
+  <div class="bx"><h4>Customer segments</h4><ul>
+    <li><b>Single</b> — one counter, &lt;200 SKU. Kirana, café, provision. <i>Ragas Coffee sits here</i></li>
+    <li><b>Growing</b> — 2–10 outlets, needs sync + CRM</li>
+    <li><b>Chain</b> — 10+, HQ reporting, replenishment</li>
+    <li style="margin-top:1mm"><b>Beachhead:</b> shops billing on paper today — not shops replacing a POS</li>
+  </ul></div>
+
+  <div class="bx"><h4>Key resources</h4><ul>
+    <li><b>Per-shop spoken-alias catalog</b> — the moat. Each shop teaches it their words; that data does not
+      transfer to a competitor and grows more valuable the longer they stay</li>
+    <li><b>Corrected-utterance corpus</b> (opt-in) — the training set for on-device ASR</li>
+    <li>The grammar + six language packs</li>
+    <li>Founder: builds and sells</li>
+  </ul></div>
+
+  <div class="bx"><h4>Channels</h4><ul>
+    <li>Design-partner referral inside one street/trade</li>
+    <li>Printer dealers &amp; local IT shops — they already sell to this buyer</li>
+    <li>FMCG distributor routes</li>
+    <li>WhatsApp-led onboarding</li>
+    <li>ONDC / DigiDukaan <span class="a">VALIDATE</span></li>
+  </ul></div>
+
+  <div class="bx cost"><h4>Cost structure</h4><ul>
+    <li><b>Cloud inference — the line that decides the business.</b> Today every utterance is a paid cloud ASR call.
+      Ceiling is ₹10/shop/month all-in. At ~24,000 utterances/shop/month this does not close on cloud ASR at any
+      plausible rate; on-device is not an optimisation, it is the business model <span class="a">VALIDATE</span></li>
+    <li>Onboarding &amp; support — the real cost at kirana ARPU; must stay near-zero-touch</li>
+    <li>Engineering (founder today; ASR/Android hire next)</li>
+    <li>Channel commissions · Deliberately zero hardware cost</li>
+  </ul></div>
+
+  <div class="bx rev"><h4>Revenue streams</h4><ul>
+    <li><b>Single</b> ₹199–299/mo <span class="a">VALIDATE</span></li>
+    <li><b>Growing</b> ₹1,499–2,999/mo — includes what Petpooja bills as add-ons</li>
+    <li><b>Chain</b> ₹7,500+/mo</li>
+    <li>Curated printer kit at near cost — adoption lever, not margin</li>
+    <li>Add-ons: replenishment, analytics, RAGaaS CRM</li>
+    <li>Aggregated insight to brands — opt-in, later, only if it never competes with the shop's own interest</li>
+  </ul></div>
+</div>
+
+<h2 class="pb">Block-by-block reasoning</h2>
+
+<h3>Customer segments — the beachhead is paper, not software</h3>
+<p>The sharpest framing is not "kirana stores". It is <b>shops that bill on paper today</b>. A shop already running
+Vyapar has absorbed the typing cost and has data to migrate; a shop with a calculator and a notebook has neither.
+Ragas Coffee — 24 SKUs, single counter — is the shape. Tier 1 must cover cafés and kirana alike, which is why the
+tier is named for its <i>counter count</i>, not its trade.</p>
+
+<h3>Value propositions — one claim is hard, the rest are projections</h3>
+<p>The capex comparison is a hard cost fact and survives contact with numbers <b>if stated carefully</b> — see the
+competitive note, where the honest denominator is WeP's ₹9,990 billing machine, not their ₹82,790 terminal bundle.
+The literacy argument is the one that is genuinely differentiating and genuinely unproven: it predicts that a shop
+can put someone at the counter who could not have run a typing POS. <b>Nobody but the founder has yet spoken to
+this system.</b> Proving that with one non-founder operator is worth more than any deck slide.</p>
+
+<h3>Key resources — where a moat could actually come from</h3>
+<p>Not the voice technology. Sarvam is a vendor and on-device ASR will commoditise. The defensible asset is the
+<b>per-shop alias catalog</b>: after a month, a shop's system knows that <i>this</i> shop's "aloo" is <i>that</i>
+SKU at <i>that</i> price. That is switching cost the shop built themselves, and it is invisible to a competitor
+quoting a lower price. Second is the corrected-utterance corpus — the only realistic route to an on-device model
+tuned to code-mixed retail speech, which is in turn the only route to ₹0 marginal inference. <b>The moat and the
+cost structure are the same asset.</b> That is the strategic core of this business and the deck should say so.</p>
+
+<h3>Cost structure — the number that decides everything</h3>
+<p>Every other block is ordinary SaaS. This one is not. A ₹199/month subscription leaves roughly ₹150 after
+platform costs to cover ~24,000 utterances, support and CAC amortisation. No cloud ASR clears that. Three routes
+exist: on-device ASR (the plan, and what the corpus is for), radically fewer cloud calls (wake-word gating —
+already the architecture), or a higher entry price (which forfeits the wedge). <b>An investor who does not probe
+this is not paying attention; one who does should be met with the roadmap, not a deflection.</b></p>
+
+<h3>Revenue — and the honest note on data monetisation</h3>
+<p>Aggregated insight to FMCG brands is the line most likely to be over-promised. It requires scale we do not have,
+consent we have not designed, and it sits uncomfortably against the shop's own interest — a brand paying for shelf
+intelligence is not paying to help the shopkeeper negotiate. Keep it as an opt-in option late in the model, never
+as a load-bearing revenue assumption. <span class="a">ASSUMPTION — VALIDATE</span></p>
+
+<h3>Key partners — Sarvam is a dependency, not a partnership</h3>
+<p>Stated plainly because diligence will: the product's core capability is currently bought from a single vendor at
+a price that does not close the unit economics. That is acceptable for a prototype and unacceptable as a
+destination, which is exactly why on-device ASR is the first funded engineering hire.</p>
+
+<h3>Where RAGaaS fits</h3>
+<p>Per the founder's direction: <b>VBS is the wedge and owns the counter; RAGaaS supplies the CRM layer.</b> The
+clean division is that VBS knows <i>what was sold and to whom</i>; RAGaaS knows <i>the conversation with that
+customer</i>. Shared customer identity — the mobile number already captured at the counter — is the join. This is
+a credible expansion story precisely because it does not require VBS to become a CRM: it requires one integration
+against a product that already exists. Keep it as a module in the architecture and one slide in the deck, not as
+the headline.</p>
+
+<p class="meta">Bolo Bill · Business Model Canvas · pricing and market assumptions carry
+<span class="a">VALIDATE</span> until the unit-economics model is built · August 2026</p>

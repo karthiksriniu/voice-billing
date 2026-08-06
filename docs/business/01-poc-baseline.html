@@ -1,0 +1,76 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<h1>Bolo Bill — PoC baseline and evidence register</h1>
+<p class="sub">What exists, what has been proven, and what has not. Everything downstream cites this page.
+Written to be handed to a diligence process unedited.</p>
+
+<h2>1. What the PoC actually does</h2>
+<p>A voice-first billing web app running on a shopkeeper's own Android phone. The shopkeeper speaks; the bill
+assembles line by line; a UPI QR carrying the exact amount is shown; a numbered receipt is produced.</p>
+<table>
+<tr><th style="width:38%">Capability</th><th style="width:14%">State</th><th>Detail</th></tr>
+<tr><td>Voice → line items</td><td>Working</td><td>Multi-item in one breath. "2kg potato, 1kg tomato, ½kg onion" → three priced lines.</td></tr>
+<tr><td>Catalog &amp; price entry by voice</td><td>Working</td><td>Admin mode; owner-only; confirmation gate on ambiguous rate-vs-pack.</td></tr>
+<tr><td>Confidence gating</td><td>Working</td><td>accept ≥0.72 / confirm ≥0.42 / reject. Deliberately pessimistic.</td></tr>
+<tr><td>Spoken aliases per SKU</td><td>Working</td><td>Shop teaches its own words: "aloo" → its potato. <b>The compounding asset.</b></td></tr>
+<tr><td>UPI collection</td><td>Working</td><td>Deep link + QR, exact amount. We never touch funds.</td></tr>
+<tr><td>Cash settlement</td><td>Working</td><td>Recorded on the shopkeeper's word — first-hand and honest.</td></tr>
+<tr><td>Customer identity &amp; repeat orders</td><td>Working</td><td>Spoken phone number recalls last 5 baskets; one tap reloads one at today's prices.</td></tr>
+<tr><td>GST-aware receipt</td><td>Working</td><td>Gapless serial per shop per financial year, allotted by the database.</td></tr>
+<tr><td>58mm thermal print</td><td>Partial</td><td>32-column render + Web Bluetooth ESC/POS. <b>Never tested on real hardware.</b></td></tr>
+<tr><td>WhatsApp receipt</td><td>Working</td><td>Free wa.me hand-off. Business API endpoint built but uncredentialed.</td></tr>
+<tr><td>Hands-free wake word</td><td>Unstable</td><td>"Hey Chitti". Works, then stalls. Under active repair.</td></tr>
+<tr><td>Inventory deduction</td><td>Not built</td><td>Schema exists; no logic.</td></tr>
+<tr><td>Offline billing</td><td>Not built</td><td>Requires the network today.</td></tr>
+<tr><td>Payment reconciliation</td><td>Not built</td><td>Deliberate — see risk R3.</td></tr>
+</table>
+
+<h2>2. Stack as built</h2>
+<div class="kv"><b>ASR:</b> Sarvam <code>saarika:v2.5</code>, cloud, per-utterance, per-shop language code.</div>
+<div class="kv"><b>Understanding:</b> a deterministic grammar parser. <b>No LLM anywhere in the utterance path.</b>
+Chosen because a grammar's failures are legible — when it cannot parse, it knows, and that feeds the confidence
+gate. A model that always returns something confident is the exact failure mode this product cannot afford.</div>
+<div class="kv"><b>Backend:</b> Python/FastAPI on Vercel serverless · Supabase Postgres over PostgREST.</div>
+<div class="kv"><b>Client:</b> vanilla-JS PWA, Material 3 tokens. Chrome Web Speech API for wake-word spotting;
+Web Bluetooth for ESC/POS.</div>
+<div class="kv"><b>Languages:</b> Tamil, English, Hindi, Malayalam, Telugu, Kannada — code-mixed, per shop.
+Numerals, units, aliases and phonetic rules are data files, not code.</div>
+
+<h2>3. Validated — with the evidence</h2>
+<table>
+<tr><th style="width:44%">Claim</th><th>Evidence</th></tr>
+<tr><td>The parser is correct across six languages</td><td><b>1,561 automated checks</b>, including a 1,003-combination matrix of every wake word, command alias and mode alias against a catalog stocked with deliberately colliding names (bill paper, cashew, chutney). Zero collisions.</td></tr>
+<tr><td>It survives real ASR output, not clean text</td><td>Tested by generating Tamil/Hindi/Kannada speech and passing it through the live Sarvam endpoint. This found four <b>silent mispricing</b> classes that clean-text tests missed.</td></tr>
+<tr><td>Multi-item dictation works</td><td>4 items, mixed units, one breath, Tamil → 4 correct priced lines.</td></tr>
+<tr><td>Receipt numbering is gapless under load</td><td>8 simultaneous finalises → 8 distinct sequential numbers, no duplicates, no gaps.</td></tr>
+<tr><td>Six languages are genuinely configured</td><td>Numeral tables filled for all six; ~170 aliases added after discovering the non-Tamil packs were Tamil tables with a few native words sprinkled in.</td></tr>
+</table>
+<div class="good"><b>The silent-error work is the strongest technical signal.</b> Three real defects found and fixed:
+₹115 of goods billing as ₹12.50 (multi-item collapse); 500g of a ₹50/kg item billing ₹25,000 (unit mismatch);
+300g of onion billing ₹0.07 (unrecognised numeral). Each was silent. Each is now a regression test. This is the
+discipline the product's core promise depends on.</div>
+
+<h2 class="pb">4. NOT validated — the honest register</h2>
+<div class="bad"><b>These go in the deck's risk slide, not buried.</b> A diligence process finds them either way.</div>
+<table>
+<tr><th style="width:30%">Gap</th><th>Status</th></tr>
+<tr><td><b>Real-shop volume</b></td><td>Ragas Coffee (24 SKUs) is a genuine business and has used it. <span class="a">FILL IN</span> transaction count, period, and who operated it — owner or staff. Everything the deck can claim about adoption rests on this number.</td></tr>
+<tr><td><b>Unit cost — the central one</b></td><td>Target is ₹10/shop/month with <b>₹0 cloud inference</b>. The PoC calls a paid cloud ASR on every utterance. At ~24,000 utterances/shop/month this is the constraint the whole business model turns on, and it is <b>not met today</b>. <span class="a">VALIDATE</span> Sarvam per-second rate.</td></tr>
+<tr><td><b>Latency</b></td><td>Target p95 speech-end → line on screen is 1,150 ms. Measured ASR round trip is <b>~2,200 ms</b> plus parse. Not met. Cloud round trip is the cause; on-device ASR is the answer.</td></tr>
+<tr><td><b>Noisy environment</b></td><td>Only tested against a podcast played deliberately (background −45 dB vs voice −13 dB). Not tested in a real shop at 70–80 dB(A) with customers.</td></tr>
+<tr><td><b>Real accents</b></td><td>All synthetic-speech testing used macOS TTS voices. <b>No real human speaker other than the founder has been transcribed.</b></td></tr>
+<tr><td><b>Offline</b></td><td>Not built. CLAUDE.md calls offline non-negotiable; the PoC requires the network.</td></tr>
+<tr><td><b>Thermal printer</b></td><td>Never connected to a physical printer. Cheap ESC/POS units are Bluetooth Classic, which a browser cannot open at all — needs the Android app.</td></tr>
+<tr><td><b>Wake word stability</b></td><td>Stalls after first use; three causes found and fixed, unverified on a handset.</td></tr>
+<tr><td><b>Staff adoption</b></td><td>No non-founder has been trained on it or observed using it under time pressure.</td></tr>
+</table>
+
+<h2>5. What this baseline means for the raise</h2>
+<p><b>This is a working prototype with one live design partner, not a pilot with traction.</b> Positioned honestly
+it is still a strong pre-seed artifact: six languages, a tested grammar, a real receipt series and a live URL, built
+solo. Positioned as traction it will not survive a technical diligence call.</p>
+<p>The two questions a competent investor asks first are the two in the register above: <i>what does an utterance
+cost you</i>, and <i>does it work in a loud shop with someone else's voice</i>. The roadmap must answer both, and
+the funding ask should be visibly sized to do so.</p>
+<p class="meta">Bolo Bill · PoC baseline · generated from the working system, August 2026 ·
+<span class="a">FILL IN</span> = founder input needed · <span class="a">VALIDATE</span> = check before circulating</p>

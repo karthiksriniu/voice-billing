@@ -1,0 +1,95 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<h1>Competitive analysis — and where the thesis bends</h1>
+<p class="sub">Pressure-tested rather than assumed. One material correction to the strategic frame is carried
+through everything below.</p>
+
+<div class="bad"><b>Correction to the thesis.</b> The frame contrasts our ₹3,000–8,000 incremental spend against a
+₹70,000–1,20,000 dedicated stack, giving an 85–95% capex saving. That comparison is against WeP's <i>large POS
+terminals</i> (₹52,990–92,190). But WeP also sells <b>billing machines from ₹9,990</b> — BP Joy Pro ₹9,990,
+BP Joy Plus ₹11,999, BP 2000 ₹13,500 — and that, not an ₹82,790 terminal bundle, is what a single-counter shop is
+realistically offered. Against the honest denominator the saving is roughly <b>40–70%</b>, or ~100% for a shop that
+already owns a phone and a printer. Still decisive. But an investor who checks — and one will — should find we had
+already checked.</div>
+
+<h2>Matrix</h2>
+<table>
+<tr><th style="width:11%">Player</th><th style="width:14%">Pricing</th><th style="width:12%">HW capex</th>
+<th style="width:14%">Voice / AI</th><th style="width:12%">Segment</th><th style="width:11%">Languages</th>
+<th style="width:10%">Offline</th><th>Switching cost</th></tr>
+
+<tr class="us"><td>Bolo Bill</td><td>₹199–299 / ₹1,499–2,999 / ₹7,500+ <span class="a">V</span></td>
+<td>₹0–6,000 (BYOD phone + printer)</td><td><b>Voice-native core</b> — grammar-based, confidence-gated, no LLM in path</td>
+<td>Paper-billing single counter → chain</td><td>6, code-mixed, data-driven</td><td><b>Not yet built</b></td>
+<td>Low to enter; rises with the shop's own alias catalog</td></tr>
+
+<tr><td>WeP Sol</td><td>Hardware sale + software</td><td><b>₹9,990–37,000</b> billing machines;<br>₹52,990–92,190 POS terminals</td>
+<td>None found</td><td>Retail, hardware-led</td><td>Limited</td><td>Yes (device-local)</td>
+<td>High — sunk capex, 300k+ devices installed</td></tr>
+
+<tr><td>Petpooja</td><td>₹3,000–12,000/mo reported; some sources ₹1,500–5,000. <b>Not published.</b> +1.5–2% txn fees <span class="a">V</span></td>
+<td>Terminal or BYOD tablet</td><td>Add-on at best; 2026 commentary flags it as slow on voice/predictive</td>
+<td>Restaurants/QSR, 75,000+</td><td>Multi, typed</td><td>Partial</td><td>High — menu, KDS, aggregator integrations</td></tr>
+
+<tr><td>Vyapar</td><td>Free + low-cost paid</td><td>₹0 (BYOD)</td><td>None — typed entry</td>
+<td>Single-store kirana, traders</td><td>Local languages, typed</td><td><b>Strong</b> — offline-first</td>
+<td>Moderate — ledger and party data</td></tr>
+
+<tr><td>GoFrugal</td><td>Mid-market ERP</td><td>Terminal-oriented</td><td>Rule-based alerts, no voice</td>
+<td>Grocery/supermarket, multi-store</td><td>Multi</td><td>Yes</td><td>Very high — ERP + HQ</td></tr>
+
+<tr><td>Zoho</td><td>Free to ₹25L rev; ₹999+/mo</td><td>₹0</td><td>Ecosystem AI, not billing-UX</td>
+<td>Accounting-first</td><td>Multi</td><td>Partial</td><td>High — whole-suite gravity</td></tr>
+
+<tr><td>Loyverse</td><td>Free; $29/store/mo paid</td><td>₹0 (BYOD)</td><td>None</td>
+<td>Mobile-first SMB, 1M+ merchants, 170+ countries</td><td>Multi</td><td>Yes</td><td>Low</td></tr>
+
+<tr><td>Square</td><td>Free tier; ~2.6%+15¢; $49–60/mo</td><td>$0 reader → $799 register</td><td>Ecosystem AI</td>
+<td>US/global SMB</td><td>Multi</td><td>Yes</td><td>Moderate — payments lock-in</td></tr>
+</table>
+
+<h2>The differentiation window — and why it is a window</h2>
+<p>The scan supports the central claim: <b>no scaled player, Indian or global, runs voice as the primary
+interaction model for billing in 2026.</b> Where voice appears it is a bolt-on. That is a real opening.</p>
+<p>It is not a moat. Three things could close it inside eighteen months:</p>
+<ul class="tight">
+<li><b>Vyapar adds voice.</b> They have the offline engine, the languages, the distribution and the ledger data.
+This is the most likely competitive event and the one to plan against, not hope past.</li>
+<li><b>ASR commoditises.</b> Sarvam, Bhashini and open on-device models are all moving. The capability we buy today
+will be free tomorrow — good for our cost line, and equally good for everyone else's.</li>
+<li><b>An aggregator bundles it.</b> Petpooja or a quick-commerce platform ships adequate voice to an installed
+base we would spend years acquiring.</li>
+</ul>
+
+<div class="good"><b>So the defensibility argument cannot be "we have voice".</b> It has to be:
+<b>(1)</b> the per-shop alias catalog, which the shop itself builds and cannot carry to a competitor;
+<b>(2)</b> the corrected-utterance corpus, which is the only realistic route to an on-device model tuned to
+code-mixed retail speech, and therefore to a cost structure a ₹199/month tier can actually carry; and
+<b>(3)</b> being the one product whose <i>entire</i> interaction model assumes the shopkeeper never types — a
+retrofit competitor bolts voice onto a typed workflow and inherits its assumptions.
+Points 1 and 2 are the same asset viewed from two directions, and both compound only with real shops. Which makes
+the pilot, not the technology, the thing worth funding.</div>
+
+<h2>Where we lose today — state it first</h2>
+<table>
+<tr><th style="width:22%">Against</th><th>Their advantage, honestly</th></tr>
+<tr><td>Vyapar</td><td><b>Offline.</b> They work with no network; we do not work without one. For a kirana this is not a feature comparison, it is a disqualification. Closing this is non-negotiable before any paid Tier-1 launch.</td></tr>
+<tr><td>WeP Sol</td><td>A physical thing with a warranty, sold by someone who visits. A ₹9,990 machine that prints is an easier purchase than trusting a phone app — and there is one throat to choke when it breaks.</td></tr>
+<tr><td>Petpooja</td><td>Depth for F&amp;B — KDS, aggregator integrations, modifiers, table management. We should not chase this; it argues for kirana/provision as the beachhead over cafés, despite the pilot being a café.</td></tr>
+<tr><td>GoFrugal / Marg</td><td>Everything a chain needs and we have not built. Tier 3 is a roadmap claim, not a product.</td></tr>
+<tr><td>All of them</td><td><b>They are proven at scale and we have one design partner.</b> The deck should lead with this rather than be caught by it.</td></tr>
+</table>
+
+<h2>What this implies for positioning</h2>
+<p>Not "an AI POS". Positioned that way we are compared on feature count against products with a decade of features,
+and we lose. The defensible position is narrower and truer:</p>
+<p style="font-size:12pt;padding:3mm;background:#eefaf6;border-left:3px solid #0f766e;margin:2mm 0">
+<b>The billing app for the shop that still bills on paper</b> — because it is the only one where nobody has to type,
+and it speaks the six languages those counters actually run in.</p>
+<p>That framing chooses a fight we can win: not against Petpooja's feature depth, but against a notebook and a
+calculator — where the incumbent has no voice, no languages, no data and no roadmap, and where 88% of Indian retail
+still lives. It also sets the honest bar for the product: <b>faster than paper, or it does not ship.</b></p>
+
+<p class="meta">Bolo Bill · Competitive analysis · WeP and Petpooja pricing spot-checked against public sources,
+August 2026; Petpooja does not publish rates and reported ranges conflict — treat as a band, not a figure ·
+<span class="a">V</span> = validate before circulating</p>
