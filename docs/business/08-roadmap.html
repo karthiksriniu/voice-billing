@@ -1,0 +1,53 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<h1>Phased roadmap</h1>
+<p class="sub">Tied to funding tranches and to the two questions that decide the business: what does an utterance
+cost, and does it work in a loud shop in someone else's voice.</p>
+
+<div class="flag"><b>The sequencing rule.</b> Every phase must close a gap in the evidence register before it adds a
+feature. A prototype that grows features without closing gaps becomes harder to fund, not easier.</div>
+
+<h2>0–6 months · pre-seed · ₹60 lakh <span class="a">from the model</span></h2>
+<table>
+<tr><th style="width:22%">Track</th><th style="width:44%">What ships</th><th>Why it is first</th></tr>
+<tr><td><b>Android app</b></td><td>Native rewrite. On-device wake word in a foreground service. Bluetooth Classic printing. Local SQLite store — <b>offline billing</b>.</td><td>Offline is a disqualification against Vyapar, not a feature gap. And the browser cannot reach the printers this market buys.</td></tr>
+<tr><td><b>Measure the unknowns</b></td><td>Instrument billing duration, utterances per bill, correction rate, error rate. Get the real Sarvam invoice.</td><td>Four of the five sensitivities are measurable today and none are measured. This is the cheapest work with the highest effect on the raise.</td></tr>
+<tr><td><b>On-device ASR spike</b></td><td>Quantised streaming model on code-mixed Tamil retail speech. Target: beat the ₹0.06/utterance break-even.</td><td>Go / no-go on the whole cost structure. Better to learn in month 3 than month 12.</td></tr>
+<tr><td><b>Natural-language analytics</b></td><td>"How much coffee did I sell last week", asked aloud, answered aloud.</td><td>Ragas's owner does not know his own margins. This is the clearest unmet need we have observed first-hand.</td></tr>
+<tr><td><b>10 design partners</b></td><td>Chennai, mixed formats, at least half kirana rather than café.</td><td>Retention is the weakest number in the model. Only real shops fix that.</td></tr>
+<tr style="background:#eefaf6"><td><b>Team</b></td><td>Founder + 1 ASR/Android engineer</td><td>Founder unpaid. That is the capital-efficiency story, stated plainly.</td></tr>
+</table>
+<p><b>Gate to the next tranche:</b> on-device ASR under the break-even rate · offline billing working · 10 shops
+retained 8+ weeks · measured error rate and billing time.</p>
+
+<h2>6–18 months · seed</h2>
+<table>
+<tr><th style="width:22%">Track</th><th style="width:44%">What ships</th><th>Build or buy</th></tr>
+<tr><td><b>Tier 2 product</b></td><td>Multi-counter sync, order management, CRM depth via RAGaaS, loyalty.</td><td><b>Integrate</b> RAGaaS rather than build CRM. The only reason a small team can show this at all.</td></tr>
+<tr><td><b>Inventory</b></td><td>Deduction on sale, low-stock alerts. Forecasting comes later and is statistical, not generative.</td><td>Build — it is the same data model.</td></tr>
+<tr><td><b>Compliance</b></td><td>Full tax invoice: per-SKU HSN and rate, registration scheme.</td><td>Build. Needed the moment a shop crosses the threshold.</td></tr>
+<tr><td><b>Channel</b></td><td>Printer dealers and local IT shops. One curated kit, one SKU, one set of support questions.</td><td>Partner. Founder-led acquisition does not reach 600 shops.</td></tr>
+<tr><td><b>Payments</b></td><td>Stay on UPI rails. We never touch funds.</td><td><b>Never build.</b> Different licence, different business.</td></tr>
+<tr style="background:#eefaf6"><td><b>Team</b></td><td>+1 engineer, +1 field/onboarding lead</td><td>Founder starts taking salary.</td></tr>
+</table>
+<p><b>Gate:</b> ~600 Tier 1 shops · Tier 2 in ≥25 · CAC payback under 3 months on the reseller channel ·
+churn measured, not assumed.</p>
+
+<h2>18–36 months · Series A or profitable growth</h2>
+<table>
+<tr><th style="width:22%">Track</th><th style="width:44%">What ships</th><th>Note</th></tr>
+<tr><td><b>Tier 3</b></td><td>Multi-store HQ, predictive replenishment (Croston/ETS), anomaly detection.</td><td>The first tier where a learned model earns its place — there is finally enough data.</td></tr>
+<tr><td><b>Language 7+</b></td><td>Marathi, Bengali, Gujarati. Config, not code.</td><td>The pack architecture already assumes this.</td></tr>
+<tr><td><b>Ecosystem</b></td><td>ONDC, WhatsApp ordering, aggregators.</td><td>Evaluate as distribution, not just integration.</td></tr>
+<tr><td><b>Corpus</b></td><td>Opt-in corrected-utterance corpus at scale → materially better on-device model.</td><td><b>The moat compounding.</b> Never conflate consented data with production data.</td></tr>
+<tr style="background:#eefaf6"><td><b>Team</b></td><td>~8–10</td><td>Support must stay near-zero-touch or Tier 1 economics break.</td></tr>
+</table>
+
+<h2>What we will not do</h2>
+<ul class="tight">
+<li><b>Manufacture hardware.</b> Different economics, different capital, different investor.</li>
+<li><b>Hold payment funds.</b> Licensing and float risk we have no reason to take.</li>
+<li><b>Chase F&amp;B depth.</b> Petpooja has a decade of it. We win at the counter that still uses paper.</li>
+<li><b>Sell shop data before the shop benefits.</b> A brand paying for shelf intelligence is not paying to help the shopkeeper negotiate. Opt-in, late, or not at all.</li>
+</ul>
+<p class="meta">Bolo Bill · Roadmap · tranches sized from sheet 4 of the unit-economics model · August 2026</p>

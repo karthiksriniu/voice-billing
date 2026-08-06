@@ -1,0 +1,32 @@
+@page { size: 254mm 142.9mm; margin: 0; }
+*{box-sizing:border-box}
+body{margin:0;font:12pt/1.45 -apple-system,"Helvetica Neue",Arial,sans-serif;color:#15201f}
+.s{width:254mm;height:142.9mm;padding:13mm 15mm;page-break-after:always;position:relative;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.s.dark{background:#0e1415;color:#dee3e5}
+.s.dark h1,.s.dark h2{color:#81d3e0}
+.n{position:absolute;bottom:6mm;right:14mm;font-size:8pt;color:#9aa8a7}
+.k{font-size:8.5pt;letter-spacing:1.6px;text-transform:uppercase;color:#0f766e;font-weight:700;margin-bottom:2mm}
+.s.dark .k{color:#81d3e0}
+h1{font-size:26pt;margin:0 0 3mm;letter-spacing:-.6px;line-height:1.12}
+h2{font-size:17pt;margin:0 0 3mm;color:#0f766e;letter-spacing:-.2px}
+p{margin:0 0 2.5mm}
+.big{font-size:38pt;font-weight:800;color:#0f766e;letter-spacing:-1px;line-height:1}
+.s.dark .big{color:#81d3e0}
+ul{margin:1mm 0;padding-left:6mm}li{margin-bottom:1.8mm}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:9mm;flex:1}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;flex:1}
+.four{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm}
+.card{border:1px solid #d5e0df;border-radius:2.5mm;padding:4mm;background:#fbfdfd}
+.card.hot{background:#eefaf6;border-color:#0f766e}
+.card.warn{background:#fdf0f0;border-color:#e5b4b4}
+.card h3{margin:0 0 1.5mm;font-size:11.5pt;color:#0f766e}
+.card p,.card li{font-size:9.5pt;margin-bottom:1.5mm}
+table{width:100%;border-collapse:collapse;font-size:9pt}
+th{background:#0f766e;color:#fff;text-align:left;padding:2mm;font-weight:600}
+td{border-bottom:1px solid #e3eae9;padding:2mm;vertical-align:top}
+tr.us td{background:#e6f5f3;font-weight:600}
+.quote{font-size:15pt;line-height:1.4;font-style:italic;color:#134e4a;border-left:3px solid #0f766e;padding-left:6mm}
+.stat{text-align:center}.stat .v{font-size:27pt;font-weight:800;color:#0f766e;line-height:1}
+.stat .l{font-size:8.5pt;color:#5b6b6a;margin-top:1.5mm}
+.a{background:#fff4e5;color:#b45309;font-size:7.5pt;padding:0 1.2mm;border-radius:2px;font-weight:700}
+.fl{flex:1;display:flex;flex-direction:column;justify-content:center}

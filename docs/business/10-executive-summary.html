@@ -1,0 +1,67 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_style.css">
+<style>@page{margin:12mm 13mm} body{font-size:10pt} h1{font-size:19pt} h2{font-size:11pt;margin:4mm 0 1.5mm}</style>
+<h1>Bolo Bill — voice-first billing for Indian retail</h1>
+<p class="sub">Pre-seed · ₹60 lakh · Chennai · Karthik Srinivasan, solo founder ·
+<b>bolo-bill.vercel.app</b> — the product is live and you can try it</p>
+
+<p><b>A doctor should be looking at the patient, not the screen. A retailer should be looking at the customer, not
+the gadget.</b> Every billing system built for Indian retail asks the shopkeeper to look away — find an item, type
+a quantity, fix a typo — while a customer waits. So the shops that can least afford it keep the notebook, and 88%
+of Indian retail remains unorganised trade.</p>
+
+<p>Bolo Bill removes the interface. The shopkeeper speaks — in Tamil, Hindi, Malayalam, Telugu, Kannada or English,
+code-mixed the way people actually talk — and the bill assembles line by line, ending in a UPI QR for the exact
+amount and a numbered GST-compliant receipt. It runs on the phone they already own plus a ₹2,500 printer, against
+the ₹9,990–37,000 billing machines this market is otherwise sold.</p>
+
+<h2>What exists — a working product, not a mockup</h2>
+<p>Live and in use at <b>Ragas Coffee</b>, a working café: <b>~50 bills over one week</b>, and within that week the
+operator moved from press-to-talk to the hands-free wake word. Six languages, multi-item dictation in one breath,
+per-shop spoken aliases, confidence gating, gapless receipt numbering, WhatsApp delivery. <b>1,561 automated
+tests</b>, including a 1,003-case matrix across five languages. Built solo, on no outside capital.</p>
+
+<h2>The insight underneath the speed</h2>
+<p>The café's owner <b>does not know objectively what margin he makes.</b> He is not unusual — owners have neither
+the time nor the training to read a dashboard, so understanding of their own business is outsourced to an auditor
+once a quarter. So the same idea that removes typing from billing also removes the spreadsheet from knowing your
+numbers: <i>ask the shop a question aloud, get an answer aloud.</i> That is a Tier-1 module here, not a Tier-2
+dashboard, and it is the clearest unmet need we have observed first-hand.</p>
+
+<h2>Business model — priced against what the shop already pays</h2>
+<p><b>₹399/month</b> for a single counter. Ragas pays WeP <b>₹583/month</b> in annual maintenance today, on top of
+sunk capex, for a machine that cannot tell him his margin — <b>that</b> is the reference price, not a free tier.
+₹1,999 for 2–10 outlets, undercutting Petpooja's reported ₹3,000–12,000 band. Hardware kit sold at cost, never at
+margin: we do not manufacture, hold stock, or touch payment funds.</p>
+
+<h2>The number this business turns on, stated plainly</h2>
+<p>On cloud ASR a typical shop is <b>−₹358/month gross</b>. Moving inference on-device takes the same shop to
+<b>+₹362 at 91% margin</b> — LTV ₹9,050, CAC ₹800, <b>11.3× LTV:CAC</b>, payback 2.2 months. Break-even on cloud
+is <b>₹0.0603 per utterance</b>; above that, Tier 1 cannot be profitable at any volume. <b>That is what this round
+is for — moving inference on-device, not adding features.</b></p>
+
+<h2>Why it is defensible after ASR commoditises</h2>
+<p>It will, and that is fine — voice recognition is not the moat. The moat is the <b>per-shop alias catalog</b>
+(each shop teaches the system its own words; after a month it knows <i>this</i> shop's "aloo" is <i>that</i> SKU —
+switching cost the shop built themselves) and the <b>corrected-utterance corpus</b>, which is the only realistic
+route to an on-device model tuned to code-mixed retail speech. The moat and the cost structure are the same asset.</p>
+
+<h2>What is not proven — said here rather than found later</h2>
+<ul class="tight">
+<li><b>Offline billing does not exist yet.</b> Against Vyapar that is a disqualification, not a gap. It is the first thing this round buys.</li>
+<li><b>Nobody but the founder has spoken to the system.</b> Accent and noise testing used synthetic voices.</li>
+<li><b>Retention is unknown.</b> One week at one shop. The 4%/month churn in the model is its weakest number.</li>
+<li><b>The on-device ASR target is unvalidated.</b> If a small quantised model cannot hit accuracy on code-mixed retail speech, pricing has to move. It is spiked in months 1–3, before headcount.</li>
+</ul>
+
+<h2>The ask</h2>
+<p><b>₹60 lakh pre-seed</b>, backed out of an 18-month plan rather than rounded: ₹36L engineering (one ASR/Android
+engineer — the on-device port <i>is</i> the round), ₹12L field and onboarding, ₹8L infrastructure and devices,
+₹4L buffer. Founder unpaid in Year 1. It buys four things: offline billing, inference on-device and under
+break-even, ten retained shops, and measured error and churn — which is what turns a working prototype into a
+fundable business.</p>
+
+<p style="margin-top:5mm;font-size:11pt;text-align:center;color:#0f766e"><b>Faster than paper, or it does not ship.</b></p>
+<p class="meta">Every figure traces to the unit-economics model or to observed data at the design partner.
+Market figures: Mordor Intelligence (POS), public industry sources (kirana counts, competitor pricing).
+Competitor pricing spot-checked August 2026; Petpooja does not publish rates.</p>
