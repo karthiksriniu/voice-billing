@@ -52,7 +52,8 @@
   let capturing = false;        // a command clip is being recorded right now
   let hearing = false;          // the recogniser has actually got audio, not just started
   let fails = 0;
-  let audioCtx, analyser, data, vadTimer, watchdog;
+  let audioCtx, analyser, data, vadTimer, watchdog, micSource;
+  let lastAudioAt = 0, heartbeat = null;
   let words = ["chitti", "chithi", "chitty", "chiti"];
 
   const srLang = () => ({ en: "en-IN", ta: "ta-IN", hi: "hi-IN", ml: "ml-IN",
@@ -172,7 +173,11 @@
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 512;
-    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    // Held in a variable on purpose. An unreferenced MediaStreamAudioSourceNode can be
+    // collected, and when it is the analyser goes on returning zeroes for ever — which
+    // reads as a silent room, so the clip never ends.
+    micSource = audioCtx.createMediaStreamSource(stream);
+    micSource.connect(analyser);
     data = new Uint8Array(analyser.fftSize);
     if (audioCtx.state === "suspended") audioCtx.resume();
   }
@@ -308,15 +313,24 @@
     stopRec();
     // handleClip is async and the recorder still owns the stream; the doorbell goes back
     // on once it has let go.
-    setTimeout(() => { if (on) { releaseMic(); startRecogniser(); } }, 1400);
+    fails = 0;
+    setTimeout(() => {
+      if (!on) return;
+      releaseMic();
+      hearing = false;
+      lastAudioAt = Date.now();
+      startRecogniser();
+    }, 1400);
   }
 
   /* Nothing holds the microphone while we are only waiting for a name. */
   function releaseMic() {
     if (!stream) return;
     try { stream.getTracks().forEach((tr) => tr.stop()); } catch (err) { /* already gone */ }
+    try { if (micSource) micSource.disconnect(); } catch (err) { /* already gone */ }
     stream = null;
     analyser = null;
+    micSource = null;
   }
 
   /* ---- the doorbell ---- */
@@ -332,7 +346,7 @@
       // ask for and are checked alongside it.
       rec.maxAlternatives = 5;
       rec.lang = srLang();
-      rec.onaudiostart = () => { hearing = true; fails = 0; armedLabel(); };
+      rec.onaudiostart = () => { hearing = true; fails = 0; lastAudioAt = Date.now(); armedLabel(); };
       rec.onresult = (e) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           for (const alt of alternatives(e.results[i])) {
@@ -383,6 +397,49 @@
     try { r.onend = null; r.onerror = null; r.stop(); } catch (err) { /* already gone */ }
   }
 
+  /* The doorbell stops ringing for reasons this code cannot enumerate.
+   *
+   * Chrome suspends speech recognition when the tab is hidden — the screen going off or
+   * the shopkeeper glancing at WhatsApp is enough — and what comes back is not always a
+   * working recogniser. It can also end a session and simply not deliver the event that
+   * would have restarted it. The reported symptom is exactly this shape: fine the first
+   * time, dead afterwards, alive again after a reload or a toggle, which is to say alive
+   * again after something rebuilt it.
+   *
+   * Rather than chase each of those, this checks that the thing is actually alive and
+   * rebuilds it when it is not. Audio arriving is the proof of life; a recogniser that has
+   * not seen any for twenty seconds while the shop is in front of it is not listening,
+   * whatever its own state says.
+   */
+  const STALL_MS = 20000;
+  function watchTheWatcher() {
+    clearInterval(heartbeat);
+    heartbeat = setInterval(() => {
+      if (!on) { clearInterval(heartbeat); return; }
+      if (capturing || document.visibilityState !== "visible") return;
+      const quietFor = Date.now() - lastAudioAt;
+      if (rec && quietFor < STALL_MS) return;
+      stopRecogniser();
+      hearing = false;
+      lastAudioAt = Date.now();          // one grace period per rebuild, not a spin
+      startRecogniser();
+    }, 5000);
+  }
+
+  /* Hidden means suspended, so it is stopped deliberately and rebuilt on the way back.
+     Leaving it to die on its own is what left a recogniser that existed and heard
+     nothing. */
+  document.addEventListener("visibilitychange", () => {
+    if (!on) return;
+    if (document.visibilityState === "hidden") {
+      stopRecogniser();
+    } else if (!capturing) {
+      hearing = false;
+      lastAudioAt = Date.now();
+      setTimeout(startRecogniser, 250);
+    }
+  });
+
   /* Failing quietly is the one thing a hands-free feature must never do: the shopkeeper is
      not looking at the phone, so silence is indistinguishable from working. */
   function fail(message) {
@@ -410,7 +467,9 @@
     if (on) {
       // Started before any await: Safari only honours start() inside the tap that caused
       // it, and awaiting anything at all ends that tap.
+      lastAudioAt = Date.now();
       startRecogniser();
+      watchTheWatcher();
       // Always, not only when a thumb turned it on. Restoring the switch after a reload
       // skipped this, so the live feature quietly ran on the built-in fallback list —
       // without "hd", which is the only spelling this handset actually produces. It would
@@ -418,6 +477,7 @@
       // both: intermittent, and untraceable to the thing that changed.
       loadWords();
     } else {
+      clearInterval(heartbeat);
       stopRecogniser();
       endCapture();
       releaseMic();
