@@ -21,7 +21,11 @@ import secrets
 import time
 
 ITERATIONS = 120_000
-TOKEN_TTL_S = 60 * 60 * 12          # a trading day
+# A trading day was too short for the device it runs on. A shop opens before six and
+# closes after ten, so a session started before opening expired mid-evening — in the
+# middle of billing, which is the worst possible moment to ask for a passcode.
+TOKEN_TTL_S = 60 * 60 * 12                  # one day, when not remembered
+TOKEN_TTL_REMEMBERED_S = 60 * 60 * 24 * 7   # a week, on the shop's own counter phone
 
 
 def _b64e(raw: bytes) -> str:
@@ -59,9 +63,13 @@ def _secret() -> bytes:
     return hashlib.sha256(raw.encode()).digest()
 
 
-def issue_token(shop_id: str, mobile: str, role: str) -> str:
+def issue_token(shop_id: str, mobile: str, role: str, remember: bool = False) -> str:
+    """`remember` is the shopkeeper saying this phone is the shop's, not a borrowed one.
+    It buys a week instead of a day. Signing out still ends it immediately, which is what
+    makes the longer life acceptable on a device that sits on a counter."""
+    ttl = TOKEN_TTL_REMEMBERED_S if remember else TOKEN_TTL_S
     body = {"shop": shop_id, "mobile": mobile, "role": role,
-            "exp": int(time.time()) + TOKEN_TTL_S}
+            "exp": int(time.time()) + ttl}
     payload = _b64e(json.dumps(body, separators=(",", ":")).encode())
     sig = _b64e(hmac.new(_secret(), payload.encode(), hashlib.sha256).digest())
     return f"{payload}.{sig}"

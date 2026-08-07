@@ -118,11 +118,13 @@ class SignupRequest(BaseModel):
     name: str = "Shop"
     vpa: str = ""
     lang: str = "ta"
+    remember: bool = True
 
 
 class LoginRequest(BaseModel):
     mobile: str
     passcode: str
+    remember: bool = True
 
 
 class SettingsRequest(BaseModel):
@@ -380,7 +382,7 @@ async def auth_signup(req: SignupRequest):
     if error:
         return deny(error, 502)
     await db.add_staff(shop_id, shop_id, auth.hash_passcode(code), "owner", req.name)
-    return {"ok": True, "token": auth.issue_token(shop_id, shop_id, "owner"),
+    return {"ok": True, "token": auth.issue_token(shop_id, shop_id, "owner", req.remember),
             "shop_id": shop_id, "role": "owner", "shop_name": req.name,
             "vpa": req.vpa, "lang": norm_lang(req.lang)}
 
@@ -391,14 +393,15 @@ async def auth_login(req: LoginRequest):
     mobile = db.shop_key(req.mobile)
     shop = await db.get_shop(mobile)
     if shop and shop.get("passcode_hash") and auth.verify_passcode(code, shop["passcode_hash"]):
-        return {"ok": True, "token": auth.issue_token(mobile, mobile, "owner"),
+        return {"ok": True, "token": auth.issue_token(mobile, mobile, "owner", req.remember),
                 "shop_id": mobile, "role": "owner", "shop_name": shop.get("name", ""),
                 "vpa": shop.get("upi_vpa", ""), "lang": norm_lang(shop.get("lang"))}
     staff = await db.get_staff(mobile)
     if staff and auth.verify_passcode(code, staff.get("passcode_hash", "")):
         shop = await db.get_shop(staff["shop_id"]) or {}
         return {"ok": True,
-                "token": auth.issue_token(staff["shop_id"], mobile, staff.get("role", "user")),
+                "token": auth.issue_token(staff["shop_id"], mobile, staff.get("role", "user"),
+                                          req.remember),
                 "shop_id": staff["shop_id"], "role": staff.get("role", "user"),
                 "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", ""),
                 "lang": shop.get("lang") or "ta"}

@@ -793,3 +793,13 @@ button.busy,button.busy:disabled{opacity:1}
    learn a second. */
 .talk.paytalk{margin-top:var(--space-2)}
 #payExtra{flex-wrap:wrap}
+
+/* -- Remember this phone --------------------------------------- */
+.check{
+  display:flex;align-items:center;gap:var(--space-3);
+  margin:var(--space-3) 0;cursor:pointer;
+  font-size:var(--type-body-medium-size);color:var(--color-on-surface-variant);
+}
+.check input{
+  width:20px;height:20px;flex:none;accent-color:var(--color-primary);margin:0;
+}

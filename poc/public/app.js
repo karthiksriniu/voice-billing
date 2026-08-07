@@ -176,6 +176,16 @@ $("continueBtn").onclick = () => withBusy($("continueBtn"), async () => {
   }
 });
 
+try {
+  const pref = localStorage.getItem("boloRemember");
+  if (pref === "0") { $("rememberMe").checked = false; $("rememberMe2").checked = false; }
+} catch (e) { /* private mode */ }
+$("rememberMe").onchange = $("rememberMe2").onchange = (e) => {
+  const on = e.target.checked;
+  $("rememberMe").checked = on; $("rememberMe2").checked = on;
+  try { localStorage.setItem("boloRemember", on ? "1" : "0"); } catch (err) { /* ignore */ }
+};
+
 const resetAuth = () => {
   $("mobile").disabled = false;
   $("continueBtn").hidden = false;
@@ -189,7 +199,8 @@ $("backBtn2").onclick = resetAuth;
 $("loginBtn").onclick = () => withBusy($("loginBtn"), async () => {
   const r = await api("/api/auth/login", {
     method: "POST",
-    body: { mobile: digits($("mobile").value), passcode: digits($("loginCode").value) },
+    body: { mobile: digits($("mobile").value), passcode: digits($("loginCode").value),
+            remember: $("rememberMe").checked },
   });
   if (!r.ok) { toast(r.error || "Sign in failed", 3500); $("loginCode").value = ""; return; }
   await enter(r);
@@ -203,7 +214,8 @@ $("signupBtn").onclick = () => withBusy($("signupBtn"), async () => {
   const r = await api("/api/auth/signup", {
     method: "POST",
     body: { mobile: digits($("mobile").value), passcode: code,
-            name: $("shopName").value.trim() || "Shop", vpa, lang: $("langPick").value },
+            name: $("shopName").value.trim() || "Shop", vpa, lang: $("langPick").value,
+            remember: $("rememberMe2").checked },
   });
   if (!r.ok) { toast(r.error || "Could not create business", 4000); return; }
   await enter(r);
