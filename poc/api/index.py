@@ -720,6 +720,34 @@ async def remove_alias(req: AliasRequest, request: Request):
                         status_code=200 if not error else 502)
 
 
+@router.get("/bills")
+async def bills_list(request: Request, limit: int = 40):
+    """The shop's own recent bills. Exists to answer two questions at a counter: did that
+    one get paid, and can you send me that receipt again."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    rows = await db.recent_bills(c["shop"], max(1, min(limit, 100)))
+    out = []
+    for r in rows:
+        doc = r.get("receipt") or {}
+        out.append({
+            "id": r.get("id"),
+            "receipt_no": r.get("receipt_no", ""),
+            "created_at": r.get("created_at"),
+            "total": float(r.get("total") or 0),
+            "items": len([x for x in (r.get("items") or []) if x.get("name")]),
+            "customer_mobile": r.get("customer_mobile", ""),
+            # 'confirmed' only ever means somebody said so — cash from the shopkeeper, or
+            # a provider confirmation. It is never inferred from the handset.
+            "paid": r.get("payment_state") == "confirmed",
+            "method": r.get("payment_method", ""),
+            "receipt_status": r.get("receipt_status", "none"),
+            "title": doc.get("title", ""),
+        })
+    return {"ok": True, "bills": out}
+
+
 @router.get("/receipt/{bill_id}")
 async def receipt_get(bill_id: str, request: Request):
     """The stored document, in the three shapes it is needed in: structured for the

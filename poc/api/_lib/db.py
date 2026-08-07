@@ -194,6 +194,13 @@ async def next_receipt_no(shop_id: str, fy: str) -> int:
     return 0
 
 
+async def recent_bills(shop_id: str, limit: int = 40) -> list[dict]:
+    """Newest first, this shop only. The index on (shop_id, created_at desc) exists for
+    exactly this query."""
+    return await _get("bills", {"shop_id": f"eq.{shop_id}", "select": "*",
+                                "order": "created_at.desc", "limit": str(limit)})
+
+
 async def get_bill(shop_id: str, bill_id: str) -> dict | None:
     rows = await _get("bills", {"id": f"eq.{bill_id}", "shop_id": f"eq.{shop_id}",
                                 "select": "*", "limit": "1"})

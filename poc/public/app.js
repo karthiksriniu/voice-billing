@@ -16,7 +16,7 @@ const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 const $ = (id) => document.getElementById(id);
 const screens = ["auth", "main", "payment", "receipt", "settings", "staffScreen",
-                 "billdoc"];
+                 "billdoc", "history"];
 const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
@@ -24,7 +24,7 @@ const state = {
   token: "", shop: { id: "", name: "", vpa: "", lang: "en" }, role: "user",
   items: [], mode: "billing", bill: null,
   askingPrice: null, proposal: null, queue: [],
-  customer: "", history: [], picked: -1,
+  customer: "", history: [], picked: -1, bills: [],
   debug: localStorage.getItem("boloDebug") === "1",
   aliasing: null,
   expanded: false, products: [],
@@ -308,6 +308,8 @@ async function openMic() {
 
 function setTalk(mode) {
   $("talk").className = "talk " + mode;
+  const pt = $("payTalk");
+  if (pt) pt.className = "talk paytalk " + mode;
   const l = $("talkLabel");
   if (mode === "rec") {
     l.innerHTML = `${t("recording")}<br><small>${t("releaseToStop")}</small>`;
@@ -366,6 +368,12 @@ async function handleClip() {
   }
 }
 
+$("payMore").onclick = () => {
+  const box = $("payExtra");
+  box.hidden = !box.hidden;
+  $("payMore").textContent = box.hidden ? t("moreActions") : t("fewerActions");
+};
+
 const talk = $("talk");
 /* The press acquires the microphone if nothing is holding it.
    It used to be held open from startup, so pressing could assume it was there. Hands-free
@@ -392,6 +400,16 @@ talk.addEventListener("pointerup", (e) => { e.preventDefault(); release(); });
 talk.addEventListener("pointercancel", release);
 talk.addEventListener("lostpointercapture", release);
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* The same press-to-talk, on the payment screen. "Chitti, cash paid" and "Chitti, send
+   receipt" were always commands for THIS screen; until now the only way to reach them was
+   hands-free, which left anyone without the wake word tapping their way through. */
+const payTalk = $("payTalk");
+payTalk.addEventListener("pointerdown", (e) => { e.preventDefault(); startRec(); });
+payTalk.addEventListener("pointerup", (e) => { e.preventDefault(); stopRec(); });
+payTalk.addEventListener("pointercancel", stopRec);
+payTalk.addEventListener("lostpointercapture", stopRec);
+payTalk.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- results ---------- */
 
@@ -1044,15 +1062,12 @@ function showPrompt({ kind, main, note, warn, onOk, onCancel,
 
 /* ---------- billing list (accordion) ---------- */
 
-$("accHead").onclick = () => { state.expanded = !state.expanded; render(); };
-
 function render() {
   if (state.mode === "admin") return;
   const box = $("items");
   const n = state.items.length;
 
   if (!n) {
-    $("accHead").hidden = true;
     box.hidden = false;
     box.innerHTML = `<p class="empty">${t("emptyBill")}<br><span class="en">${
       health.asr_configured ? t("emptyHint") : t("emptyHintType")}</span></p>`;
@@ -1063,18 +1078,11 @@ function render() {
 
   const pending = state.items.filter((i) => i.pending);
   const total = state.items.reduce((s, i) => s + (i.pending ? 0 : i.amount), 0);
-  const last = state.items[n - 1];
 
-  // Collapsed by default so the shopkeeper sees a running total rather than a wall of
-  // lines — but never collapsed over something still unresolved.
-  const open = state.expanded || pending.length > 0;
-  $("accHead").hidden = false;
-  $("accCount").textContent = `${n} ${n === 1 ? t("item") : t("items")}`;
-  $("accLast").textContent = open ? "" : `${last.name} · ${rupees(last.amount)}`;
-  $("accTotal").textContent = rupees(total);
-  $("accChev").textContent = open ? "⌃" : "⌄";
-  $("accHead").classList.toggle("alert", pending.length > 0);
-  box.hidden = !open;
+  // Always open. A bill is a flat list of what the customer is buying — there is nothing
+  // to group, and collapsing it meant an item could be added without being visible, which
+  // is the one thing this screen must never do.
+  box.hidden = false;
 
   const fmtQty = (n) => (+n).toFixed(n % 1 ? 2 : 0).replace(/\.?0+$/, "") || "0";
   box.innerHTML = state.items.map((it, i) => {
@@ -1137,9 +1145,26 @@ $("typeForm").onsubmit = async (e) => {
 
 /* ---------- finalise, pay, receipt ---------- */
 
+/* The screen changes on the tap, not on the response.
+   Finalise allots a receipt number, writes a bill and builds a document — hundreds of
+   milliseconds on a good connection and seconds on a shop's 3G. Waiting for that before
+   moving meant the shopkeeper pressed again, or said "close bill" again, and got two.
+   So the payment screen appears immediately in a waiting state and fills in when the
+   answer arrives. The double-press has nowhere to land because the button is already gone. */
+function showPaymentPending() {
+  $("payAmount").textContent = rupees(state.items.reduce((s, i) => s + (i.pending ? 0 : i.amount), 0));
+  $("qr").removeAttribute("src");
+  $("qr").classList.add("loading");
+  $("payRef").textContent = t("working");
+  $("sendReceipt").disabled = true;
+  $("nextSale").disabled = true;
+  show("payment");
+}
+
 async function finalize() {
   if (!state.items.length || state.items.some((i) => i.pending)) return;
   $("finalize").disabled = true;
+  showPaymentPending();
   try {
     const d = await api("/api/finalize", {
       method: "POST",
@@ -1157,14 +1182,19 @@ async function finalize() {
     $("payAmount").textContent = rupees(d.total);
     $("paidAmount").textContent = rupees(d.total);
     $("qr").src = d.qr;
+    $("qr").classList.remove("loading");
+    $("sendReceipt").disabled = false;
+    $("nextSale").disabled = false;
     // The number and the moment, both fixed at finalise. Shown here as well as on the
     // receipt so the shopkeeper can read them back to a customer without printing.
     $("payRef").textContent = d.receipt_no
       ? `${d.receipt_no} · ${stamp(d.receipt && d.receipt.issued_at)}`
       : d.ref;
-    show("payment");
   } catch (err) {
-    toast(t("notSaved"));
+    // Back to the bill rather than stranded on a payment screen with no QR.
+    $("qr").classList.remove("loading");
+    show("main");
+    toast(t("notSaved"), 4000, true);
   } finally { $("finalize").disabled = false; }
 }
 
@@ -1224,6 +1254,74 @@ function stamp(iso) {
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ` +
          `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/* ---------- past bills ---------- */
+
+/* The screen exists to answer two questions at a counter: did that one get paid, and can
+   you send me that receipt again. So payment state is the loudest thing on the row, and
+   both actions are one tap from it. */
+async function openHistory() {
+  goScreen("history");
+  const box = $("histList");
+  box.innerHTML = `<p class="empty small">${t("working")}</p>`;
+  try {
+    const j = await api("/api/bills?limit=40");
+    if (!j.ok) { box.innerHTML = `<p class="empty small">${j.error || t("notSaved")}</p>`; return; }
+    state.bills = j.bills || [];
+    renderHistoryList();
+  } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
+}
+$("miHistory").onclick = openHistory;
+
+function renderHistoryList() {
+  const box = $("histList");
+  if (!state.bills.length) { box.innerHTML = `<p class="empty small">${t("noBills")}</p>`; return; }
+  box.innerHTML = state.bills.map((b, i) => {
+    // Unpaid is the state worth noticing, so it is the one that gets colour.
+    const paid = b.paid
+      ? `<span class="pill paid">${t("paid")}${b.method ? ` · ${b.method.toUpperCase()}` : ""}</span>`
+      : `<span class="pill unpaid">${t("unpaid")}</span>`;
+    return `<div class="hrow">
+      <div class="hmain">
+        <b>${rupees(b.total)}</b> ${paid}
+        <div class="hsub">${b.receipt_no || "—"} · ${stamp(b.created_at)}</div>
+        <div class="hsub">${b.customer_mobile
+          ? `📱 ${b.customer_mobile}` : `<i>${t("noCustomer")}</i>`} · ${b.items} ${t("items")}</div>
+      </div>
+      <div class="hacts">
+        <button class="mini" data-hwa="${i}">${t("shareWhatsapp")}</button>
+        <button class="mini" data-hpr="${i}">${t("printBill")}</button>
+      </div></div>`;
+  }).join("");
+  box.querySelectorAll("[data-hwa]").forEach((el) => {
+    el.onclick = () => reopenBill(state.bills[+el.dataset.hwa], "wa");
+  });
+  box.querySelectorAll("[data-hpr]").forEach((el) => {
+    el.onclick = () => reopenBill(state.bills[+el.dataset.hpr], "print");
+  });
+}
+
+/* Fetches the stored document rather than rebuilding one — a receipt sent again must be
+   the same receipt, with the same number and the same date. */
+async function reopenBill(b, how) {
+  if (!b) return;
+  try {
+    const j = await api(`/api/receipt/${encodeURIComponent(b.id)}`);
+    if (!j.ok) { toast(j.error || t("notSaved"), 3500, true); return; }
+    state.bill = { bill_id: b.id, total: b.total };
+    state.doc = j;
+    if (how === "wa") {
+      $("custMobile").value = b.customer_mobile || "";
+      openWhatsApp(b.customer_mobile || "");
+    } else {
+      $("docText").textContent = j.text;
+      $("docNote").textContent = j.receipt.number
+        ? `${j.receipt.title} ${j.receipt.number} · ${stamp(j.receipt.issued_at)}`
+        : t("unnumbered");
+      goScreen("billdoc");
+    }
+  } catch (err) { toast(t("network"), 3000, true); }
 }
 
 /* ---------- the document ---------- */
@@ -1360,7 +1458,6 @@ function newBill() {
   clearCustomer();
   state.askingPrice = null;
   state.proposal = null;
-  state.expanded = false;
   hidePrompt();
   setMode("billing");
   show("main");

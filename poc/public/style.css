@@ -757,3 +757,38 @@ button.busy,button.busy:disabled{opacity:1}
   .roll{width:58mm;box-shadow:none;padding:0;font-size:11px}
   @page{size:58mm auto;margin:2mm}
 }
+
+/* -- Past bills ------------------------------------------------ */
+.histlist{display:flex;flex-direction:column;gap:var(--space-2)}
+.hrow{
+  display:flex;align-items:center;gap:var(--space-3);
+  padding:var(--space-3);border:1px solid var(--color-outline-variant);
+  border-radius:var(--radius-md);background:var(--color-surface-container-low);
+}
+.hmain{flex:1;min-width:0}
+.hmain b{font-size:var(--type-title-medium-size)}
+.hsub{
+  font-size:var(--type-body-small-size);color:var(--color-on-surface-variant);
+  margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.hacts{display:flex;flex-direction:column;gap:var(--space-1);flex:none}
+.pill{
+  display:inline-block;margin-left:var(--space-2);padding:1px var(--space-2);
+  border-radius:var(--radius-full);font-size:var(--type-label-medium-size);font-weight:700;
+}
+/* Unpaid is the state worth noticing; paid is quiet on purpose. */
+.pill.paid{background:var(--color-secondary-container);color:var(--color-on-secondary-container)}
+.pill.unpaid{background:var(--color-error-container);color:var(--color-on-error-container)}
+
+/* The QR has not arrived yet — the screen is already here. */
+.qr.loading{
+  background:var(--color-surface-container-high);min-height:180px;
+  animation:pulsefade 1.2s var(--ease-standard) infinite;
+}
+@keyframes pulsefade{0%,100%{opacity:.45}50%{opacity:.9}}
+
+/* Same button, smaller, on the screen the customer is looking at. */
+.talk.paytalk{width:72px;height:72px;margin-top:var(--space-2)}
+.talk.paytalk .talkicon{width:26px;height:26px}
+.talk.paytalk.rec .talkicon{width:22px;height:22px}
+#payExtra{flex-wrap:wrap}
