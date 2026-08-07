@@ -545,16 +545,18 @@ window.micReport = function micReport() {
   const by = {};
   for (const r of log) {
     const k = r.mic || "default";
-    by[k] = by[k] || { n: 0, ms: 0, confirms: 0, rejects: 0, unmatched: 0, empty: 0, corrections: 0 };
+    by[k] = by[k] || { n: 0, ms: 0, trouble: 0, corrections: 0 };
     const b = by[k];
-    b.n++; b.ms += r.ms; b.confirms += r.confirms; b.rejects += r.rejects;
-    b.unmatched += r.unmatched; b.empty += r.empty ? 1 : 0; b.corrections += r.corrections || 0;
+    b.n++; b.ms += r.ms; b.corrections += r.corrections || 0;
+    // Counted once per utterance rather than once per symptom — an utterance that was both
+    // unmatched and silent is one bad utterance, not two.
+    if (r.confirms || r.rejects || r.unmatched || r.empty) b.trouble++;
   }
   return Object.entries(by).map(([mic, b]) => ({
     mic, utterances: b.n,
     avg_ms: Math.round(b.ms / b.n),
     // The headline: how often the system was unsure, wrong, or heard nothing.
-    trouble_rate: +(((b.confirms + b.rejects + b.unmatched + b.empty) / b.n)).toFixed(3),
+    trouble_rate: +(b.trouble / b.n).toFixed(3),
     corrections_per_utterance: +(b.corrections / b.n).toFixed(3),
   }));
 };
@@ -1253,14 +1255,13 @@ function render() {
   // is the one thing this screen must never do.
   box.hidden = false;
 
-  const fmtQty = (n) => (+n).toFixed(n % 1 ? 2 : 0).replace(/\.?0+$/, "") || "0";
   box.innerHTML = state.items.map((it, i) => {
     // A blend reads as "0.8+0.2 kg" so the shopkeeper can see both parts at a glance,
     // rather than a single 1 kg that hides what was actually weighed.
     const qty = it.combo && it.combo.length
-      ? `${it.combo.map((c) => fmtQty(c.qty)).join("+")} ${it.unit}`
+      ? `${it.combo.map((c) => fmtNum(c.qty)).join("+")} ${it.unit}`
       : it.price_led ? `${rupees(it.amount)} worth`
-                     : `${fmtQty(it.qty)} ${it.unit}`;
+                     : `${fmtNum(it.qty)} ${it.unit}`;
     return `<div class="item ${it.pending ? "confirm" : ""}">
       <span class="qty">${qty}</span>
       <span class="nm">${it.name}${
@@ -1471,7 +1472,13 @@ async function openStock() {
     }).join("") || `<p class="empty small">${t("noStock")}</p>`;
   } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
 }
-const fmtNum = (n) => (+n).toFixed(Math.abs(n) % 1 ? 2 : 0).replace(/\.?0+$/, "") || "0";
+/* Trailing zeros only mean nothing AFTER a decimal point. Stripping them unconditionally
+   turned 20 kg into "2 kg" and 100 into "1" — the amount stayed right, so the bill was
+   correct and the screen was lying, which is the worse of the two. */
+const fmtNum = (n) => {
+  const v = +n || 0;
+  return v % 1 ? String(+v.toFixed(3)) : String(Math.round(v));
+};
 $("miStock").onclick = openStock;
 
 /* ---------- past bills ---------- */
