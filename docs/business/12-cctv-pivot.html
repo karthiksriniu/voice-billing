@@ -1,0 +1,225 @@
+<meta charset="utf-8">
+<link rel="stylesheet" href="_brain.css">
+<h1>The CCTV-audio pivot, tested to destruction</h1>
+<p class="sub">Same fifty-question framework. The answer is no — but three ideas inside it are better than the ones
+they would replace, and one of them sharpens the current thesis considerably.</p>
+
+<div class="warn" style="font-size:11pt"><b>Verdict up front, so nothing is buried.</b> Billing from surveillance
+audio fails on three independent grounds, any one of which is fatal: <b>the microphones cannot carry the signal</b>,
+<b>the law will not carry the consent</b>, and <b>the cost model inverts</b> — continuous audio replaces the
+wake-word gating that the entire ₹10/shop economics depends on. The exit-gate face match adds biometric processing
+to a company that currently has no compliance surface at all.
+<br><br>But the instinct underneath it is right, and two of its parts survive. See Round 5.</div>
+
+<h2>Round 1 · Steelman it — the strongest possible case</h2>
+<div class="q"><span class="n">1</span><b>What is genuinely good about this idea? <span class="tag t-think">JUDGEMENT</span></b>
+<p>It notices that the shop <i>already has a microphone in it, already powered, already pointed at the counter,
+already paid for.</i> That is a real observation and most people would miss it.</p></div>
+<div class="q"><span class="n">2</span><b>Does it beat the wake word on user experience? <span class="tag t-think">JUDGEMENT</span></b>
+<p>In principle, completely. No phone, no button, no name to say. The shopkeeper simply works and the bill appears.
+<b>That is the logical endpoint of "the retailer should look at the customer."</b></p></div>
+<div class="q"><span class="n">3</span><b>Is the buyer's need real and funded? <span class="tag t-know">KNOWN</span></b>
+<p>Yes — and this is the strongest part. Safety and pilferage are <b>felt</b> needs with existing budgets. Nobody
+budgets for "better billing"; plenty of shops already spend on cameras.</p></div>
+<div class="q"><span class="n">4</span><b>Does it make us harder to copy? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes. Vyapar cannot retrofit this at all — it is not a feature, it is a different product with hardware in it.</p></div>
+<div class="q"><span class="n">5</span><b>Does it help the data thesis? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Enormously, if it worked. Passive capture of every basket with zero shopkeeper effort is the purest possible
+form of "the labour was already being spent".</p></div>
+<div class="q"><span class="n">6</span><b>Is frictionless checkout a real trend? <span class="tag t-know">KNOWN</span></b>
+<p>Yes, but read the evidence carefully: Amazon spent years and billions on Just Walk Out and then pulled it from
+most of its own stores. <b>The hardest version of this problem has already defeated the best-funded team on
+earth.</b></p></div>
+<div class="q"><span class="n">7</span><b>Is our friction actually large enough to be worth removing? <span class="tag t-kill">KILL</span></b>
+<p>A kirana customer already pays by UPI at the counter in about ten seconds. <b>We would be spending a great deal
+to remove ten seconds that nobody complains about</b>, while the shopkeeper's minutes — which they do complain
+about — are already addressed by what we have.</p></div>
+<div class="q"><span class="n">8</span><b>Who is the buyer for the combined product? <span class="tag t-think">JUDGEMENT</span></b>
+<p>The owner, for safety. Which is a different budget, a different sales conversation and a different competitor
+set — CCTV installers, who own that channel and sell on hardware margin. <b>A distribution game we already
+concluded we lose.</b></p></div>
+<div class="q"><span class="n">9</span><b>What is the best version of this idea? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Not billing from the camera. <b>Reconciling against it</b> — using what the shop already records to check the
+billing that happened, rather than to produce it. Hold that thought for Round 5.</p></div>
+<div class="q"><span class="n">10</span><b>If it survives the next three rounds, do we do it? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes, without hesitation — a felt, funded need with a copy-proof product is worth a hard pivot. So the next
+thirty questions are asked in good faith, not to defend the current plan.</p></div>
+
+<h2>Round 2 · The physics — where it breaks first</h2>
+<div class="q"><span class="n">11</span><b>What is a CCTV microphone actually built for? <span class="tag t-know">KNOWN</span></b>
+<p>Detecting that <i>something</i> happened — a shout, a smash, a raised voice. Not intelligibility. They are
+far-field, usually mono, heavily compressed, and commonly sampled at 8&nbsp;kHz. <b>Speech recognition is not the
+use case they were designed against.</b></p></div>
+<div class="q"><span class="n">12</span><b>How far is the mic from the shopkeeper's mouth? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Two to five metres, ceiling-mounted, pointed at the room rather than the counter. Our phone mic is twenty
+centimetres away. <b>Sound pressure falls with the square of distance</b> — that is a 20–30 dB penalty before any
+noise is added.</p></div>
+<div class="q"><span class="n">13</span><b>Does our own measured data speak to this? <span class="tag t-know">KNOWN</span></b>
+<p>Directly, and damningly. Our handset trace showed the shopkeeper's voice at −13&nbsp;dB and background at
+−45&nbsp;dB: a 32&nbsp;dB separation, which is why near-field gating works. <b>At ceiling distance that separation
+collapses toward zero</b> — the shopkeeper, the customer and the television all arrive at similar levels.</p></div>
+<div class="q"><span class="n">14</span><b>So what breaks? <span class="tag t-kill">KILL</span></b>
+<p>Every mechanism we built. Peak-relative VAD assumes the target speaker is loudest. Confidence gating assumes a
+bounded utterance. Both assume near-field. <b>The entire signal-processing layer we validated would have to be
+replaced with speaker diarisation and separation.</b></p></div>
+<div class="q"><span class="n">15</span><b>Is diarisation feasible on this hardware and budget? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Not at kirana economics. It is a research-grade problem on clean audio and considerably worse on 8&nbsp;kHz
+compressed far-field. I said earlier that true speaker identification does not fit this hardware; this pivot makes
+it <b>mandatory rather than optional</b>.</p></div>
+<div class="q"><span class="n">16</span><b>Which conversation is the bill? <span class="tag t-kill">KILL</span></b>
+<p>The genuinely hard one. A shopkeeper serves three customers at once, talks to a supplier, answers his family,
+and quotes prices to someone who then buys nothing. <b>Segmenting "a transaction began here, ended here, and these
+items belong to that person" out of ambient room audio is a much harder problem than transcription</b>, and it is
+the one nobody thinks about first.</p></div>
+<div class="q"><span class="n">17</span><b>What happens when it guesses wrong? <span class="tag t-kill">KILL</span></b>
+<p>A wrong bill, silently — the exact failure mode Principle 2 says destroys trust permanently. And unlike today,
+<b>there is no press-to-talk moment at which the shopkeeper asserted "this is a bill"</b>, so there is nothing to
+gate on and nobody to confirm it.</p></div>
+<div class="q"><span class="n">18</span><b>Could a better microphone rescue it? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes — and that is the interesting escape. A ₹300–600 boundary or lapel mic <i>at the counter</i> restores
+near-field entirely. <b>But then the camera is contributing nothing</b>, and we have simply invented a cheaper
+version of the phone we already have. Hold this too.</p></div>
+<div class="q"><span class="n">19</span><b>Can we even get the audio? <span class="tag t-test">TEST</span></b>
+<p>Cheap Indian DVRs expose RTSP with wildly variable audio support; many installations have audio disabled or the
+mic unconnected. <b>Assume a material share of installed cameras have no usable audio at all.</b></p></div>
+<div class="q"><span class="n">20</span><b>What would it take to know for certain? <span class="tag t-test">TEST</span></b>
+<p>One afternoon: pull ten seconds of audio off Ragas's own DVR, push it through Sarvam, compare against the phone
+transcript of the same moment. <b>Cheap, decisive, and I would do this before reading further if the idea still
+appealed.</b></p></div>
+
+<h2 class="pb">Round 3 · Consent — where it breaks harder</h2>
+<div class="q"><span class="n">21</span><b>Is recording customer speech legal? <span class="tag t-kill">KILL</span></b>
+<p>Video with signage is broadly accepted in Indian retail. <b>Audio is a materially different question</b>, and
+recording identifiable people's conversations is personal-data processing under the DPDP Act 2023. This is not a
+signage problem you solve with a sticker. <span class="tag t-test">TEST</span> — needs actual counsel, not my
+reading.</p></div>
+<div class="q"><span class="n">22</span><b>Whose consent is needed? <span class="tag t-think">JUDGEMENT</span></b>
+<p>The customer's, and they are a stranger who walks in mid-conversation. <b>There is no moment at which to obtain
+it that does not itself create friction</b> — which is the very thing this pivot claims to remove.</p></div>
+<div class="q"><span class="n">23</span><b>Does face capture at the exit make it worse? <span class="tag t-kill">KILL</span></b>
+<p>Substantially. Facial images used to identify a person are biometric data with heightened obligations. <b>We
+would go from a company with essentially no compliance surface to one processing biometrics of the general
+public</b>, run by one person, selling at ₹399 a month.</p></div>
+<div class="q"><span class="n">24</span><b>How does it read to the customer? <span class="tag t-think">JUDGEMENT</span></b>
+<p>"Your face is on a screen at the door until you pay." That is a debt-collection posture, not a shopping
+experience. <b>It treats every customer as a suspect to solve a problem caused by a few.</b></p></div>
+<div class="q"><span class="n">25</span><b>Does it contradict our own stated principles? <span class="tag t-know">KNOWN</span></b>
+<p>Completely. CLAUDE.md says <i>no audio retained by default; frames are consumed and discarded</i>. This pivot
+requires continuous retention of customer audio as its core mechanism. <b>That is not a constraint to relax; it is
+the constraint that makes the product defensible.</b></p></div>
+<div class="q"><span class="n">26</span><b>Could we do it with retention but no storage? <span class="tag t-think">JUDGEMENT</span></b>
+<p>On-device transcription with immediate discard genuinely helps, and is the only version I would even
+contemplate. It does not solve consent — processing is processing — but it removes the breach surface.</p></div>
+<div class="q"><span class="n">27</span><b>What is the downside risk if we get it wrong? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Asymmetric and severe. A privacy failure involving customer audio and faces ends the company and the founder's
+name. Compare that against the upside — removing ten seconds from a checkout.</p></div>
+<div class="q"><span class="n">28</span><b>Would investors see this as a moat or a liability? <span class="tag t-think">JUDGEMENT</span></b>
+<p>A diligence-stage investor will ask about DPDP within five minutes. <b>"Solo founder processing public biometrics"
+is a line item that costs valuation rather than adding it.</b></p></div>
+<div class="q"><span class="n">29</span><b>Is there a consent-clean version? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes — one that listens only to the <i>shopkeeper</i>, who is an employee or the owner and can genuinely consent.
+That points back to the counter mic in Q18, not the ceiling camera.</p></div>
+<div class="q"><span class="n">30</span><b>Does the pilferage use case need audio at all? <span class="tag t-know">KNOWN</span></b>
+<p>No. <b>Shrinkage is detected by comparing what was sold to what is missing</b> — a stock-versus-sales question,
+answerable from data we already generate, with no camera involved. This is the most important answer in the
+document.</p></div>
+
+<h2>Round 4 · Economics and buyer</h2>
+<div class="q"><span class="n">31</span><b>What does continuous audio do to the cost model? <span class="tag t-kill">KILL</span></b>
+<p>It inverts it. The wake word exists precisely so we pay for ~50 utterances a day instead of ten hours of audio.
+<b>Continuous transcription is roughly a 100× increase in the thing our entire ₹10/shop ceiling was built to
+avoid</b> — and on-device does not rescue it, because the compute runs regardless of who pays for it.</p></div>
+<div class="q"><span class="n">32</span><b>Does it need new hardware after all? <span class="tag t-know">KNOWN</span></b>
+<p>Yes: an exit screen, a camera pointed at it, and something to run inference on. <b>We would be re-acquiring
+exactly the capex the entire hardware strategy was built to avoid</b>, and inheriting warranty and installation
+with it.</p></div>
+<div class="q"><span class="n">33</span><b>Who installs it? <span class="tag t-think">JUDGEMENT</span></b>
+<p>A CCTV installer — a channel that sells on hardware margin and owns the customer. We would become a component
+in someone else's sale.</p></div>
+<div class="q"><span class="n">34</span><b>Is the current camera even in the right place? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Usually not. Security cameras point at the door, the till and the aisles. <b>Repurposing them means moving or
+adding cameras, at which point "the shop already has it" is no longer true</b> — which was the whole premise.</p></div>
+<div class="q"><span class="n">35</span><b>Does it serve our beachhead? <span class="tag t-kill">KILL</span></b>
+<p>No. The shop that still bills on paper is the least likely to have working CCTV audio, an exit gate, or a
+separate entrance and exit at all. <b>This pivot moves us upmarket, into supermarkets — where GoFrugal already
+lives and where we have no product.</b></p></div>
+<div class="q"><span class="n">36</span><b>What happens to the six languages? <span class="tag t-think">JUDGEMENT</span></b>
+<p>They matter less. A supermarket has literate counter staff and typed POS already. <b>Our sharpest asset becomes
+irrelevant in the segment this pivot takes us to.</b></p></div>
+<div class="q"><span class="n">37</span><b>How does the customer's number reach the bill? <span class="tag t-kill">KILL</span></b>
+<p>Unsolved, and it is load-bearing for the QR-to-phone flow. Either they say it aloud — which is worse for privacy
+and error-prone — or they scan something, at which point they are interacting, and the counter QR we already ship
+is simpler and instant.</p></div>
+<div class="q"><span class="n">38</span><b>What is the pilot cost? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Months, and hardware, against a PoC that took weeks and none. <b>For a self-funded solo founder that is most of
+the runway on the least certain hypothesis.</b></p></div>
+<div class="q"><span class="n">39</span><b>Would it invalidate what we have built? <span class="tag t-know">KNOWN</span></b>
+<p>The grammar, packs, aliases, receipts and tests all survive — they are text-layer and portable. <b>The audio
+layer, which is the part with a year of hard-won fixes in it, is thrown away entirely.</b></p></div>
+<div class="q"><span class="n">40</span><b>Is there any world where this is right? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes: a funded team, supermarket segment, hardware partner, counsel on retainer, 18 months. <b>It is a real
+company. It is not this company, and not this founder's next six months.</b></p></div>
+
+<h2 class="pb">Round 5 · What survives — and it is worth more than the idea it came from</h2>
+<div class="q"><span class="n">41</span><b>What was the instinct actually right about? <span class="tag t-know">KNOWN</span></b>
+<p>That <b>we are selling to a need nobody feels</b>. "You don't know your margin" is true and unfelt. Safety and
+pilferage are felt and funded. <b>The insight is about the pitch, not the camera.</b></p></div>
+<div class="q"><span class="n">42</span><b>Can we serve the felt need with what we already have? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes — and this is the recommendation. <b>Shrinkage is a sales-versus-stock question.</b> Once billing deducts
+stock, the gap between what was sold and what is missing is computable, per SKU, with no camera, no consent
+problem and no new hardware.</p></div>
+<div class="q"><span class="n">43</span><b>Is "what's missing" a better pitch than "what's your margin"? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Substantially. <b>Loss is felt more sharply than foregone gain</b> — the same rupee stings more than it pleases.
+"Twelve kilos of sugar went out and eight were billed" is a sentence that gets a shopkeeper's attention in a way
+that no margin dashboard ever will.</p></div>
+<div class="q"><span class="n">44</span><b>Does it strengthen the data thesis? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Yes. It gives the shopkeeper a self-interested reason to bill <i>every</i> item accurately — which is exactly
+the data-quality mechanism the last document said we needed, and a stronger one than curiosity about margins.</p></div>
+<div class="q"><span class="n">45</span><b>And the counter microphone? <span class="tag t-think">JUDGEMENT</span></b>
+<p>The genuinely good hardware idea hiding in the pivot. A ₹300–600 wired boundary or lapel mic at the counter is
+near-field, needs no consent from strangers, no camera, no exit gate — and <b>frees the shopkeeper from the phone
+entirely, which was the real goal.</b></p></div>
+<div class="q"><span class="n">46</span><b>Does that fit the hardware strategy? <span class="tag t-know">KNOWN</span></b>
+<p>Perfectly. It joins the curated kit at near cost, sits behind the existing hardware abstraction, and the app
+does not learn which microphone it is talking to.</p></div>
+<div class="q"><span class="n">47</span><b>What about video analytics later? <span class="tag t-think">JUDGEMENT</span></b>
+<p>Keep it as a Tier 3 line on the roadmap for supermarkets, clearly marked as needing partners and counsel.
+<b>It is a legitimate future; it is not a wedge.</b></p></div>
+<div class="q"><span class="n">48</span><b>Have we lost anything by rejecting the pivot? <span class="tag t-think">JUDGEMENT</span></b>
+<p>No — we have gained a sharper pitch and a cheaper microphone, and we spent a document rather than six months
+finding out.</p></div>
+<div class="q"><span class="n">49</span><b>Which pivot has better footing, honestly? <span class="tag t-know">KNOWN</span></b>
+<p><b>The data pivot, by a wide margin.</b> It needs no new hardware, no consent regime, no segment change, and no
+new physics — and it uses the audio layer we have already made work rather than discarding it.</p></div>
+<div class="q"><span class="n">50</span><b>What is the one-line summary for a partner meeting? <span class="tag t-think">JUDGEMENT</span></b>
+<p>"We looked hard at billing from the shop's cameras. The microphones cannot carry it, the consent cannot be
+obtained, and the cost model inverts — but it told us the shopkeeper cares more about what is <i>missing</i> than
+about what he <i>earned</i>, and we changed the product to answer that."</p></div>
+
+<h2>What to change in the PoC — for the version worth testing</h2>
+<div class="note">Not the camera. The two ideas it produced: <b>shrinkage as the felt need</b>, and <b>a counter
+microphone instead of the phone.</b> Both are small, and both are testable inside the current build.</div>
+<table>
+<tr><th style="width:24%">Change</th><th style="width:40%">What it is</th><th>Why it earns the effort</th></tr>
+<tr><td><b>1 · Stock deduction on sale</b></td><td>The schema already has <code>stock</code> and
+<code>stock_movements</code> and neither is written. Decrement on finalise, append a movement row.</td>
+<td>Nothing below works without it. Roughly a day.</td></tr>
+<tr><td><b>2 · Spoken goods-inward</b></td><td>"Chitti, received twenty kilo sugar" in admin mode → stock up. The
+grammar and command matching already exist; this is one command and one handler.</td>
+<td>Without an inward number there is no baseline to measure loss against.</td></tr>
+<tr><td><b>3 · The shrinkage answer</b></td><td>One screen: per SKU, opening + inward − sold = expected, versus
+counted. Spoken stock count — "Chitti, count sugar eight kilo" — closes the loop.</td>
+<td><b>This is the experiment.</b> If a shopkeeper reacts to "four kilos unaccounted", the felt-need thesis is
+right and it reshapes the pitch.</td></tr>
+<tr><td><b>4 · Wired counter mic</b></td><td>Test a ₹300–600 USB-C or 3.5&nbsp;mm lapel mic on the counter phone.
+Web Audio takes it as an input device with no code change; measure error rate against the built-in mic.</td>
+<td>Tests the good half of the pivot — the phone off the counter — for the price of a lunch.</td></tr>
+<tr><td><b>5 · Instrument first</b></td><td>Error rate, corrections per bill, billing duration.</td>
+<td>Still the highest-value work in the plan, and every experiment above is unreadable without it.</td></tr>
+</table>
+<div class="hot box"><b>The order matters.</b> Do 5 before 1–4, or none of the results will mean anything. Then 1, 2
+and 3 as one sprint, and put the shrinkage number in front of Ragas and two kirana shops. <b>If "what is missing"
+lands harder than "what you earn", the whole pitch changes — and that is worth far more than the camera was.</b></div>
+
+<p class="meta">Bolo Bill · CCTV-audio pivot assessment · the two questions that would reopen it are Q20 (real
+audio from a real DVR through Sarvam) and Q21 (counsel on DPDP for customer audio) · August 2026</p>
