@@ -412,3 +412,52 @@ becomes compelling bundled with receipts and the Phase 4 reorder draft.
 
 **Reverses if:** a different monetisation thesis is chosen, at which point this entry is
 rewritten rather than amended.
+
+---
+
+## D11. A vision model reads paper, and only paper
+
+**Decision.** Document import — a photographed rate card, menu board or supplier delivery
+note turned into catalog rows or stock inward — runs on Claude Opus 5 with vision. Nothing
+else in the product calls a large model. The utterance path stays the deterministic grammar
+parser it was.
+
+**Why this does not break the ₹10 ceiling.** The constraint that rules out cloud ASR is
+arithmetic, not principle: ~24,000 utterances a shop a month leaves no room for per-call
+inference at any price. A catalog import happens **once**, when a shop signs up; an invoice
+perhaps weekly. Measured cost is about **7 paise a page** — call it ₹1–2 a shop a year for
+the catalog and a few rupees a year for inward. That is two orders of magnitude away from
+the number that decided the billing path, which is why the same reasoning lands in the
+opposite place.
+
+**Why a model at all, when the parser exists.** The parser reads speech in a grammar the
+shop has been taught. A rate card is somebody's handwriting, in a layout nobody agreed on,
+with abbreviations only that shop uses, in a script that may not be Latin. There is no
+grammar to write. This is the shape of problem a large model is actually for.
+
+**What it is not allowed to do.**
+
+- **It transcribes; it does not decide.** Which SKU a row *is* — whether "Sug." is the Sugar
+  already on the shelf — is settled afterwards by the same phonetic matcher the voice path
+  uses, at a higher bar (0.90) than billing, because billing has the shopkeeper's ear a
+  second later and an import does not. The model is never in a position to overwrite a price
+  by concluding two names are the same thing.
+- **It cannot write.** The read endpoint returns proposals. A separate, explicit save writes
+  them. A matched row keeps its aliases, its stock and its description: a rate card names a
+  price and nothing else, and an import that quietly dropped the spoken names a shop had
+  taught it would be worse than not importing at all.
+- **It may not guess a number.** Blank, smudged and ambiguous prices are dropped and counted,
+  and the count is shown. A missing row is an annoyance; an invented price is a wrong bill,
+  and principle 2 says which of those we optimise against.
+- **Owner only.** A worker importing a rate card would be repricing the shop from a
+  photograph.
+
+**Cost of this decision.** It adds a cloud dependency to a product that is otherwise
+offline-first, and an API key to a deployment that had two. Import is therefore the one
+screen that requires a network — acceptable because it is a setup activity, done once,
+usually sitting down, and the shop bills perfectly well without ever using it (D4).
+
+**Reverses if:** on-device OCR gets good enough at Indian handwriting and mixed scripts to
+match this without a network — at which point the interface stays and the reader is swapped
+behind it — or if measured cost per shop turns out an order of magnitude above 7 paise a
+page, which would mean rate limiting imports rather than removing them.
