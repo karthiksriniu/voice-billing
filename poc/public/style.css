@@ -787,8 +787,9 @@ button.busy,button.busy:disabled{opacity:1}
 }
 @keyframes pulsefade{0%,100%{opacity:.45}50%{opacity:.9}}
 
-/* Same button, smaller, on the screen the customer is looking at. */
-.talk.paytalk{width:72px;height:72px;margin-top:var(--space-2)}
-.talk.paytalk .talkicon{width:26px;height:26px}
-.talk.paytalk.rec .talkicon{width:22px;height:22px}
+/* The same control, the same size. Shrinking it here made it read as a different, lesser
+   button — and it is not: it is the same press-to-talk, on the screen where "cash paid"
+   and "send receipt" are said. A thumb that has learned one target should not have to
+   learn a second. */
+.talk.paytalk{margin-top:var(--space-2)}
 #payExtra{flex-wrap:wrap}

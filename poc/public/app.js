@@ -94,7 +94,23 @@ async function api(path, { method = "GET", body } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  // A session lasts a trading day, and until now nothing noticed when it ended. The
+  // symptom was a screen reporting the server's words verbatim — "Sign in required" on
+  // Past bills, and the worse "Owner only" on Settings, which blames the role for what is
+  // really an expired token. One 401 while we believe we are signed in means exactly one
+  // thing, so say it once and send them back to the passcode.
+  if (res.status === 401 && state.token) sessionExpired();
   return res.json();
+}
+
+let expiring = false;
+function sessionExpired() {
+  if (expiring) return;                       // several calls can fail together
+  expiring = true;
+  state.token = "";
+  try { localStorage.removeItem("vaakku"); } catch (e) { /* private mode */ }
+  toast(t("sessionOver"), 5000, true);
+  setTimeout(() => { expiring = false; resetAuth(); show("auth"); }, 400);
 }
 
 /* ---------- language ---------- */

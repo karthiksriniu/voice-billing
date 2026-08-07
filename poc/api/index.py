@@ -457,8 +457,10 @@ async def delete_product(req: DeleteRequest, request: Request):
 @router.get("/settings")
 async def settings_get(request: Request):
     c = claims_of(request)
-    if not c or c["role"] != "owner":
-        return deny("Owner only")
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
     shop = await db.get_shop(c["shop"]) or {}
     gstin = shop.get("gstin", "")
     return {"ok": True, "mobile": c["shop"], "name": shop.get("name", ""),
@@ -471,8 +473,10 @@ async def settings_get(request: Request):
 @router.post("/settings")
 async def settings_set(req: SettingsRequest, request: Request):
     c = claims_of(request)
-    if not c or c["role"] != "owner":
-        return deny("Owner only")
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
     shop = await db.get_shop(c["shop"]) or {}
     name = req.name.strip() or shop.get("name", "")
     lang = norm_lang(req.lang or shop.get("lang"))
