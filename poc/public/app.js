@@ -1481,6 +1481,177 @@ const fmtNum = (n) => {
 };
 $("miStock").onclick = openStock;
 
+/* ---------- import from paper ---------- */
+
+/* No cold-start wall (D4) says a shop bills on day one with an empty catalog. It does not
+   say the catalog has to stay empty, and typing forty products on a phone is nobody's
+   evening. Almost every shop already owns the list — on a rate card, a menu board, a
+   supplier's delivery note — so the fastest path to a full catalog is a photograph.
+
+   What arrives back is a proposal, never a write. The screen is built around review: rows
+   start ticked but each one can be dropped with a tap, a misread name or price is
+   correctable in place, and the only thing that writes is the button at the bottom. */
+
+const imp = { kind: "catalog", rows: [], cost: 0 };
+
+function openImport() {
+  goScreen("import");
+  imp.rows = [];
+  $("impList").innerHTML = "";
+  $("impStatus").textContent = "";
+  $("impFoot").hidden = true;
+  setImportKind(imp.kind);
+}
+$("miImport").onclick = openImport;
+
+function setImportKind(kind) {
+  imp.kind = kind;
+  $("impKindCatalog").classList.toggle("on", kind === "catalog");
+  $("impKindInward").classList.toggle("on", kind === "inward");
+  $("impHint").textContent = t(kind === "inward" ? "impHintInward" : "impHintCatalog");
+}
+$("impKindCatalog").onclick = () => { setImportKind("catalog"); openImport(); };
+$("impKindInward").onclick = () => { setImportKind("inward"); openImport(); };
+
+$("impPick").onclick = () => $("impFiles").click();
+$("impFiles").onchange = () => {
+  const files = [...$("impFiles").files];
+  $("impFiles").value = "";                     // so the same photo can be retried
+  if (files.length) readDocuments(files);
+};
+
+async function readDocuments(files) {
+  if (files.length > 5) { toast(t("impTooMany"), 4000, true); return; }
+  const fd = new FormData();
+  files.forEach((f) => fd.append("files", f, f.name || "page.jpg"));
+  fd.append("kind", imp.kind);
+
+  // Reading a page takes seconds, not milliseconds, and a screen that says nothing for ten
+  // seconds reads as broken. This is the one place in the app where a wait is expected, so
+  // it is named rather than hidden behind a spinner.
+  $("impStatus").textContent = t("impReading");
+  $("impList").innerHTML = "";
+  $("impFoot").hidden = true;
+  await withBusy($("impPick"), async () => {
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: state.token ? { Authorization: `Bearer ${state.token}` } : {},
+        body: fd,
+      });
+      if (res.status === 401 && state.token) { sessionExpired(); return; }
+      const j = await res.json();
+      if (!j.ok) { $("impStatus").textContent = j.error || t("notSaved"); return; }
+      imp.rows = j.items || [];
+      imp.cost = j.cost_paise || 0;
+      // Rows the model could not read are reported rather than quietly absent. A price
+      // list that came back four items short and said nothing would be discovered weeks
+      // later, at the counter, as a product that does not exist.
+      const notes = [];
+      if (j.skipped) notes.push(`${j.skipped} ${t("impSkipped")}`);
+      if (j.truncated) notes.push(t("impTruncated"));
+      $("impStatus").textContent = notes.join(" · ");
+      renderImport();
+    } catch (err) { $("impStatus").textContent = t("network"); }
+  });
+}
+
+function renderImport() {
+  const box = $("impList");
+  if (!imp.rows.length) {
+    box.innerHTML = `<p class="empty small">${t("impNothing")}</p>`;
+    $("impFoot").hidden = true;
+    return;
+  }
+  box.innerHTML = imp.rows.map((r, i) => (
+    imp.kind === "inward" ? inwardRow(r, i) : catalogRow(r, i)
+  )).join("");
+  box.querySelectorAll("[data-imp]").forEach((el) => {
+    el.oninput = () => {
+      const r = imp.rows[+el.dataset.imp];
+      r[el.dataset.field] = el.type === "checkbox" ? el.checked : el.value;
+    };
+  });
+  box.querySelectorAll("[data-impmatch]").forEach((el) => {
+    el.onchange = () => {
+      const r = imp.rows[+el.dataset.impmatch];
+      r.chosen_id = el.value;
+      r.keep = !!el.value;
+      renderImport();
+    };
+  });
+  $("impFoot").hidden = false;
+  $("impCost").textContent = imp.cost
+    ? `${t("impCost")} ${rupees(imp.cost / 100)}` : "";
+}
+
+function catalogRow(r, i) {
+  const known = r.match;
+  const moved = known && Math.abs((r.was || 0) - r.price) > 0.005;
+  // Only a price that actually moves is marked. A rate card is mostly figures the shop
+  // already has; the two that changed are the whole reason for reading it.
+  const tag = !known ? `<span class="pill">${t("impNew")}</span>`
+    : moved ? `<span class="pill unpaid">${t("impChanged")}</span>` : "";
+  const was = moved ? `<span class="impwas">${rupees(r.was)}</span>` : "";
+  if (r.keep === undefined) r.keep = true;
+  return `<div class="hrow improw${moved ? " changes" : ""}">
+    <input type="checkbox" data-imp="${i}" data-field="keep" ${r.keep ? "checked" : ""}>
+    <div class="hmain">
+      <b>${esc(known ? known.name : r.name)}</b> ${tag}
+      <div class="hsub">${was}₹<input class="mini" style="width:5.5em" inputmode="decimal"
+        value="${r.price}" data-imp="${i}" data-field="price"> / ${esc(r.unit)}</div>
+      ${r.verbatim ? `<div class="impverb">${esc(r.verbatim)}</div>` : ""}
+    </div></div>`;
+}
+
+function inwardRow(r, i) {
+  // Stock can only move for something the shop already sells — an invoice line with no SKU
+  // behind it has nowhere to land, so it says so instead of silently creating one. Prices
+  // come from the price list, not from a delivery note.
+  const id = r.chosen_id || (r.match && r.match.id) || "";
+  if (r.keep === undefined) r.keep = !!id;
+  const options = (r.candidates || []).map((c) =>
+    `<option value="${c.id}" ${c.id === id ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+  const picker = r.match
+    ? `<b>${esc(r.match.name)}</b>`
+    : `<select class="mini" data-impmatch="${i}">
+         <option value="">${t("impNoMatch")}</option>${options}</select>`;
+  return `<div class="hrow improw">
+    <input type="checkbox" data-imp="${i}" data-field="keep"
+      ${r.keep ? "checked" : ""} ${id ? "" : "disabled"}>
+    <div class="hmain">
+      ${picker}
+      <div class="hsub"><input class="mini" style="width:5em" inputmode="decimal"
+        value="${r.qty}" data-imp="${i}" data-field="qty"> ${esc(r.unit)}</div>
+      ${r.verbatim ? `<div class="impverb">${esc(r.verbatim)}</div>` : ""}
+    </div></div>`;
+}
+
+const esc = (s) => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+$("impSave").onclick = () => withBusy($("impSave"), async () => {
+  const kept = imp.rows.filter((r) => r.keep);
+  if (!kept.length) { toast(t("impNothingPicked"), 3000, true); return; }
+  const items = imp.kind === "inward"
+    ? kept.map((r) => ({ product_id: r.chosen_id || (r.match && r.match.id),
+                         qty: +r.qty || 0 })).filter((x) => x.product_id && x.qty > 0)
+    : kept.map((r) => ({ id: r.match ? r.match.id : "",
+                         name: r.match ? r.match.name : r.name,
+                         unit: r.unit, price: +r.price || 0 }));
+  try {
+    const j = await api("/api/import/apply", { method: "POST",
+                                               body: { kind: imp.kind, items } });
+    if (!j.ok && !j.written) { toast(j.error || t("notSaved"), 4000, true); return; }
+    const n = imp.kind === "inward" ? j.applied : j.written;
+    speak(`${n} ${t("impSaved")}`);
+    imp.rows = [];
+    renderImport();
+    $("impStatus").textContent = "";
+    if (imp.kind === "catalog") loadCatalog();
+  } catch (err) { toast(t("network"), 3000, true); }
+});
+
 /* ---------- past bills ---------- */
 
 /* The screen exists to answer two questions at a counter: did that one get paid, and can

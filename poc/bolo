@@ -61,7 +61,7 @@ print(hits[-1] if hits else "")
   env)
     echo "Paste each value at the prompt. Nothing is written to shell history."
     echo "Choose the environments when asked — Preview too, if staging should be usable."
-    for v in SARVAM_API_KEY SUPABASE_URL SUPABASE_SERVICE_KEY; do
+    for v in SARVAM_API_KEY SUPABASE_URL SUPABASE_SERVICE_KEY ANTHROPIC_API_KEY; do
       echo "--- $v ---"
       vercel env add "$v" || true
     done

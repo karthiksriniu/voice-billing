@@ -815,3 +815,35 @@ button.busy,button.busy:disabled{opacity:1}
 .losstop b{font-size:var(--type-display-small-size);line-height:1;font-weight:800}
 .losstop span{font-size:var(--type-body-medium-size)}
 .pill{background:var(--color-surface-container-high);color:var(--color-on-surface-variant)}
+
+/* -- Import from paper ----------------------------------------- */
+/* A review screen, not an upload button. The layout says so: the Save control sits at the
+   bottom of a list the shopkeeper has to scroll past, and every row carries a checkbox
+   that starts ticked but can be untucked in one tap. */
+.seg{
+  display:flex;gap:0;margin-bottom:var(--space-3);
+  border:1px solid var(--color-outline);border-radius:var(--radius-full);overflow:hidden;
+}
+.segbtn{
+  flex:1;padding:var(--space-3);border:none;background:none;cursor:pointer;
+  font-size:var(--type-label-large-size);font-weight:600;
+  color:var(--color-on-surface-variant);font-family:inherit;
+}
+.segbtn.on{background:var(--color-secondary-container);color:var(--color-on-secondary-container)}
+
+.impfoot{
+  position:sticky;bottom:0;padding:var(--space-3) 0 var(--space-2);
+  background:linear-gradient(to top,var(--color-surface) 70%,transparent);
+}
+.improw{align-items:flex-start}
+.improw input[type=checkbox]{
+  width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--color-primary);
+}
+/* A row that will change a price the shop already has is the one worth a second look, so
+   it is the only one that gets marked. A brand new product is unremarkable. */
+.improw.changes{border-color:var(--color-primary)}
+.impwas{text-decoration:line-through;opacity:.6;margin-right:var(--space-2)}
+.impverb{
+  font-size:var(--type-body-small-size);color:var(--color-on-surface-variant);
+  opacity:.75;font-style:italic;
+}

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/style.css?v=ab8397e-0127">
+<link rel="stylesheet" href="/style.css?v=27319af-0151">
 </head>
 <body>
 
@@ -186,6 +186,32 @@
   </div>
 </section>
 
+<!-- Photograph the paperwork the shop already has. Every row that lands here is a
+     proposal: nothing is written until the shopkeeper taps Save, because a rate card read
+     slightly wrong and applied silently would mis-bill every sale afterwards. -->
+<section id="import" class="screen">
+  <header class="bar">
+    <button class="iconbtn" data-back aria-label="Back">←</button>
+    <b data-t="importHead">Import from paper</b>
+  </header>
+  <div class="pad">
+    <div class="seg" role="tablist">
+      <button id="impKindCatalog" class="segbtn on" data-t="impPriceList">Price list</button>
+      <button id="impKindInward" class="segbtn" data-t="impInvoice">Supplier invoice</button>
+    </div>
+    <p id="impHint" class="fineprint dim" data-t="impHintCatalog">Photograph the rate card
+      or menu board. Up to 5 pages, or one PDF.</p>
+    <input id="impFiles" type="file" accept="image/*,application/pdf" multiple hidden>
+    <button id="impPick" class="primary wide" data-t="impChoose">Take photo / choose file</button>
+    <div id="impStatus" class="fineprint dim"></div>
+    <div id="impList" class="histlist"></div>
+    <div id="impFoot" class="impfoot" hidden>
+      <button id="impSave" class="primary wide"><span data-t="impSave">Save these</span></button>
+      <p id="impCost" class="fineprint dim"></p>
+    </div>
+  </div>
+</section>
+
 <!-- Past bills. Its job is answering "did that one get paid?" and "can you send that
      receipt again?" — so payment state is the loudest thing on each row. -->
 <section id="history" class="screen">
@@ -245,6 +271,9 @@
     <button id="miStock" class="menuitem" role="menuitem">
       <svg class="mi" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20 6h-3V4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM9 4h6v2H9zm11 15H4V8h16z"/></svg>
       <span data-t="stockHead">Stock &amp; loss</span></button>
+    <button id="miImport" class="menuitem" role="menuitem">
+      <svg class="mi" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M9 3 7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.17L15 3zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+      <span data-t="importHead">Import from paper</span></button>
     <button id="miDebug" class="menuitem" role="menuitemcheckbox" aria-checked="false">
       <svg class="mi" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20 8h-2.81a6 6 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17a6 6 0 0 0-2.83 0L8.41 3 7 4.41l1.62 1.63A6 6 0 0 0 6.81 8H4v2h2.09A6.6 6.6 0 0 0 6 11v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81a5.99 5.99 0 0 0 10.38 0H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20zm-6 8h-4v-2h4zm0-4h-4v-2h4z"/></svg><span data-t="debugInfo">Debug info</span><span id="miDebugState" class="mistate">Off</span></button>
     <div id="miDiv" class="menudiv"></div>
@@ -332,10 +361,10 @@
 </section>
 
 <div id="toast" class="toast"></div>
-<script>window.BOLO_BUILD="ab8397e-0127"</script>
-<script src="/i18n.js?v=ab8397e-0127"></script>
-<script src="/app.js?v=ab8397e-0127"></script>
-<script src="/print.js?v=ab8397e-0127"></script>
-<script src="/wake.js?v=ab8397e-0127"></script>
+<script>window.BOLO_BUILD="27319af-0151"</script>
+<script src="/i18n.js?v=27319af-0151"></script>
+<script src="/app.js?v=27319af-0151"></script>
+<script src="/print.js?v=27319af-0151"></script>
+<script src="/wake.js?v=27319af-0151"></script>
 </body>
 </html>

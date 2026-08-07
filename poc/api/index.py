@@ -32,6 +32,7 @@ import gst                                             # noqa: E402
 import receipt as receipts                            # noqa: E402
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
+import vision                                          # noqa: E402
 
 app = FastAPI(title="Vaakku PoC")
 app.add_middleware(
@@ -937,6 +938,150 @@ async def stock_report(request: Request):
     rows.sort(key=lambda r: r["value_lost"], reverse=True)
     return {"ok": True, "items": rows,
             "total_lost": round(sum(r["value_lost"] for r in rows if r["value_lost"] > 0), 2)}
+
+
+# ---------------------------------------------------------------------------
+# Document import
+# ---------------------------------------------------------------------------
+# A shop bills on day one with an empty catalog (D4), and it stays half-empty for weeks
+# because typing forty products on a phone is nobody's evening. But almost every shop
+# already owns the list on paper — a rate card, a menu board, the supplier's invoice. This
+# reads it.
+#
+# The model transcribes; this code decides. Matching an extracted line to a SKU the shop
+# already sells uses the same phonetic matcher as the voice path, so an import and a spoken
+# correction agree with each other, and the model is never in a position to overwrite a
+# price by concluding two names are the same thing.
+
+IMPORT_MIMES = {"image/jpeg": "image/jpeg", "image/jpg": "image/jpeg",
+                "image/png": "image/png", "image/webp": "image/webp",
+                "image/heic": "image/jpeg", "image/heif": "image/jpeg",
+                "application/pdf": "application/pdf"}
+
+# Above this, the extracted name and a catalog name are the same product. Deliberately
+# higher than the billing gate: billing has the shopkeeper's ear a second later, an import
+# proposes a silent price change to a row they may skim past.
+IMPORT_MATCH = 0.90
+
+
+@router.post("/import")
+async def import_document(request: Request,
+                          files: list[UploadFile] = File(...),
+                          kind: str = Form("catalog")):
+    """Photographs or a PDF in, proposed rows out. Writes nothing."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    # Prices and stock both belong to the owner. A worker importing a rate card would be
+    # repricing the shop from a photograph.
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    if kind not in ("catalog", "inward"):
+        return deny("Unknown kind", 400)
+
+    blobs: list[tuple[bytes, str]] = []
+    for f in files:
+        mime = IMPORT_MIMES.get((f.content_type or "").lower())
+        if not mime:
+            return JSONResponse({"ok": False,
+                                 "error": f"{f.filename or 'file'}: photos or PDF only"},
+                                status_code=400)
+        raw = await f.read()
+        if len(raw) > vision.MAX_BYTES:
+            return JSONResponse({"ok": False,
+                                 "error": f"{f.filename or 'file'} is too large"},
+                                status_code=400)
+        blobs.append((raw, mime))
+
+    t0 = time.perf_counter()
+    out = await vision.read(blobs, kind)
+    if not out.get("ok"):
+        return JSONResponse(out, status_code=502)
+
+    shop = await db.get_shop(c["shop"]) or {}
+    lang = lang_for(shop.get("lang") or "en")
+    products = await db.get_products(c["shop"])
+    cat = Catalog(products)
+
+    rows = []
+    for raw in out["data"].get("items", []):
+        name = tidy_name(raw.get("name") or "")
+        if not name:
+            continue
+        near = cat.candidates(name, lang, n=3)
+        top = near[0] if near else None
+        matched = top if top and top["score"] >= IMPORT_MATCH else None
+        row = {"name": name, "verbatim": raw.get("verbatim", ""),
+               "unit": lang.canonical_unit(raw.get("unit") or "") or "piece",
+               "match": matched, "candidates": near}
+        if kind == "catalog":
+            row["price"] = round(float(raw.get("price") or 0), 2)
+            # Shown so a review screen can lead with what actually changes. A rate card
+            # is mostly prices the shop already has; the two that moved are the point.
+            row["was"] = float(matched["unit_price"] or 0) if matched else None
+        else:
+            row["qty"] = round(float(raw.get("qty") or 0), 3)
+            row["rate"] = round(float(raw.get("rate") or 0), 2)
+        rows.append(row)
+
+    return {"ok": True, "kind": kind, "items": rows,
+            "skipped": int(out["data"].get("skipped") or 0),
+            "supplier": out["data"].get("supplier", ""),
+            "invoice_no": out["data"].get("invoice_no", ""),
+            "invoice_date": out["data"].get("invoice_date", ""),
+            "truncated": out.get("truncated", False),
+            "cost_paise": out.get("cost_paise", 0),
+            "took_ms": int((time.perf_counter() - t0) * 1000)}
+
+
+class ApplyRequest(BaseModel):
+    kind: str = "catalog"
+    items: list[dict] = []
+
+
+@router.post("/import/apply")
+async def import_apply(req: ApplyRequest, request: Request):
+    """Write the rows the shopkeeper kept. Only rows they sent arrive here — the review
+    screen is where an unwanted row is dropped, and there is no 'apply all' shortcut that
+    skips it."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+
+    shop = await db.get_shop(c["shop"]) or {}
+    lang = lang_for(shop.get("lang") or "en")
+
+    if req.kind == "inward":
+        known = {p["id"] for p in await db.get_products(c["shop"])}
+        moves = [{"product_id": i["product_id"], "delta": abs(float(i.get("qty") or 0))}
+                 for i in req.items if i.get("product_id") in known]
+        error = await db.move_stock(c["shop"], moves, "inward")
+        return JSONResponse({"ok": not error, "error": error, "applied": len(moves)},
+                            status_code=200 if not error else 502)
+
+    written, failed = 0, []
+    for i in req.items:
+        payload = {"name": tidy_name(i.get("name") or ""),
+                   "unit": lang.canonical_unit(i.get("unit") or "") or "piece",
+                   "unit_price": round(float(i.get("price") or 0), 2)}
+        if not payload["name"]:
+            continue
+        # An id means "this is the product already on the shelf" — the row keeps its
+        # aliases, its stock and its description, and only the fields sent here move.
+        if i.get("id"):
+            existing = next((p for p in await db.get_products(c["shop"])
+                             if p["id"] == i["id"]), None)
+            if existing:
+                payload = {**existing, **payload, "id": i["id"]}
+        _, error = await db.upsert_product(c["shop"], payload)
+        if error:
+            failed.append({"name": payload["name"], "error": error})
+        else:
+            written += 1
+    db.invalidate(c["shop"])
+    return {"ok": not failed, "written": written, "failed": failed}
 
 
 class SettleRequest(BaseModel):
