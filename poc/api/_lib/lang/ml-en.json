@@ -584,6 +584,20 @@
       "ബിൽ അയക്കൂ",
       "രസീത് അയക്കൂ",
       "സെൻഡ് റസീറ്റ്"
+    ],
+    "stock_in": [
+      "goods received",
+      "inward",
+      "received",
+      "stock in",
+      "കിട്ടി",
+      "സ്റ്റോക്ക് വന്നു"
+    ],
+    "stock_count": [
+      "count",
+      "stock count",
+      "എണ്ണം",
+      "സ്റ്റോക്ക് ഉണ്ട്"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

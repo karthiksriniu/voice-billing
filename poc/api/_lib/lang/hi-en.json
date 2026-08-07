@@ -575,6 +575,21 @@
       "बिल भेजो",
       "रसीद भेजो",
       "सेंड रसीद"
+    ],
+    "stock_in": [
+      "goods received",
+      "inward",
+      "received",
+      "stock in",
+      "आया",
+      "माल आया",
+      "स्टॉक आया"
+    ],
+    "stock_count": [
+      "count",
+      "stock count",
+      "गिनती",
+      "स्टॉक है"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

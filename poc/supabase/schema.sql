@@ -138,6 +138,23 @@ begin
 end;
 $$;
 
+-- Applying a movement has to be an increment, not a write. Two sales of the same item in
+-- the same second would otherwise each read the old figure and each store their own
+-- answer, and one of them would be lost — which is exactly the sort of quiet arithmetic
+-- error that makes a shrinkage number worthless.
+create or replace function bump_stock(p_id text, p_delta numeric)
+returns void
+language sql
+security invoker
+set search_path = public, pg_temp
+as $$
+  update products set stock = coalesce(stock, 0) + p_delta, updated_at = now()
+  where id = p_id;
+$$;
+
+create index if not exists stock_moves_shop on stock_movements (shop_id, occurred_at desc);
+create index if not exists stock_moves_prod on stock_movements (shop_id, product_id);
+
 -- Repeat-order history: "phone number 98400 12345" at the start of a bill pulls this
 -- customer's last few purchases. Scoped by shop, newest first.
 create index if not exists bills_customer

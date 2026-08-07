@@ -194,6 +194,48 @@ async def next_receipt_no(shop_id: str, fy: str) -> int:
     return 0
 
 
+async def move_stock(shop_id: str, moves: list[dict], reason: str,
+                     bill_id: str | None = None) -> str:
+    """Write stock movements and apply them to the product rows.
+
+    The ledger is the truth and the running figure on the product is a convenience — an
+    append-only log can be recomputed after a bad write, whereas a bare number cannot be
+    argued with. Shrinkage is the difference between what this ledger says should be there
+    and what somebody counted, so it has to be complete rather than tidy.
+    """
+    if not moves:
+        return ""
+    rows = [{"shop_id": shop_id, "product_id": m["product_id"],
+             "delta": float(m["delta"]), "reason": reason, "bill_id": bill_id}
+            for m in moves if m.get("product_id")]
+    if not rows:
+        return ""
+    if not configured():
+        _memory.setdefault("moves", []).extend(rows)
+        return ""
+    invalidate(shop_id)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(f"{SUPABASE_URL}/rest/v1/stock_movements",
+                             headers=_headers(), json=rows)
+            if r.status_code >= 400:
+                return f"supabase {r.status_code}: {r.text[:200]}"
+            # Applied one product at a time on purpose: PostgREST cannot express
+            # "stock = stock + delta" in a bulk patch, and a read-then-write of the whole
+            # catalog would lose any sale that landed in between.
+            for m in rows:
+                await c.post(f"{SUPABASE_URL}/rest/v1/rpc/bump_stock", headers=_headers(),
+                             json={"p_id": m["product_id"], "p_delta": m["delta"]})
+    except Exception as exc:                           # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"
+    return ""
+
+
+async def stock_ledger(shop_id: str, since_days: int = 90) -> list[dict]:
+    return await _get("stock_movements", {"shop_id": f"eq.{shop_id}", "select": "*",
+                                          "order": "occurred_at.desc", "limit": "2000"})
+
+
 async def recent_bills(shop_id: str, limit: int = 40) -> list[dict]:
     """Newest first, this shop only. The index on (shop_id, created_at desc) exists for
     exactly this query."""

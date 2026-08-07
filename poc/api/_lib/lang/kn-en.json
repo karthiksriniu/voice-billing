@@ -554,6 +554,20 @@
       "ಬಿಲ್ ಕಳಿಸಿ",
       "ರಸೀದಿ ಕಳಿಸಿ",
       "ಸೆಂಡ್ ರಸೀದಿ"
+    ],
+    "stock_in": [
+      "goods received",
+      "inward",
+      "received",
+      "stock in",
+      "ಬಂತು",
+      "ಸರಕು ಬಂತು"
+    ],
+    "stock_count": [
+      "count",
+      "stock count",
+      "ಎಣಿಕೆ",
+      "ಸ್ಟಾಕ್ ಇದೆ"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

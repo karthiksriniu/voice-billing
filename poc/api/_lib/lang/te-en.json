@@ -558,6 +558,20 @@
       "బిల్లు పంపు",
       "రసీదు పంపు",
       "సెండ్ రసీద్"
+    ],
+    "stock_in": [
+      "goods received",
+      "inward",
+      "received",
+      "stock in",
+      "వచ్చింది",
+      "సరుకు వచ్చింది"
+    ],
+    "stock_count": [
+      "count",
+      "stock count",
+      "లెక్క",
+      "స్టాక్ ఉంది"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

@@ -613,6 +613,14 @@ async def finalize(req: FinalizeRequest):
     doc = receipts.build(shop, bill, number, now)
     bill_id = await db.save_bill(req.shop_id, {**bill, "receipt_no": number,
                                                "receipt": doc})
+    # What was sold leaves the shelf. Combos are expanded so a blend decrements both of its
+    # parts rather than one invented line.
+    moves = []
+    for it in req.items:
+        for part in (it.get("combo") or [it]):
+            if part.get("product_id") and part.get("qty"):
+                moves.append({"product_id": part["product_id"], "delta": -abs(float(part["qty"]))})
+    await db.move_stock(req.shop_id, moves, "sale", bill_id)
     return {
         "bill_id": bill_id, "total": total, "ref": ref,
         "upi_uri": uri, "qr": qr_data_uri(uri),
@@ -850,6 +858,85 @@ async def receipt_send(req: SendRequest, request: Request):
     return JSONResponse({"ok": sent, "configured": True,
                          "error": "" if sent else r.text[:300]},
                         status_code=200 if sent else 502)
+
+
+class StockRequest(BaseModel):
+    moves: list[dict]           # [{product_id, qty}]
+    reason: str = "inward"      # inward | count | wastage
+
+
+@router.post("/stock")
+async def stock_write(req: StockRequest, request: Request):
+    """Goods in, a physical count, or wastage. Owner only — a stock figure decides whether
+    the shop believes it is being robbed, so it is not a worker's to move."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    if req.reason not in ("inward", "count", "wastage"):
+        return deny("Unknown reason", 400)
+
+    products = {p["id"]: p for p in await db.get_products(c["shop"])}
+    moves = []
+    for m in req.moves:
+        p = products.get(m.get("product_id"))
+        if not p:
+            continue
+        qty = float(m.get("qty") or 0)
+        if req.reason == "count":
+            # A count is not a delta — it is an assertion about what is on the shelf, so
+            # the movement is whatever makes the ledger agree with the shopkeeper's eyes.
+            moves.append({"product_id": p["id"], "delta": qty - float(p.get("stock") or 0)})
+        else:
+            moves.append({"product_id": p["id"],
+                          "delta": abs(qty) if req.reason == "inward" else -abs(qty)})
+    error = await db.move_stock(c["shop"], moves, req.reason)
+    return JSONResponse({"ok": not error, "error": error, "applied": len(moves)},
+                        status_code=200 if not error else 502)
+
+
+@router.get("/stock")
+async def stock_report(request: Request):
+    """What should be on the shelf, against what was counted.
+
+    The number the shopkeeper actually cares about is the gap. Loss is felt more sharply
+    than foregone gain, which is why this is the screen worth building before any margin
+    dashboard.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    products = await db.get_products(c["shop"])
+    ledger = await db.stock_ledger(c["shop"])
+    agg: dict[str, dict] = {}
+    for m in ledger:
+        a = agg.setdefault(m["product_id"], {"sold": 0.0, "inward": 0.0,
+                                             "counted": 0.0, "wastage": 0.0})
+        delta = float(m.get("delta") or 0)
+        if m["reason"] == "sale":
+            a["sold"] += -delta
+        elif m["reason"] == "inward":
+            a["inward"] += delta
+        elif m["reason"] == "wastage":
+            a["wastage"] += -delta
+        else:
+            a["counted"] += delta          # the correction a count applied
+    rows = []
+    for p in products:
+        a = agg.get(p["id"], {"sold": 0.0, "inward": 0.0, "counted": 0.0, "wastage": 0.0})
+        # A count correction IS the shrinkage: it is the amount the shelf disagreed with
+        # the ledger by. Negative means goods left without being billed.
+        rows.append({"id": p["id"], "name": p["name"], "unit": p["unit"],
+                     "unit_price": float(p["unit_price"] or 0),
+                     "stock": float(p.get("stock") or 0),
+                     "sold": round(a["sold"], 3), "inward": round(a["inward"], 3),
+                     "wastage": round(a["wastage"], 3),
+                     "unaccounted": round(a["counted"], 3),
+                     "value_lost": round(-a["counted"] * float(p["unit_price"] or 0), 2)})
+    rows.sort(key=lambda r: r["value_lost"], reverse=True)
+    return {"ok": True, "items": rows,
+            "total_lost": round(sum(r["value_lost"] for r in rows if r["value_lost"] > 0), 2)}
 
 
 class SettleRequest(BaseModel):

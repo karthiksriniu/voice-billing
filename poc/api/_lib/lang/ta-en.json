@@ -521,6 +521,25 @@
       "பில் அனுப்பு",
       "ரசீது அனுப்பு",
       "ரிசீட் அனுப்பு"
+    ],
+    "stock_in": [
+      "goods received",
+      "inward",
+      "received",
+      "stock in",
+      "stock vandhuchu",
+      "vandhuchu",
+      "சரக்கு வந்தது",
+      "ரிசீவ்ட்",
+      "வந்தது"
+    ],
+    "stock_count": [
+      "count",
+      "ennu",
+      "stock count",
+      "stock irukku",
+      "இருக்கு",
+      "எண்ணு"
     ]
   },
   "_comment_of": "Filler words dropped before matching. 'of', 'ku', 'kku' appear in price-led phrasing: 'ten rupees ku coriander'.",

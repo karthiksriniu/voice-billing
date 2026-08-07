@@ -16,7 +16,7 @@ const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 const $ = (id) => document.getElementById(id);
 const screens = ["auth", "main", "payment", "receipt", "settings", "staffScreen",
-                 "billdoc", "history"];
+                 "billdoc", "history", "stock"];
 const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
@@ -322,16 +322,72 @@ function applyAsrAvailability() {
   $("typeToggle").hidden = true;
 }
 
+/* The phone's own microphone is 20cm from the shopkeeper's mouth only while the phone is
+   in their hand — which is the thing we are trying to stop. A wired lapel or boundary mic
+   on the counter is near-field permanently, costs a few hundred rupees, and is chosen here
+   rather than assumed. The browser exposes it as just another input device, so this is a
+   deviceId and nothing else changes. */
+const MIC_PREF = "boloMicId";
+
 async function openMic() {
   if (stream) return;
+  const want = (() => { try { return localStorage.getItem(MIC_PREF) || ""; } catch (e) { return ""; } })();
+  const base = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      // `exact` on purpose: silently falling back to the built-in mic would make a mic
+      // comparison meaningless, and we would be measuring the wrong device.
+      audio: want ? { ...base, deviceId: { exact: want } } : base,
     });
   } catch (err) {
-    setStatus(t("voiceUnavailable"));
-    toast("Allow microphone access, then reload.", 4000);
+    if (want) {                                  // the chosen mic is gone — say so, then fall back
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: base });
+        toast(t("micGone"), 4000, true);
+      } catch (e2) { /* handled below */ }
+    }
+    if (!stream) {
+      setStatus(t("voiceUnavailable"));
+      toast("Allow microphone access, then reload.", 4000);
+      return;
+    }
   }
+  const track = stream.getAudioTracks()[0];
+  micLabel = (track && track.label) || "default";
+}
+
+let micLabel = "";
+
+/* Device labels are hidden until permission has been granted once, so the picker is
+   populated after the mic has been opened, not before. */
+async function listMics() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === "audioinput");
+  } catch (err) { return []; }
+}
+
+async function renderMicPicker() {
+  const sel = $("setMic");
+  if (!sel) return;
+  const mics = await listMics();
+  const cur = (() => { try { return localStorage.getItem(MIC_PREF) || ""; } catch (e) { return ""; } })();
+  sel.innerHTML = `<option value="">${t("micDefault")}</option>` + mics.map((m, i) =>
+    `<option value="${m.deviceId}"${m.deviceId === cur ? " selected" : ""}>${
+      m.label || `${t("micDefault")} ${i + 1}`}</option>`).join("");
+  sel.onchange = async () => {
+    try { localStorage.setItem(MIC_PREF, sel.value); } catch (e) { /* private mode */ }
+    releaseMicForSwitch();
+    await openMic();
+    toast(`${t("micNow")} ${micLabel || t("micDefault")}`, 3000, true);
+  };
+}
+
+/* Switching device means dropping the stream the old one owns. */
+function releaseMicForSwitch() {
+  if (!stream) return;
+  try { stream.getTracks().forEach((tr) => tr.stop()); } catch (e) { /* gone */ }
+  stream = null;
 }
 
 function setTalk(mode) {
@@ -385,8 +441,14 @@ async function handleClip() {
     fd.append("shop_id", state.shop.id);
     fd.append("mode", state.mode);
     fd.append("lang", state.shop.lang || "ta");
+    fd.append("mic", micLabel || "");
+    fd.append("clip_ms", String(ms));
     const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-    apply(await res.json(), Math.round(performance.now() - t0));
+    const data = await res.json();
+    // Which microphone produced this, how long the clip was, and what came back. Without
+    // these three, "the counter mic is better" is an impression rather than a result.
+    logAttempt(data, ms, Math.round(performance.now() - t0));
+    apply(data, Math.round(performance.now() - t0));
   } catch (err) {
     toast(t("network"));
     setStatus(t("ready"));
@@ -438,6 +500,64 @@ payTalk.addEventListener("pointerup", (e) => { e.preventDefault(); stopRec(); })
 payTalk.addEventListener("pointercancel", stopRec);
 payTalk.addEventListener("lostpointercapture", stopRec);
 payTalk.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* ---------- measurement ----------
+   Kept on the device and never sent anywhere on its own. Its whole purpose is to answer
+   questions we have been guessing at: how long a bill really takes, how often a line has
+   to be corrected, and whether a counter microphone is actually better than the phone. */
+function logAttempt(data, clipMs, roundTripMs) {
+  try {
+    const rec = {
+      at: Date.now(), mic: micLabel || "default", clip_ms: clipMs, ms: roundTripMs,
+      asr_ms: data.asr_ms || 0,
+      items: (data.items || []).length,
+      // A confirm is the parser saying "I am not sure" — the single best proxy for
+      // recognition quality that does not need a human to grade it.
+      confirms: (data.items || []).filter((i) => i.verdict === "confirm").length,
+      rejects: (data.items || []).filter((i) => i.verdict === "reject").length,
+      unmatched: (data.unmatched || []).length,
+      empty: !data.transcript,
+      chars: (data.transcript || "").length,
+    };
+    const log = JSON.parse(localStorage.getItem("boloLog") || "[]");
+    log.push(rec);
+    localStorage.setItem("boloLog", JSON.stringify(log.slice(-500)));
+  } catch (err) { /* measurement must never break billing */ }
+}
+
+/* A correction is the strongest signal we have and the only one that needs the shopkeeper.
+   Called wherever a line is removed or overwritten shortly after it appeared. */
+function logCorrection(kind) {
+  try {
+    const log = JSON.parse(localStorage.getItem("boloLog") || "[]");
+    const last = log[log.length - 1];
+    if (last && Date.now() - last.at < 30000) {
+      last.corrections = (last.corrections || 0) + 1;
+      last.correction_kind = kind;
+      localStorage.setItem("boloLog", JSON.stringify(log));
+    }
+  } catch (err) { /* never break billing */ }
+}
+
+/* Grouped by microphone, because that is the comparison being run. */
+window.micReport = function micReport() {
+  const log = JSON.parse(localStorage.getItem("boloLog") || "[]");
+  const by = {};
+  for (const r of log) {
+    const k = r.mic || "default";
+    by[k] = by[k] || { n: 0, ms: 0, confirms: 0, rejects: 0, unmatched: 0, empty: 0, corrections: 0 };
+    const b = by[k];
+    b.n++; b.ms += r.ms; b.confirms += r.confirms; b.rejects += r.rejects;
+    b.unmatched += r.unmatched; b.empty += r.empty ? 1 : 0; b.corrections += r.corrections || 0;
+  }
+  return Object.entries(by).map(([mic, b]) => ({
+    mic, utterances: b.n,
+    avg_ms: Math.round(b.ms / b.n),
+    // The headline: how often the system was unsure, wrong, or heard nothing.
+    trouble_rate: +(((b.confirms + b.rejects + b.unmatched + b.empty) / b.n)).toFixed(3),
+    corrections_per_utterance: +(b.corrections / b.n).toFixed(3),
+  }));
+};
 
 /* ---------- results ---------- */
 
@@ -498,6 +618,8 @@ function apply(data, roundTripMs) {
   }
   if (data.command === "cash_paid") { cashReceived(); return; }
   if (data.command === "send_receipt") { sendReceiptByVoice(data.customer_mobile); return; }
+  if (data.command === "stock_in") { moveStock(data, "inward"); return; }
+  if (data.command === "stock_count") { moveStock(data, "count"); return; }
   if (data.command === "add_item") { addItemByVoice(data); return; }
 
   if (data.command === "cancel_last" && state.items.length) {
@@ -549,7 +671,10 @@ function addOrUpdate(line) {
   if (i === -1) { state.items.push(line); return false; }
   const was = state.items[i].amount;
   state.items[i] = line;
-  if (was !== line.amount) toast(`${line.name} — ${t("updated")} ${rupees(line.amount)}`);
+  if (was !== line.amount) {
+    logCorrection("restated");
+    toast(`${line.name} — ${t("updated")} ${rupees(line.amount)}`);
+  }
   return true;
 }
 
@@ -993,6 +1118,7 @@ async function loadSettings() {
   $("setVpa").value = j.vpa || "";
   $("setWa").value = j.wa_number || "";
   $("setGstin").value = j.gstin || "";
+  renderMicPicker();
   $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   $("setLang").value = j.lang;
   $("setMobile").textContent = `${t("signedInAs")} ${j.mobile}`;
@@ -1002,6 +1128,20 @@ async function loadSettings() {
     $("setMobile").textContent += `  ·  stored “${j.stored_lang}” → ${j.lang}`;
   }
 }
+
+/* The comparison, in the shopkeeper's own shop rather than in a lab. Trouble rate is the
+   share of utterances the system was unsure about, got wrong, or heard nothing in — the
+   best proxy for recognition quality that does not need a human to grade every line. */
+$("micReportBtn").onclick = () => {
+  const rows = window.micReport();
+  const out = $("micReportOut");
+  out.hidden = false;
+  out.textContent = rows.length
+    ? rows.map((r) => `${r.mic}\n  utterances      ${r.utterances}\n  avg round trip  ${r.avg_ms} ms\n` +
+        `  trouble rate    ${(r.trouble_rate * 100).toFixed(1)}%\n` +
+        `  corrections     ${r.corrections_per_utterance} per utterance`).join("\n\n")
+    : t("noData");
+};
 
 $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   e.preventDefault();
@@ -1023,6 +1163,7 @@ $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   state.shop.wa_number = j.wa_number;
   state.shop.gstin = j.gstin;
   $("setGstin").value = j.gstin || "";
+  renderMicPicker();
   $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   setLang(j.lang);
   applyStrings();
@@ -1131,7 +1272,7 @@ function render() {
       <button class="del" data-del="${i}" aria-label="Remove">✕</button></div>`;
   }).join("");
   box.querySelectorAll("[data-del]").forEach((b) => {
-    b.onclick = () => { state.items.splice(+b.dataset.del, 1); render(); };
+    b.onclick = () => { logCorrection("removed"); state.items.splice(+b.dataset.del, 1); render(); };
   });
   box.querySelectorAll("[data-ok]").forEach((b) => {
     b.onclick = () => { state.items[+b.dataset.ok].pending = false; render(); };
@@ -1283,6 +1424,55 @@ function stamp(iso) {
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ` +
          `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+/* ---------- stock ---------- */
+
+/* "Chitti, received twenty kilo sugar" and "Chitti, count sugar eight kilo". The same
+   grammar that reads a bill reads these — an item and a quantity is an item and a
+   quantity, and only the verb differs. */
+async function moveStock(data, reason) {
+  if (state.role !== "owner") { speak(t("ownerOnly")); return; }
+  const moves = (data.items || [])
+    .filter((i) => i.product_id && i.verdict !== "reject")
+    .map((i) => ({ product_id: i.product_id, qty: i.qty, name: i.name, unit: i.unit }));
+  if (!moves.length) { speak(t("sayItemQty")); return; }
+  try {
+    const j = await api("/api/stock", { method: "POST", body: { moves, reason } });
+    if (!j.ok) { speak(t("notSaved")); return; }
+    const said = moves.map((m) => `${m.name} ${m.qty} ${m.unit}`).join(", ");
+    speak(`${reason === "inward" ? t("stockedIn") : t("counted")} ${said}`);
+    if (document.querySelector(".screen.active").id === "stock") openStock();
+  } catch (err) { speak(t("network")); }
+}
+
+/* The gap between what the ledger says should be on the shelf and what was counted. That
+   difference is the number worth showing — everything else on this screen is its working. */
+async function openStock() {
+  goScreen("stock");
+  const box = $("stockList");
+  box.innerHTML = `<p class="empty small">${t("working")}</p>`;
+  try {
+    const j = await api("/api/stock");
+    if (!j.ok) { box.innerHTML = `<p class="empty small">${j.error || t("notSaved")}</p>`; return; }
+    const lost = $("lossTop");
+    if (j.total_lost > 0) {
+      lost.hidden = false;
+      lost.innerHTML = `<b>${rupees(j.total_lost)}</b><span>${t("unaccountedFor")}</span>`;
+    } else { lost.hidden = true; }
+    box.innerHTML = (j.items || []).map((r) => {
+      // Only a shortfall gets colour. A surplus is usually a miscount, not a windfall.
+      const gap = r.unaccounted < 0
+        ? `<span class="pill unpaid">${fmtNum(r.unaccounted)} ${r.unit} · ${rupees(r.value_lost)}</span>`
+        : r.unaccounted > 0 ? `<span class="pill">+${fmtNum(r.unaccounted)} ${r.unit}</span>` : "";
+      return `<div class="hrow"><div class="hmain">
+        <b>${r.name}</b> ${gap}
+        <div class="hsub">${t("onShelf")} ${fmtNum(r.stock)} ${r.unit} · ${t("soldWord")} ${fmtNum(r.sold)} · ${t("inWord")} ${fmtNum(r.inward)}</div>
+      </div></div>`;
+    }).join("") || `<p class="empty small">${t("noStock")}</p>`;
+  } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
+}
+const fmtNum = (n) => (+n).toFixed(Math.abs(n) % 1 ? 2 : 0).replace(/\.?0+$/, "") || "0";
+$("miStock").onclick = openStock;
 
 /* ---------- past bills ---------- */
 

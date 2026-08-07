@@ -803,3 +803,15 @@ button.busy,button.busy:disabled{opacity:1}
 .check input{
   width:20px;height:20px;flex:none;accent-color:var(--color-primary);margin:0;
 }
+
+/* -- Stock and loss -------------------------------------------- */
+/* The gap is the headline. Everything under it is the working. */
+.losstop{
+  display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+  padding:var(--space-4);margin-bottom:var(--space-3);
+  background:var(--color-error-container);color:var(--color-on-error-container);
+  border-radius:var(--radius-md);
+}
+.losstop b{font-size:var(--type-display-small-size);line-height:1;font-weight:800}
+.losstop span{font-size:var(--type-body-medium-size)}
+.pill{background:var(--color-surface-container-high);color:var(--color-on-surface-variant)}
