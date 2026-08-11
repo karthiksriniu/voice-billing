@@ -1213,6 +1213,11 @@ async function loadSettings() {
   $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   $("setLang").value = j.lang;
   $("setMobile").textContent = `${t("signedInAs")} ${j.mobile}`;
+  // The key itself is unreadable after the moment it was made, so all this can offer is
+  // whether one exists — which is enough to say "Generate" or "Replace" honestly.
+  state.shop.has_order_key = !!j.has_order_key;
+  $("keyGen").textContent = j.has_order_key ? t("orderKeyNew2") : t("orderKeyNew");
+  $("keyBox").hidden = true;
   // A stored value that isn't a language code is what broke dictation for a shop whose
   // interface still looked right. Show it rather than quietly normalising in silence.
   if (j.stored_lang && j.stored_lang !== j.lang) {
@@ -1248,6 +1253,53 @@ $("aiRun").onclick = () => withBusy($("aiRun"), async () => {
     out.classList.toggle("bad", !j.ok);
   } catch (err) { out.textContent = t("network"); out.classList.add("bad"); }
 });
+
+/* Minting the order key.
+ *
+ * Shown once and never again, because only its digest is stored — there is nothing to read
+ * it back from. That is the point rather than an inconvenience: a key a shop's database
+ * could hand over is a key an agent could be impersonated with.
+ *
+ * Generating replaces, so this is also the revoke button. Said plainly before the tap, not
+ * discovered afterwards by an integration that has quietly stopped working. */
+$("keyGen").onclick = () => {
+  const replacing = !!state.shop.has_order_key;
+  const go = () => withBusy($("keyGen"), async () => {
+    try {
+      const j = await api("/api/order-key", { method: "POST", body: { confirm: true } });
+      if (!j.ok || !j.key) { toast(j.error || t("notSaved"), 4500, true); return; }
+      state.shop.has_order_key = true;
+      $("keyValue").textContent = j.key;
+      $("keyBox").hidden = false;
+      $("keyValue").scrollIntoView({ block: "nearest" });
+    } catch (err) { toast(t("network"), 3000, true); }
+  });
+  if (!replacing) { go(); return; }
+  showPrompt({
+    kind: t("orderKeyNew2"),
+    main: t("orderKeyReplace"),
+    note: t("orderKeyOnce"),
+    warn: true,
+    onOk: () => { hidePrompt(); go(); },
+    onCancel: hidePrompt,
+  });
+};
+
+$("keyCopy").onclick = async () => {
+  const key = $("keyValue").textContent;
+  try {
+    await navigator.clipboard.writeText(key);
+    toast(t("copied"), 2500, true);
+  } catch (err) {
+    // Clipboard access is refused outside a secure context and on some Android webviews.
+    // Selecting the text is the fallback that always works, and beats a silent no-op.
+    const r = document.createRange();
+    r.selectNodeContents($("keyValue"));
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    toast(t("copyManually"), 4000, true);
+  }
+};
 
 $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   e.preventDefault();
@@ -2159,22 +2211,39 @@ async function acceptOrder(o) {
   } catch (err) { toast(t("network"), 3000, true); }
 }
 
+/* Two taps, because the third one never happens.
+   A reason field the shopkeeper has to type mid-service stays empty, and a bare "we cannot
+   fulfil your order" tells the customer nothing they can act on — whether to come back
+   later or to buy it elsewhere. The two reasons cover nearly every refusal a counter
+   makes, and the plain X still refuses without giving one. */
+const REJECT_REASONS = [
+  { id: "stock", key: "rejStock" },
+  { id: "busy", key: "rejBusy" },
+];
+
 function rejectOrder(o) {
+  const refuse = async (reason) => {
+    hidePrompt();
+    try {
+      const j = await api("/api/orders/reject", {
+        method: "POST", body: { order_id: o.id, reason },
+      });
+      if (!j.ok) { toast(j.error || t("notSaved"), 4500, true); }
+      else { tellCustomer(j.mobile, j.message); speak(t("orderRejected")); }
+    } catch (err) { toast(t("network"), 3000, true); }
+    openOrders();
+    refreshOrderCount();
+  };
   showPrompt({
     kind: t("orderReject"),
     main: `${o.customer_mobile || t("noCustomer")} — ${rupees(o.total)}`,
     note: t("rejectNote"),
     warn: true,
-    onOk: async () => {
-      hidePrompt();
-      try {
-        const j = await api("/api/orders/reject", { method: "POST", body: { order_id: o.id } });
-        if (!j.ok) { toast(j.error || t("notSaved"), 4500, true); }
-        else { tellCustomer(j.mobile, j.message); speak(t("orderRejected")); }
-      } catch (err) { toast(t("network"), 3000, true); }
-      openOrders();
-      refreshOrderCount();
-    },
+    chips: REJECT_REASONS.map((r) => ({ id: r.id, label: t(r.key) })),
+    onChip: (id) => refuse(t((REJECT_REASONS.find((r) => r.id === id) || {}).key) || ""),
+    // The unadorned refusal is still one tap away, for the reasons that are nobody's
+    // business but the shop's.
+    onOk: () => refuse(""),
     onCancel: hidePrompt,
   });
 }

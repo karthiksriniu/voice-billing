@@ -480,6 +480,9 @@ async def settings_get(request: Request):
             "lang": norm_lang(shop.get("lang")), "vpa": shop.get("upi_vpa", ""),
             "wa_number": shop.get("wa_number", ""), "gstin": gstin,
             "gst_state": gst.state_of(gstin),
+            # Whether one exists, never any part of it — the digest is all that is stored,
+            # and the button only needs to know whether it is generating or replacing.
+            "has_order_key": bool(shop.get("order_key_hash")),
             "stored_lang": shop.get("lang", "")}
 
 

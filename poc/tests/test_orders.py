@@ -279,6 +279,17 @@ def test_reject():
     # A refusal is not a sale: no bill, no receipt number, no stock movement.
     check("nothing was billed", STORE["bills"], [])
     check("nothing left the shelf", STORE["moves"], [])
+    # A reason the shopkeeper picked in one tap has to reach the customer verbatim. A
+    # refusal with no reason still goes out — some refusals are nobody's business but the
+    # shop's — and must not leave a dangling blank line where the reason would be.
+    STORE["orders"][0]["status"] = "pending"
+    j2 = client.post("/api/orders/reject", headers=owner(),
+                     json={"order_id": "o1", "reason": ""}).json()
+    check("a refusal with no reason still tells the customer",
+          "cannot fulfil" in j2["message"].lower(), True)
+    check("...without an empty line where the reason would be",
+          "\n\n\n" in j2["message"], False)
+
     check("rejecting twice is refused",
           client.post("/api/orders/reject", headers=owner(),
                       json={"order_id": "o1"}).status_code, 409)

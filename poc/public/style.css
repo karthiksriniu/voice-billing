@@ -1083,3 +1083,16 @@ button.busy,button.busy:disabled{opacity:1}
   background:var(--color-error-container);color:var(--color-on-error-container);
   padding:0 var(--space-2);border-radius:var(--radius-full);font-weight:700;
 }
+
+/* The order key, the one time it is visible. Monospace and wrapped: it is 52 characters
+   that must be transcribed exactly, and a proportional font makes l/1 and O/0 a coin toss. */
+.keyvalue{
+  display:block;margin:var(--space-2) 0;padding:var(--space-3);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:var(--type-body-small-size);line-height:1.5;
+  word-break:break-all;user-select:all;
+  background:var(--color-surface-container-lowest);color:var(--color-on-surface);
+  border:1px solid var(--color-primary);border-radius:var(--radius-sm);
+}
+.keyacts{display:flex;gap:var(--space-2)}
+.fineprint.warn{color:var(--color-error);opacity:.9}

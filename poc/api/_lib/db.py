@@ -587,6 +587,8 @@ async def probe() -> dict:
         "products.recipe": {"select": "recipe", "limit": "1"},
         "bills": {"select": "id", "limit": "1"},
         "stock_movements": {"select": "id", "limit": "1"},
+        "orders": {"select": "id", "limit": "1"},
+        "shops.order_key_hash": {"select": "order_key_hash", "limit": "1"},
     }
     # Functions are the half of a migration that fails silently. A missing column shows up
     # as a rejected write the shopkeeper sees; a missing function is caught, fallen back
