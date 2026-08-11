@@ -6,6 +6,7 @@ unchanged. Everything here is disposable except the parser and the language pack
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 import sys
@@ -778,6 +779,48 @@ class OrderActionRequest(BaseModel):
     reason: str = ""
 
 
+def order_key_from(request: Request) -> str:
+    """Find the order key wherever the caller's platform decided to put it.
+
+    Agent and automation platforms each expose one auth widget and not the others: some
+    offer only Bearer, some only Basic, some only a named header. Which of those a shop's
+    integration can use is not something the shop chooses, so all of them are accepted.
+    The key's own prefix is what identifies it, which is why the scheme does not have to.
+
+    Not accepted from the query string, deliberately. A URL is written to access logs, proxy
+    logs and analytics by default, and a credential in one is a credential that leaks
+    somewhere nobody thought to look. Every scheme below travels in a header instead.
+    """
+    named = request.headers.get("x-order-key", "").strip()
+    if named:
+        return named
+
+    header = request.headers.get("authorization", "").strip()
+    if not header:
+        return ""
+    scheme, _, rest = header.partition(" ")
+    rest = rest.strip()
+
+    if scheme.lower() == "bearer":
+        return rest
+    if scheme.lower() == "basic":
+        # The key may be the username or the password depending on the platform, and some
+        # send a placeholder in the other field. Both halves are offered to the lookup and
+        # the prefix decides — guessing a convention would fail for half of them.
+        try:
+            decoded = base64.b64decode(rest + "=" * (-len(rest) % 4)).decode("utf-8", "replace")
+        except Exception:                              # noqa: BLE001
+            return ""
+        user, _, password = decoded.partition(":")
+        for candidate in (user.strip(), password.strip()):
+            if auth.looks_like_order_key(candidate):
+                return candidate
+        return ""
+    # No scheme at all — "Authorization: bolo_ord_...". Wrong per the RFC and common enough
+    # in hand-configured integrations; the prefix makes it unambiguous.
+    return header if auth.looks_like_order_key(header) else ""
+
+
 async def order_caller(request: Request) -> tuple[str, str, dict | None]:
     """Who is placing this order: an automated caller with a key, or the counter.
 
@@ -785,18 +828,27 @@ async def order_caller(request: Request) -> tuple[str, str, dict | None]:
     only in the caller's configuration, and a database dump does not confer the ability to
     place orders.
     """
-    header = request.headers.get("authorization", "")
-    token = header[7:] if header.lower().startswith("bearer ") else ""
-    key = request.headers.get("x-order-key", "") or (token if auth.looks_like_order_key(token) else "")
-    if key:
+    key = order_key_from(request)
+    # A session token also arrives as a Bearer, so the prefix is what tells them apart. Only
+    # something shaped like an order key is looked up as one; anything else falls through to
+    # the counter's own session.
+    if key and auth.looks_like_order_key(key):
         shop = await db.shop_by_order_key(auth.order_key_hash(key))
         if not shop:
-            return "", "", {"error": "Unknown order key", "code": 401}
+            return "", "", {"error": "Unknown or revoked order key", "code": 401}
         return shop["id"], "api", None
     c = claims_of(request)
     if c:
         return c["shop"], "counter", None
-    return "", "", {"error": "Sign in required", "code": 401}
+    # Said in full, because a caller seeing this has no way to know which of these their
+    # platform is capable of sending.
+    return "", "", {
+        "error": "No credential recognised",
+        "accepted": ["Authorization: Bearer <key>",
+                     "Authorization: Basic <base64 of key: or :key>",
+                     "X-Order-Key: <key>"],
+        "hint": "The key starts with bolo_ord_ and is generated in Settings.",
+        "code": 401}
 
 
 async def resolve_lines(shop_id: str, lines: list[OrderLine]) -> tuple[list[dict], list[str]]:
@@ -841,7 +893,8 @@ async def order_create(req: OrderRequest, request: Request):
     counter with a signed-in session — the same queue either way."""
     shop_id, source, err = await order_caller(request)
     if err:
-        return deny(err["error"], err["code"])
+        return JSONResponse({"ok": False, **{k: v for k, v in err.items() if k != "code"}},
+                            status_code=err["code"])
     if not req.items:
         return deny("No items", 400)
 

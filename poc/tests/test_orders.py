@@ -305,6 +305,54 @@ def test_unrendered_template():
     check("nothing was queued", STORE["orders"], [])
 
 
+def test_auth_schemes():
+    """The key travels however the caller's platform can send it.
+
+    Agent platforms each expose one auth widget and not the others. Which one a shop's
+    integration is capable of using is not the shop's choice, so every common shape has to
+    reach the same lookup — and a session token, which arrives as a Bearer too, must not be
+    mistaken for one.
+    """
+    reset()
+    key = make_key()
+    body = {"items": "2 americano", "dry_run": True}
+    import base64 as b64
+
+    def send(headers):
+        return client.post("/api/orders", headers=headers, json=body)
+
+    check("named header", send({"X-Order-Key": key}).status_code, 200)
+    check("Authorization: Bearer", send({"Authorization": f"Bearer {key}"}).status_code, 200)
+    check("lower-case scheme", send({"Authorization": f"bearer {key}"}).status_code, 200)
+
+    # Basic, with the key as the username — the shape a curl -u "key:" produces.
+    as_user = b64.b64encode(f"{key}:".encode()).decode()
+    check("Basic, key as username", send({"Authorization": f"Basic {as_user}"}).status_code, 200)
+    # ...and as the password, which is what other platforms send.
+    as_pass = b64.b64encode(f"api:{key}".encode()).decode()
+    check("Basic, key as password", send({"Authorization": f"Basic {as_pass}"}).status_code, 200)
+
+    # No scheme at all. Wrong per the RFC, common in hand-configured integrations, and
+    # unambiguous because of the prefix.
+    check("bare key in Authorization", send({"Authorization": key}).status_code, 200)
+
+    # Things that must NOT authenticate.
+    check("a wrong key is refused", send({"Authorization": "Bearer bolo_ord_nope"}).status_code, 401)
+    check("garbled Basic is refused",
+          send({"Authorization": "Basic !!!not-base64!!!"}).status_code, 401)
+    check("no credential is refused", send({}).status_code, 401)
+
+    # The refusal has to say what this endpoint will take — the caller cannot see the code.
+    j = send({}).json()
+    check("...and lists the schemes it accepts", len(j["accepted"]), 3)
+    check("...and where the key comes from", "Settings" in j["hint"], True)
+
+    # A counter session is also a Bearer. It must be read as a session, not looked up as an
+    # order key and rejected.
+    r = send(owner())
+    check("a session token still works as a session", r.status_code, 200)
+
+
 def test_auth():
     reset()
     key = make_key(SHOP)
@@ -438,6 +486,7 @@ if __name__ == "__main__":
     test_dry_run()
     test_shapes()
     test_unrendered_template()
+    test_auth_schemes()
     test_auth()
     test_accept()
     test_reject()
