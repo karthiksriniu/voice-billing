@@ -59,12 +59,33 @@ print(hits[-1] if hits else "")
     ;;
 
   env)
+    # `vercel env add` refuses to overwrite, so rotating a key used to mean knowing to
+    # remove it first — and a half-done rotation leaves the old, revoked value in place
+    # while everything still reports "configured". Named a variable, this removes and
+    # re-adds it in one go.
+    #
+    # The value is typed at Vercel's own prompt and goes straight to Vercel. It is not
+    # echoed, not passed as an argument, and never lands in shell history or this repo.
+    if [ -n "${2:-}" ]; then
+      v="$2"
+      echo "--- replacing $v ---"
+      echo "Removing the old value (choose every environment it is set in):"
+      vercel env rm "$v" || true
+      echo "Now paste the new value:"
+      vercel env add "$v"
+      echo
+      echo "Redeploy for it to take effect:  ./bolo deploy"
+      echo "Then confirm it works: Settings -> Photo & recipe AI -> Run"
+      exit 0
+    fi
     echo "Paste each value at the prompt. Nothing is written to shell history."
     echo "Choose the environments when asked — Preview too, if staging should be usable."
     for v in SARVAM_API_KEY SUPABASE_URL SUPABASE_SERVICE_KEY ANTHROPIC_API_KEY; do
       echo "--- $v ---"
       vercel env add "$v" || true
     done
+    echo
+    echo "To replace one that is already set:  ./bolo env ANTHROPIC_API_KEY"
     echo "Then redeploy:  ./bolo deploy   (and/or)   ./bolo staging"
     ;;
 
@@ -78,5 +99,5 @@ print(hits[-1] if hits else "")
     node tests/test_units.js
     ;;
   login)  exec gh auth login ;;
-  *) echo "usage: ./bolo {dev|staging|deploy|env|test|login}"; exit 1 ;;
+  *) echo "usage: ./bolo {dev|staging|deploy|env [VAR]|test|login}"; exit 1 ;;
 esac
