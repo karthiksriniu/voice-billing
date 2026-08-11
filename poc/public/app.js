@@ -1551,7 +1551,9 @@ function renderRecipes() {
   // No ingredients categorised yet means every draft would come back empty, and the AI
   // button would look broken. Say what is actually missing.
   const noParts = !recipeState.components.length;
-  box.innerHTML = (noParts ? `<p class="empty small">${t("noComponents")}</p>` : "")
+  box.innerHTML = (noParts
+    ? `<p class="empty small">${t("noComponents")}</p>
+       <button class="primary ghostly wide" id="goCat">${t("goCategorise")}</button>` : "")
     + recipeState.items.map((s, i) => {
       const parts = s.components.map((c) =>
         `<div class="rpart">${esc(c.name)} <b>${fmtQtyUnit(c.qty, c.unit)}</b></div>`).join("");
@@ -1571,12 +1573,21 @@ function renderRecipes() {
           ${noParts ? "" : `<button class="mini go" data-rai="${i}">${t("askAi")}</button>`}
         </div></div>`;
     }).join("");
+  if ($("goCat")) $("goCat").onclick = goCategorise;
   box.querySelectorAll("[data-redit]").forEach((b) => {
     b.onclick = () => editRecipe(recipeState.items[+b.dataset.redit]);
   });
   box.querySelectorAll("[data-rai]").forEach((b) => {
     b.onclick = () => withBusy(b, () => draftRecipe(recipeState.items[+b.dataset.rai]));
   });
+}
+
+/* Categories live in the price list, two screens from where you find out you need them.
+   The trip is short, but nobody makes it on a hunch. */
+function goCategorise() {
+  show("main");
+  setMode("admin");
+  toast(t("categoriseHint"), 6000, true);
 }
 
 /* 0.02 kg is a true number and an unreadable one. Shown in whatever unit a person would
@@ -1618,6 +1629,10 @@ function editRecipe(item, note = "") {
   box.prepend(sheet);
 
   const draw = () => {
+    // Nothing in the recipe and nothing available to add: this shop has not told the app
+    // what it stocks yet, and no amount of tapping Save will change that. A lone Save
+    // button is the first thing a new shop sees here, and it explains nothing.
+    const bare = !parts.length && !recipeState.components.length;
     // The draft's own reasoning, per line. Judging a whole recipe is hard; judging "one
     // napkin handed with the drink" takes a second, and that is the difference between a
     // shopkeeper accepting the draft wholesale and actually reading it.
@@ -1635,9 +1650,14 @@ function editRecipe(item, note = "") {
       ${rows || `<p class="fineprint dim">${t("noRecipeYet")}</p>`}
       ${options ? `<div class="rline"><select data-radd>${options}</select>
         <button class="mini" data-raddgo>+ ${t("addWord")}</button></div>` : ""}
-      <button class="primary wide" data-rsave>${t("save")}</button>`;
+      ${bare ? `<p class="fineprint dim">${t("noComponents")}</p>
+        <button class="primary ghostly wide" data-rprices>${t("goCategorise")}</button>`
+        : `<button class="primary wide" data-rsave>${t("save")}</button>`}`;
 
     sheet.querySelector("[data-rclose]").onclick = () => sheet.remove();
+    const toPrices = sheet.querySelector("[data-rprices]");
+    if (toPrices) toPrices.onclick = () => { sheet.remove(); goCategorise(); };
+    if (bare) return;                      // nothing below this exists on an empty sheet
     sheet.querySelectorAll("[data-rq]").forEach((el) => {
       el.oninput = () => { parts[+el.dataset.rq].shown = el.value; };
     });
