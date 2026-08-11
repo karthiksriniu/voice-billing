@@ -7,6 +7,7 @@ unchanged. Everything here is disposable except the parser and the language pack
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 import uuid
@@ -20,7 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 sys.path.insert(0, str(Path(__file__).parent / "_lib"))
 
@@ -730,6 +731,13 @@ class OrderLine(BaseModel):
     qty: float = 1
 
 
+# A template variable that was never substituted. It arrives as a literal "{{...}}" and
+# would otherwise be parsed as a product name, matched against nothing, and reported as an
+# item the shop does not sell — sending an integrator to fix their catalog when the fault
+# is in their prompt template.
+UNRENDERED = re.compile(r"\{\{[^}]*\}\}|\{%[^%]*%\}|\$\{[^}]*\}")
+
+
 class OrderRequest(BaseModel):
     items: list[OrderLine] = []
     customer_mobile: str = ""
@@ -740,6 +748,29 @@ class OrderRequest(BaseModel):
     # error, and every trial without this lands in a real shopkeeper's queue as an order
     # they have to refuse — which is how a shop learns to stop trusting the queue.
     dry_run: bool = False
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def accept_plain_text(cls, v):
+        """Take the order however the caller has it.
+
+        A language model writes an order as a sentence. Demanding a JSON array of objects
+        makes that a second grammar for a machine to get wrong — which is exactly what this
+        endpoint set out to avoid, and exactly what it was doing. So all three shapes are
+        accepted and all three end up in the same parser:
+
+            "800 gram X plus 200 gram Y, 2 americano"     one string, whole order
+            ["800 gram X plus 200 gram Y", "2 americano"] a line each
+            [{"text": "..."}, {"name": "Y", "qty": 2}]    structured
+
+        Commas and full stops already separate items for a shopkeeper dictating a bill, so
+        a whole order in one string splits the same way a spoken one does.
+        """
+        if isinstance(v, str):
+            return [{"text": v}]
+        if isinstance(v, list):
+            return [{"text": x} if isinstance(x, str) else x for x in v]
+        return v
 
 
 class OrderActionRequest(BaseModel):
@@ -815,6 +846,19 @@ async def order_create(req: OrderRequest, request: Request):
         return deny("No items", 400)
 
     catalog = await db.get_products(shop_id)
+    # An unrendered template reaches here as a literal "{{order_items}}" and would be
+    # reported as a product the shop does not stock — sending the integrator to fix a
+    # catalog when the fault is three layers up in their prompt.
+    raw = " ".join((l.text or l.name or "") for l in req.items)
+    leftover = UNRENDERED.findall(raw)
+    if leftover:
+        return JSONResponse(
+            {"ok": False, "error": "A template placeholder was not filled in",
+             "reason": "unrendered_template", "found": leftover[:5],
+             "hint": "The agent sent the variable's name rather than its value. "
+                     "Check the variable exists and is in scope where the body is built."},
+            status_code=422)
+
     items, unmatched = await resolve_lines(shop_id, req.items)
     if not items and unmatched:
         # Nothing understood at all. Refused rather than queued, so an agent gets a clear

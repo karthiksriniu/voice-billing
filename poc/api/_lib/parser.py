@@ -105,11 +105,19 @@ class Lang:
                               | set(self.script["vowel_signs"])
                               | {self.script["virama"]})
 
+        # A canonical key is an alias of itself. That reads as a tautology and was not
+        # true: "g" and "l" name their own units and appeared in nobody's alias list, so
+        # they were not unit words at all. "800 g" left the 800 unconverted and billed
+        # eight hundred KILOS — Rs720,000 of coffee from one missing entry — while
+        # "800 gram" was correct, which is what kept it hidden. Registered here rather
+        # than patched at each call site, so every lookup sees the same table.
         self.units = {}
         for canon, spec in self.data["units"].items():
             for a in spec["aliases"]:
                 if norm(a):
                     self.units[norm(a)] = canon
+            if norm(canon):
+                self.units.setdefault(norm(canon), canon)
         self.unit_spec = self.data["units"]
 
         # Multi-word measures are matched on the raw string before tokenising, since
@@ -163,6 +171,9 @@ class Lang:
         holding "Kg" made _to_canonical find no conversion for "500 gram", leave the 500
         alone and bill 500 x the per-kilo price. Resolving the stored unit through the
         same alias table as the spoken one is what stops that.
+
+        Every canonical key is registered as an alias of itself when the pack is loaded,
+        so "g" and "l" resolve here like any other spelling.
         """
         return self.units.get(norm(unit or ""), (unit or "").strip())
 
@@ -354,7 +365,7 @@ class Parser:
     def parse(self, transcript: str, asr_confidence: float = 1.0,
               mode: str = "billing") -> ParseResult:
         res = ParseResult(transcript=transcript)
-        text = norm(transcript)
+        text = self.split_glued_units(norm(transcript))
         if not text:
             return res
 
@@ -686,6 +697,25 @@ class Parser:
             matched_on=matched, price_led=price_led, match_score=score,
             needs_price=price <= 0, raw=raw.strip(),
         )
+
+    # A digit followed immediately by letters that spell a unit: 800g, 1.5kg, 500ml, 2l.
+    # Nobody says this out loud, so speech never produced it — but it is exactly how a
+    # person types and how a language model writes, and the order API feeds both straight
+    # into this parser.
+    _GLUED = re.compile(r"(\d)\s*([a-zA-Z\u0900-\u0DFF]{1,12})\b")
+
+    def split_glued_units(self, text: str) -> str:
+        """Put a space between a number and a unit stuck to it.
+
+        Only when the letters actually name a unit. A blanket digit/letter split would
+        break a product called 7Up or A4, and quietly renaming a shop's products to fix a
+        typing convention is a worse bug than the one being fixed.
+        """
+        def space(m):
+            word = norm(m.group(2))
+            known = word in self.lang.unit_spec or word in self.lang.units
+            return f"{m.group(1)} {m.group(2)}" if known else m.group(0)
+        return self._GLUED.sub(space, text)
 
     def _to_canonical(self, qty: float, spoken_unit: str, product_unit: str) -> float:
         """Convert a spoken unit to the product's pricing unit — '500 gram' priced per kg.

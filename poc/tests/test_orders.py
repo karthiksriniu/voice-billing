@@ -196,11 +196,13 @@ def test_422_is_explained():
     head = {"X-Order-Key": key}
 
     # 1. A body of the wrong shape. FastAPI's own validation, before any handler runs.
-    r = client.post("/api/orders", headers=head, json={"items": ["Americano"]})
+    #    Note a list of plain strings is NOT malformed any more — see test_shapes — so this
+    #    has to be something no coercion can rescue.
+    r = client.post("/api/orders", headers=head, json={"items": 42})
     j = r.json()
     check("a malformed body is 422", r.status_code, 422)
     check("...and says so in words", "shape" in j.get("error", "").lower(), True)
-    check("...naming the field", j["problems"][0]["field"].startswith("items"), True)
+    check("...naming the field", j["problems"][0]["field"], "items")
     check("...and shows what the body should look like", "items" in j.get("expected", {}), True)
     check("...without FastAPI's raw detail array", "detail" in j, False)
 
@@ -246,6 +248,61 @@ def test_dry_run():
     check("...and says it saved nothing", j["status"], "not_saved")
     near("...while pricing it for real", j["total"], 1000.0)
     check("...and nothing reached the queue", STORE["orders"], [])
+
+
+def test_shapes():
+    """Take the order however the caller has it.
+
+    A language model writes an order as a sentence. Insisting on a JSON array of objects
+    made that a second grammar for a machine to get wrong — the exact thing this endpoint
+    exists to avoid. All three shapes must land on the same parser and price identically.
+    """
+    reset()
+    key = make_key()
+    head = {"X-Order-Key": key}
+    want = 1280.0
+
+    # 1. The whole order as one string, the way an agent hands over a transcript.
+    j = client.post("/api/orders", headers=head, json={"dry_run": True,
+        "items": "800 gram plantation double A plus 200 gram cherry peaberry, 2 americano"
+    }).json()
+    check("a plain string is accepted", j["ok"], True)
+    check("...and splits into its lines", len(j["items"]), 2)
+    near("...priced the same as the structured form", j["total"], want)
+
+    # 2. A line each.
+    j = client.post("/api/orders", headers=head, json={"dry_run": True, "items": [
+        "800 gram plantation double A plus 200 gram cherry peaberry", "2 americano"]}).json()
+    near("a list of strings prices the same", j["total"], want)
+
+    # 3. Structured, as before.
+    j = client.post("/api/orders", headers=head, json={"dry_run": True, "items": [
+        {"text": "800 gram plantation double A plus 200 gram cherry peaberry"},
+        {"name": "Americano", "qty": 2}]}).json()
+    near("the structured form is unchanged", j["total"], want)
+
+    # A unit as a machine writes it, not as anyone says it. "800 g" of a Rs900/kg coffee
+    # billed eight hundred KILOS before the parser learned that "g" is a unit.
+    j = client.post("/api/orders", headers=head,
+                    json={"dry_run": True, "items": "800g plantation double A"}).json()
+    near("a glued unit is 0.8 kg, not 800", j["items"][0]["qty"], 0.8)
+    near("...and priced accordingly", j["total"], 720.0)
+
+
+def test_unrendered_template():
+    """A placeholder the agent never filled in. Reported as what it is — otherwise it looks
+    like a product the shop does not stock, and the integrator goes and edits the catalog."""
+    reset()
+    key = make_key()
+    for placeholder in ("{{order_items_text}}", "${items}", "{% items %}"):
+        r = client.post("/api/orders", headers={"X-Order-Key": key},
+                        json={"items": placeholder})
+        j = r.json()
+        check(f"{placeholder} is caught", r.status_code, 422)
+        check("...as a template fault, not a missing product", j["reason"],
+              "unrendered_template")
+        check("...naming what was left unfilled", placeholder in j["found"], True)
+    check("nothing was queued", STORE["orders"], [])
 
 
 def test_auth():
@@ -379,6 +436,8 @@ if __name__ == "__main__":
     test_unmatched()
     test_422_is_explained()
     test_dry_run()
+    test_shapes()
+    test_unrendered_template()
     test_auth()
     test_accept()
     test_reject()

@@ -337,6 +337,36 @@ def run():
         check(f"unit {stored!r}", it and it[0].qty == 0.5 and it[0].amount == 25.0,
               f"-> {[(i.qty, i.amount) for i in it]} (want 0.5 kg, Rs25)")
 
+    print("a unit written rather than spoken")
+    from parser import Catalog as _C5a
+    # Nobody says "800g" out loud, so speech never produced it — but it is how a person
+    # types and how a language model writes, and the order API feeds both into this parser.
+    # Two separate faults met here: a canonical key that was in nobody's alias list, so "g"
+    # was not a unit word at all, and a unit glued to its digits, so the number vanished.
+    # Together "800 g" of a Rs900/kg coffee billed eight hundred KILOS — Rs720,000.
+    for code in ("ta-en", "ml-en", "hi-en", "te-en", "kn-en"):
+        pw = Parser(Lang(code), _C5a([
+            {"id": "C", "name": "Coffee", "unit": "kg", "unit_price": 900.0},
+            {"id": "M", "name": "Milk", "unit": "l", "unit_price": 60.0},
+            # A product whose own name starts with digits: the glue-splitter must not
+            # rename it while fixing a typing convention.
+            {"id": "S", "name": "7Up", "unit": "piece", "unit_price": 40.0},
+        ]))
+        for said, want_qty, want_amt in (
+                ("800 gram coffee", 0.8, 720.0),
+                ("800 g coffee", 0.8, 720.0),
+                ("800g coffee", 0.8, 720.0),
+                ("1.5kg coffee", 1.5, 1350.0),
+                ("500ml milk", 0.5, 30.0),
+                ("2l milk", 2.0, 120.0),
+                ("2 l milk", 2.0, 120.0),
+                ("two 7Up", 2.0, 80.0)):
+            it = pw.parse(said).items
+            check(f"{code} {said!r}",
+                  it and abs(it[0].qty - want_qty) < 1e-6 and it[0].amount == want_amt,
+                  f"-> {[(i.name, i.qty, i.unit, i.amount) for i in it]} "
+                  f"(want {want_qty}, Rs{want_amt})")
+
     print("volume converts, and never into mass")
     from parser import Catalog as _C5b
     # Litre and millilitre carried no conversion factor at all, so "500 ml" against a
