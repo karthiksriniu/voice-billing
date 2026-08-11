@@ -249,6 +249,7 @@ async function enter(session) {
   $("miDiv").hidden = !owner;
   setMode("billing");
   show("main");
+  refreshOrderCount();
   applyAsrAvailability();
   if (health.asr_configured) await openMic();
 }
@@ -2123,42 +2124,63 @@ $("placeOrder").onclick = () => withBusy($("placeOrder"), placeOrder);
    never happened. Either way the customer has to be told, so either way a message is
    prepared and WhatsApp is opened on the same tap. */
 
-let orderState = [];
+let orderState = { pending: [], rejected: [], tab: "pending" };
 
-async function openOrders() {
+async function openOrders(tab) {
   goScreen("orders");
+  if (tab) orderState.tab = tab;
   const box = $("orderList");
   box.innerHTML = `<p class="empty small">${t("working")}</p>`;
   try {
-    const j = await api("/api/orders?status=pending");
-    if (!j.ok) { box.innerHTML = `<p class="empty small">${j.error || t("notSaved")}</p>`; return; }
-    orderState = j.orders || [];
+    // Both lists, so the counts on the tabs are true whichever one is open. Two small
+    // queries beat one unbounded one: a shop's refused orders accumulate forever and the
+    // screen only ever shows the recent ones.
+    const [p, r] = await Promise.all([
+      api("/api/orders?status=pending"),
+      api("/api/orders?status=rejected"),
+    ]);
+    if (!p.ok) { box.innerHTML = `<p class="empty small">${p.error || t("notSaved")}</p>`; return; }
+    orderState.pending = p.orders || [];
+    orderState.rejected = (r.ok && r.orders) ? r.orders.slice().reverse() : [];
+    setOrderBadge(orderState.pending.length);
     renderOrders();
   } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
 }
-$("miOrders").onclick = openOrders;
+$("miOrders").onclick = () => openOrders("pending");
+$("ordTabPending").onclick = () => { orderState.tab = "pending"; renderOrders(); };
+$("ordTabRejected").onclick = () => { orderState.tab = "rejected"; renderOrders(); };
 
-/* The queue's length, on the menu item itself. A pending order the shopkeeper never
-   looks at is a customer standing outside, so it has to be visible without opening
-   anything. Refreshed quietly; failure is silence, never a toast mid-sale. */
+/* The queue's length, on the menu item itself. A pending order the shopkeeper never looks
+   at is a customer standing outside, so it has to be visible without opening anything.
+   Refreshed quietly; failure is silence, never a toast mid-sale. */
+function setOrderBadge(n) {
+  const el = $("miOrdersCount");
+  if (el) el.textContent = n ? String(n) : "";
+  $("miOrders").classList.toggle("hasnew", !!n);
+}
+
 async function refreshOrderCount() {
-  if (!state.token) return;
+  if (!state.token) { setOrderBadge(0); return; }
   try {
     const j = await api("/api/orders?status=pending");
-    const n = j.ok ? (j.orders || []).length : 0;
-    const el = $("miOrdersCount");
-    if (el) el.textContent = n ? String(n) : "";
-    $("miOrders").classList.toggle("hasnew", !!n);
+    setOrderBadge(j.ok ? (j.orders || []).length : 0);
   } catch (err) { /* the counter must not care */ }
 }
 
 function renderOrders() {
+  const pending = orderState.tab === "pending";
+  const rows = pending ? orderState.pending : orderState.rejected;
+  $("ordTabPending").classList.toggle("on", pending);
+  $("ordTabRejected").classList.toggle("on", !pending);
+  $("ordCountPending").textContent = orderState.pending.length || "";
+  $("ordCountRejected").textContent = orderState.rejected.length || "";
+
   const box = $("orderList");
-  if (!orderState.length) {
-    box.innerHTML = `<p class="empty small">${t("noOrders")}</p>`;
+  if (!rows.length) {
+    box.innerHTML = `<p class="empty small">${t(pending ? "noOrders" : "noRejected")}</p>`;
     return;
   }
-  box.innerHTML = orderState.map((o, i) => {
+  box.innerHTML = rows.map((o, i) => {
     // Every line, and every part of a blend. The shopkeeper is about to make this; a
     // collapsed "1 item" would hide the 800g/200g split that is the whole order.
     const lines = (o.items || []).map((it) => {
@@ -2174,7 +2196,16 @@ function renderOrders() {
       ? `${o.customer_name ? esc(o.customer_name) + " " : ""}${
           o.customer_mobile ? "📱 " + esc(o.customer_mobile) : ""}`
       : `<i>${t("noCustomer")}</i>`;
-    return `<div class="orow">
+    // A refused order keeps its reason. The customer who rings back to ask why is the
+    // reason this list is kept at all.
+    const tail = pending
+      ? `<div class="oacts">
+           <button class="primary" data-oacc="${i}">${t("orderReady")}</button>
+           <button class="mini danger" data-orej="${i}">${t("orderReject")}</button>
+         </div>`
+      : `<div class="hsub dim">${t("wasRefused")}${
+           o.reject_reason ? ` — ${esc(o.reject_reason)}` : ""}</div>`;
+    return `<div class="orow${pending ? "" : " done"}">
       <div class="ohead">
         <span class="owho">${who}</span>
         <span class="pill">${o.source === "counter" ? t("srcCounter") : t("srcPhone")}</span>
@@ -2182,17 +2213,14 @@ function renderOrders() {
       <div class="hsub">${stamp(o.created_at)}${o.note ? ` · ${esc(o.note)}` : ""}</div>
       <div class="olines">${lines}</div>
       <div class="ototal"><span>${t("total")}</span><b>${rupees(o.total)}</b></div>
-      <div class="oacts">
-        <button class="primary" data-oacc="${i}">${t("orderReady")}</button>
-        <button class="mini danger" data-orej="${i}">${t("orderReject")}</button>
-      </div>
+      ${tail}
     </div>`;
   }).join("");
   box.querySelectorAll("[data-oacc]").forEach((b) => {
-    b.onclick = () => withBusy(b, () => acceptOrder(orderState[+b.dataset.oacc]));
+    b.onclick = () => withBusy(b, () => acceptOrder(orderState.pending[+b.dataset.oacc]));
   });
   box.querySelectorAll("[data-orej]").forEach((b) => {
-    b.onclick = () => rejectOrder(orderState[+b.dataset.orej]);
+    b.onclick = () => rejectOrder(orderState.pending[+b.dataset.orej]);
   });
 }
 
@@ -2207,6 +2235,10 @@ async function acceptOrder(o) {
     state.customer = j.mobile || "";
     tellCustomer(j.mobile, j.message);
     speak(t("orderAccepted"));
+    // Off the queue either way — accepted and refused both leave it, and a badge that only
+    // came down on a refusal told the shopkeeper there was still work waiting.
+    orderState.pending = orderState.pending.filter((x) => x.id !== o.id);
+    setOrderBadge(orderState.pending.length);
     showPayment(j);
   } catch (err) { toast(t("network"), 3000, true); }
 }
@@ -2215,7 +2247,7 @@ async function acceptOrder(o) {
    A reason field the shopkeeper has to type mid-service stays empty, and a bare "we cannot
    fulfil your order" tells the customer nothing they can act on — whether to come back
    later or to buy it elsewhere. The two reasons cover nearly every refusal a counter
-   makes, and the plain X still refuses without giving one. */
+   makes, and the plain tick still refuses without giving one. */
 const REJECT_REASONS = [
   { id: "stock", key: "rejStock" },
   { id: "busy", key: "rejBusy" },
@@ -2231,8 +2263,7 @@ function rejectOrder(o) {
       if (!j.ok) { toast(j.error || t("notSaved"), 4500, true); }
       else { tellCustomer(j.mobile, j.message); speak(t("orderRejected")); }
     } catch (err) { toast(t("network"), 3000, true); }
-    openOrders();
-    refreshOrderCount();
+    await openOrders("rejected");
   };
   showPrompt({
     kind: t("orderReject"),

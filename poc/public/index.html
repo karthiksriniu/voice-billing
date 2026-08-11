@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/style.css?v=d20d2bc-0048">
+<link rel="stylesheet" href="/style.css?v=b35b669-0105">
 </head>
 <body>
 
@@ -268,6 +268,16 @@
     <b data-t="ordersHead">Pending orders</b>
   </header>
   <div class="pad">
+    <!-- Two lists, one screen. Pending is first and default because it is the only one
+         with anything to do; refused orders are a record, kept because a customer rings
+         back to ask why. Counts on the tabs so the shopkeeper can see there is work
+         without opening the one they are not on. -->
+    <div class="seg" role="tablist">
+      <button id="ordTabPending" class="segbtn on" role="tab">
+        <span data-t="ordPending">Waiting</span> <b id="ordCountPending"></b></button>
+      <button id="ordTabRejected" class="segbtn" role="tab">
+        <span data-t="ordRejected">Not served</span> <b id="ordCountRejected"></b></button>
+    </div>
     <div id="orderList" class="histlist"></div>
   </div>
 </section>
@@ -455,10 +465,10 @@
 </section>
 
 <div id="toast" class="toast"></div>
-<script>window.BOLO_BUILD="d20d2bc-0048"</script>
-<script src="/i18n.js?v=d20d2bc-0048"></script>
-<script src="/app.js?v=d20d2bc-0048"></script>
-<script src="/print.js?v=d20d2bc-0048"></script>
-<script src="/wake.js?v=d20d2bc-0048"></script>
+<script>window.BOLO_BUILD="b35b669-0105"</script>
+<script src="/i18n.js?v=b35b669-0105"></script>
+<script src="/app.js?v=b35b669-0105"></script>
+<script src="/print.js?v=b35b669-0105"></script>
+<script src="/wake.js?v=b35b669-0105"></script>
 </body>
 </html>

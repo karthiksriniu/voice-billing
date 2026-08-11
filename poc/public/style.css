@@ -1096,3 +1096,11 @@ button.busy,button.busy:disabled{opacity:1}
 }
 .keyacts{display:flex;gap:var(--space-2)}
 .fineprint.warn{color:var(--color-error);opacity:.9}
+
+/* A refused order is a record, not a task. Quieter than a waiting one, and with no
+   buttons — the decision has already been made. */
+.orow.done{opacity:.72;border-style:dashed}
+.orow.done .ototal b{font-weight:700}
+/* Counts on the tabs, so the shopkeeper can see there is work on the list they are not
+   looking at. */
+.segbtn b{font-weight:800;opacity:.85}
