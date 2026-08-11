@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/style.css?v=dc87e57-1440">
+<link rel="stylesheet" href="/style.css?v=b6f5873-2016">
 </head>
 <body>
 
@@ -119,6 +119,9 @@
       <button id="clearCatalogBtn" class="mini danger" data-t="clearAll">Clear all</button>
     </div>
     <div class="tablehead"><span data-t="name">Item</span><span data-t="uom">UOM</span><span data-t="price">Price</span><span></span><span></span></div>
+    <!-- Only rendered once a shop has actually categorised something, so a kirana with two
+         hundred untouched items never sees a key to marks it does not have. -->
+    <p id="catLegend" class="catlegend" hidden></p>
     <!-- Its own scroll container, so the list grows without pushing anything off screen. -->
     <div id="skuList" class="skulist"></div>
   </div>
@@ -409,10 +412,10 @@
 </section>
 
 <div id="toast" class="toast"></div>
-<script>window.BOLO_BUILD="dc87e57-1440"</script>
-<script src="/i18n.js?v=dc87e57-1440"></script>
-<script src="/app.js?v=dc87e57-1440"></script>
-<script src="/print.js?v=dc87e57-1440"></script>
-<script src="/wake.js?v=dc87e57-1440"></script>
+<script>window.BOLO_BUILD="b6f5873-2016"</script>
+<script src="/i18n.js?v=b6f5873-2016"></script>
+<script src="/app.js?v=b6f5873-2016"></script>
+<script src="/print.js?v=b6f5873-2016"></script>
+<script src="/wake.js?v=b6f5873-2016"></script>
 </body>
 </html>

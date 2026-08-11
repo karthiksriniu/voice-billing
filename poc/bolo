@@ -14,7 +14,13 @@ export PATH="$PWD/.tools/node/bin:$PWD/.tools/gh/bin:$PATH"
 branch() { git rev-parse --abbrev-ref HEAD; }
 
 case "${1:-dev}" in
-  dev)    exec .venv/bin/uvicorn api.index:app --reload --host 0.0.0.0 --port 8077 ;;
+  dev)
+    # Stamped before serving. The cache-buster only moved at deploy time, so editing a JS
+    # file locally left the browser holding the previous one behind an unchanged ?v= — the
+    # page looks reloaded and is not, and you debug code that is no longer running.
+    ./stamp.sh >/dev/null
+    exec .venv/bin/uvicorn api.index:app --reload --host 0.0.0.0 --port 8077
+    ;;
 
   staging)
     ./stamp.sh

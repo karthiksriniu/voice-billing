@@ -1011,20 +1011,26 @@ function renderCatalog() {
   const box = $("skuList");
   if (!state.products.length) { box.innerHTML = `<p class="empty small">No items yet.</p>`; return; }
   $("skuCount").textContent = `(${state.products.length})`;
+  const used = CATEGORIES.filter((c) => c !== "resale"
+    && state.products.some((p) => p.category === c));
+  const legend = $("catLegend");
+  legend.hidden = !used.length;
+  legend.innerHTML = used.map((c) =>
+    `<span>${catBadge(c)} ${esc(catLabel(c))}</span>`).join("");
   box.innerHTML = state.products.map((p, i) => `
     <div class="skurow${p.unit_price > 0 ? "" : " unpriced"}">
-      <span class="sku-n">${p.name}${p.description ? `<em>${p.description}</em>` : ""}${
+      <span class="sku-n">${p.name}${catBadge(p.category)}${
+        p.description ? `<em>${p.description}</em>` : ""}${
         (p.aliases || []).length ? `<span class="aliases">${(p.aliases || []).map((a, k) =>
           `<button class="alias" data-unalias="${i}:${k}" title="${t("removeAlias")}">${a}<i>×</i></button>`
         ).join("")}</span>` : ""}</span>
-      <span class="sku-u">${p.unit}${p.category && p.category !== "resale"
-        ? `<i class="catmark cat-${p.category}">${catLabel(p.category)}</i>` : ""}</span>
+      <span class="sku-u">${p.unit}</span>
       <span class="sku-p">${p.unit_price > 0 ? rupees(p.unit_price) : "—"}</span>
       <button class="sku-e" data-edit="${i}" aria-label="Edit">✎</button>
       <button class="sku-d" data-del="${i}" aria-label="Delete">🗑</button>
     </div>`).join("");
   box.querySelectorAll("[data-edit]").forEach((b) => {
-    b.onclick = () => editSku(state.products[+b.dataset.edit]);
+    b.onclick = () => editSku(state.products[+b.dataset.edit], b.closest(".skurow"));
   });
   box.querySelectorAll("[data-del]").forEach((b) => {
     b.onclick = () => deleteSku(state.products[+b.dataset.del]);
@@ -1080,8 +1086,61 @@ function deleteSku(p) {
    as the things you cannot. */
 const CATEGORIES = ["raw", "consumable", "menu", "resale"];
 const catLabel = (c) => t(`cat_${c}`) || c;
+/* A short mark, because it sits beside a product name that may already be long. Stated per
+   language rather than taken from the first letter of the label: that collided in Tamil
+   (மூலப்பொருள் / மெனு) and Telugu (ముడిసరుకు / మెనూ), and two badges that look the same are
+   worse than no badge at all. "Sold as-is" gets nothing — it is the default every shop
+   starts with, so a kirana with two hundred untouched items sees no marks and no legend. */
+const catShort = (c) => t(`catshort_${c}`) || catLabel(c).trim().charAt(0).toUpperCase();
+const catBadge = (c) => (c && c !== "resale"
+  ? ` <i class="catmark one cat-${c}" title="${esc(catLabel(c))}">${esc(catShort(c))}</i>`
+  : "");
 
-function editSku(p) {
+/* Opened in place, not at the top of the list.
+   The editor used to be prepended, so tapping the pencil on the fortieth item scrolled
+   nothing and showed nothing — the box opened somewhere above the fold and the tap looked
+   ignored, which is why it got tapped again, and again, each one stacking another editor.
+   `openEditor` puts it where the row is, keeps exactly one open, and scrolls to it. */
+function openEditor(box, anchor, node) {
+  box.querySelectorAll(".skuedit, .rsheet").forEach((el) => el.remove());
+  box.querySelectorAll(".editing").forEach((el) => el.classList.remove("editing"));
+  if (anchor && anchor.parentNode === box) {
+    anchor.classList.add("editing");        // the row being edited, dimmed behind its form
+    anchor.after(node);
+  } else {
+    box.prepend(node);
+  }
+  reveal(node);
+  return node;
+}
+
+/* Bring the WHOLE form into view, not just its first line.
+   The price editor is three rows tall inside a short scrolling box, so landing its top on
+   screen still hides the type picker and the note underneath — which is most of what was
+   just added. Nothing moves if it already fits: a row the thumb is resting on should not
+   slide out from under it. */
+function reveal(node) {
+  const host = node.closest(".skulist");
+  const r = node.getBoundingClientRect();
+  const top = host ? host.getBoundingClientRect().top : 0;
+  const bottom = host ? host.getBoundingClientRect().bottom : window.innerHeight;
+  if (r.top >= top && r.bottom <= bottom) return;          // already wholly visible
+  // Taller than the space it has to live in: show the top, since that is where the fields
+  // the shopkeeper came for are.
+  const block = (r.height > bottom - top || r.top < top) ? "start" : "end";
+  // Not smooth. The animated form was silently doing nothing here — the identical call
+  // without it scrolls correctly — and an editor that reliably appears is worth more than
+  // one that sometimes glides into view and otherwise stays where it cannot be seen.
+  node.scrollIntoView({ block });
+}
+
+function closeEditor(node) {
+  const prev = node.previousElementSibling;
+  if (prev) prev.classList.remove("editing");
+  node.remove();
+}
+
+function editSku(p, anchor) {
   const box = $("skuList");
   const row = document.createElement("div");
   row.className = "skuedit";
@@ -1093,8 +1152,12 @@ function editSku(p) {
       `<option value="${c}"${c === cat ? " selected" : ""}>${catLabel(c)}</option>`).join("")}</select>
     <button class="mini go">${t("save")}</button><button class="mini x">✕</button>
     <small class="catnote">${t("catNote")}</small>`;
-  box.prepend(row);
-  row.querySelector(".x").onclick = () => row.remove();
+  openEditor(box, anchor, row);
+  // Deliberately not focused. Focusing the name scrolled the input into view, cancelling
+  // the scroll that was bringing the whole form into view — and on a phone it throws the
+  // keyboard up over the form as well, when the tap was as likely about the price or the
+  // type as the name.
+  row.querySelector(".x").onclick = () => closeEditor(row);
   row.querySelector(".go").onclick = async () => {
     const j = await api("/api/catalog", {
       method: "POST",
@@ -1104,7 +1167,7 @@ function editSku(p) {
               unit_price: parseFloat(row.querySelector(".e-p").value) || 0 },
     });
     if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
-    row.remove();
+    closeEditor(row);
     toast(t("saved"));
     loadCatalog();
   };
@@ -1583,10 +1646,11 @@ function renderRecipes() {
     }).join("");
   if ($("goCat")) $("goCat").onclick = goCategorise;
   box.querySelectorAll("[data-redit]").forEach((b) => {
-    b.onclick = () => editRecipe(recipeState.items[+b.dataset.redit]);
+    b.onclick = () => editRecipe(recipeState.items[+b.dataset.redit], "", b.closest(".rrow"));
   });
   box.querySelectorAll("[data-rai]").forEach((b) => {
-    b.onclick = () => withBusy(b, () => draftRecipe(recipeState.items[+b.dataset.rai]));
+    const row = b.closest(".rrow");
+    b.onclick = () => withBusy(b, () => draftRecipe(recipeState.items[+b.dataset.rai], row));
   });
 }
 
@@ -1608,7 +1672,7 @@ function fmtQtyUnit(qty, unit) {
     ? `${fmtNum(q * 1000)} ${small}` : `${fmtNum(q)} ${unit}`;
 }
 
-async function draftRecipe(item) {
+async function draftRecipe(item, anchor) {
   try {
     const j = await api("/api/recipe/draft", {
       method: "POST", body: { product_id: item.id },
@@ -1620,11 +1684,11 @@ async function draftRecipe(item) {
     }
     // Opened for editing, never saved. A recipe applied silently would start consuming
     // stock on every later sale from numbers nobody read.
-    editRecipe({ ...item, components: j.components }, j.note);
+    editRecipe({ ...item, components: j.components }, j.note, anchor);
   } catch (err) { toast(t("network"), 3000, true); }
 }
 
-function editRecipe(item, note = "") {
+function editRecipe(item, note = "", anchor = null) {
   // Converted to display units once, here, so `shown` is the only quantity the sheet ever
   // reads or writes. Carrying both and picking between them meant a line the shopkeeper
   // did not touch was converted a second time on save: open a recipe, fix one number, and
@@ -1634,7 +1698,7 @@ function editRecipe(item, note = "") {
   const box = $("recipeList");
   const sheet = document.createElement("div");
   sheet.className = "rsheet";
-  box.prepend(sheet);
+  openEditor(box, anchor, sheet);
 
   const draw = () => {
     // Nothing in the recipe and nothing available to add: this shop has not told the app
@@ -1662,9 +1726,9 @@ function editRecipe(item, note = "") {
         <button class="primary ghostly wide" data-rprices>${t("goCategorise")}</button>`
         : `<button class="primary wide" data-rsave>${t("save")}</button>`}`;
 
-    sheet.querySelector("[data-rclose]").onclick = () => sheet.remove();
+    sheet.querySelector("[data-rclose]").onclick = () => closeEditor(sheet);
     const toPrices = sheet.querySelector("[data-rprices]");
-    if (toPrices) toPrices.onclick = () => { sheet.remove(); goCategorise(); };
+    if (toPrices) toPrices.onclick = () => { closeEditor(sheet); goCategorise(); };
     if (bare) return;                      // nothing below this exists on an empty sheet
     sheet.querySelectorAll("[data-rq]").forEach((el) => {
       el.oninput = () => { parts[+el.dataset.rq].shown = el.value; };
@@ -1688,7 +1752,7 @@ function editRecipe(item, note = "") {
             method: "POST", body: { product_id: item.id, components },
           });
           if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000, true); return; }
-          sheet.remove();
+          closeEditor(sheet);
           speak(`${item.name} — ${j.components} ${t("componentsWord")}`);
           openRecipes();
         } catch (err) { toast(t("network"), 3000, true); }
