@@ -1618,8 +1618,11 @@ function editRecipe(item, note = "") {
   box.prepend(sheet);
 
   const draw = () => {
+    // The draft's own reasoning, per line. Judging a whole recipe is hard; judging "one
+    // napkin handed with the drink" takes a second, and that is the difference between a
+    // shopkeeper accepting the draft wholesale and actually reading it.
     const rows = parts.map((c, i) => `<div class="rline">
-      <span>${esc(c.name)}</span>
+      <span>${esc(c.name)}${c.why ? `<i class="rwhy">${esc(c.why)}</i>` : ""}</span>
       <input type="number" step="any" inputmode="decimal" value="${displayQty(c)}"
              data-rq="${i}"><span class="dim">${displayUnit(c)}</span>
       <button class="mini danger" data-rx="${i}">✕</button></div>`).join("");

@@ -930,3 +930,10 @@ button.busy,button.busy:disabled{opacity:1}
 }
 /* A diagnostic that failed has to look like it failed. */
 .fineprint.bad{color:var(--color-error)}
+/* Why a component is in the draft, under its name. Small on purpose: it is context for a
+   decision, not a thing to read. */
+.rwhy{
+  display:block;font-style:normal;font-size:var(--type-body-small-size);
+  color:var(--color-on-surface-variant);opacity:.8;line-height:1.3;margin-top:2px;
+}
+.rline > span:first-child{align-self:center}
