@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, FastAPI, File, Form, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,6 +42,35 @@ app = FastAPI(title="Vaakku PoC")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def readable_validation_error(request: Request, exc: RequestValidationError):
+    """Say which field was wrong, in words.
+
+    FastAPI's default is a `detail` array of loc/msg/type objects. That is fine when a
+    developer is watching a browser console and useless when the caller is somebody else's
+    agent in somebody else's codebase: the shapes do not match anything the rest of this
+    API returns, and the one thing an integrator needs — which field, and what was expected
+    — is buried three levels down.
+
+    Note this fires BEFORE any handler runs, so a request with both a malformed body and a
+    bad key gets 422 rather than 401. Worth knowing when a key looks like the problem.
+    """
+    problems = []
+    for e in exc.errors():
+        # loc is ('body', 'items', 0, 'qty') — the leading 'body' is noise to a caller who
+        # already knows they sent a body.
+        where = ".".join(str(x) for x in e.get("loc", ()) if x != "body") or "body"
+        problems.append({"field": where, "problem": e.get("msg", ""),
+                         "got": repr(e.get("input"))[:80]})
+    return JSONResponse(
+        {"ok": False, "error": "The request body is not the shape this endpoint expects",
+         "problems": problems,
+         "expected": {"items": [{"text": "800 gram X plus 200 gram Y"},
+                                {"name": "Americano", "qty": 2}],
+                      "customer_mobile": "9840099887"}},
+        status_code=422)
 
 # Routes are declared on a router and then mounted at several prefixes. Vercel's rewrite
 # hands the function a path that is not reliably the one the browser asked for, and guessing
@@ -706,6 +736,10 @@ class OrderRequest(BaseModel):
     customer_name: str = ""
     note: str = ""
     shop_id: str = ""               # only honoured for a counter session, never for a key
+    # Parse and price it, then throw it away. An integration is wired up by trial and
+    # error, and every trial without this lands in a real shopkeeper's queue as an order
+    # they have to refuse — which is how a shop learns to stop trusting the queue.
+    dry_run: bool = False
 
 
 class OrderActionRequest(BaseModel):
@@ -780,15 +814,40 @@ async def order_create(req: OrderRequest, request: Request):
     if not req.items:
         return deny("No items", 400)
 
+    catalog = await db.get_products(shop_id)
     items, unmatched = await resolve_lines(shop_id, req.items)
     if not items and unmatched:
         # Nothing understood at all. Refused rather than queued, so an agent gets a clear
         # failure it can read back to the customer instead of the shop receiving a blank
         # order it cannot serve.
-        return JSONResponse({"ok": False, "error": "Could not match any item",
-                             "unmatched": unmatched}, status_code=422)
+        #
+        # An empty catalog and a wrong product name produce the same silence here and need
+        # completely different fixes — one is "the shop has not set up its prices", the
+        # other is "you asked for something they do not sell". Told apart, with a sample of
+        # what this shop does sell, because an integrator cannot guess the names.
+        priced = [p for p in catalog if float(p.get("unit_price") or 0) > 0]
+        if not priced:
+            return JSONResponse(
+                {"ok": False, "error": "This shop has no priced items yet",
+                 "reason": "empty_catalog", "shop_id": shop_id,
+                 "hint": "Add items with prices in the app before sending orders."},
+                status_code=422)
+        return JSONResponse(
+            {"ok": False, "error": "Could not match any item",
+             "reason": "no_match", "unmatched": unmatched,
+             "hint": "Use a name or alias this shop actually sells.",
+             "catalog_size": len(priced),
+             "sample": sorted(p["name"] for p in priced)[:15]},
+            status_code=422)
 
     total = round(sum(float(i["amount"]) for i in items), 2)
+    echo = [{"name": i["name"], "qty": i["qty"], "unit": i["unit"], "amount": i["amount"],
+             "parts": [{"name": c["name"], "qty": c["qty"]} for c in (i.get("combo") or [])]}
+            for i in items]
+    if req.dry_run:
+        return JSONResponse({"ok": True, "dry_run": True, "status": "not_saved",
+                             "total": total, "items": echo, "unmatched": unmatched},
+                            status_code=200)
     order_id, error = await db.save_order(shop_id, {
         "source": source, "items": items, "total": total,
         "customer_mobile": db.shop_key(req.customer_mobile) if req.customer_mobile else "",
@@ -800,11 +859,7 @@ async def order_create(req: OrderRequest, request: Request):
         "ok": True, "order_id": order_id, "status": "pending", "total": total,
         # Echoed back so the caller can read the order to the customer before hanging up.
         # An agent that cannot confirm what was understood will confirm what it assumed.
-        "items": [{"name": i["name"], "qty": i["qty"], "unit": i["unit"],
-                   "amount": i["amount"],
-                   "parts": [{"name": c["name"], "qty": c["qty"]} for c in (i.get("combo") or [])]}
-                  for i in items],
-        "unmatched": unmatched}, status_code=201)
+        "items": echo, "unmatched": unmatched}, status_code=201)
 
 
 @router.get("/orders")

@@ -187,6 +187,67 @@ def test_unmatched():
     check("...and nothing is queued", len(STORE["orders"]), 1)
 
 
+def test_422_is_explained():
+    """Two different faults share the 422 number and need opposite fixes. An integrator
+    reading only the status code cannot tell a malformed body from a name the shop does not
+    stock, so the body has to say which."""
+    reset()
+    key = make_key()
+    head = {"X-Order-Key": key}
+
+    # 1. A body of the wrong shape. FastAPI's own validation, before any handler runs.
+    r = client.post("/api/orders", headers=head, json={"items": ["Americano"]})
+    j = r.json()
+    check("a malformed body is 422", r.status_code, 422)
+    check("...and says so in words", "shape" in j.get("error", "").lower(), True)
+    check("...naming the field", j["problems"][0]["field"].startswith("items"), True)
+    check("...and shows what the body should look like", "items" in j.get("expected", {}), True)
+    check("...without FastAPI's raw detail array", "detail" in j, False)
+
+    r = client.post("/api/orders", headers=head,
+                    json={"items": [{"name": "Americano", "qty": "two"}]})
+    check("an unparseable quantity is caught the same way", r.status_code, 422)
+    check("...pointing at the quantity",
+          "qty" in r.json()["problems"][0]["field"], True)
+
+    # 2. A well-formed body naming something the shop does not sell.
+    j = client.post("/api/orders", headers=head,
+                    json={"items": [{"text": "two kilo unobtainium"}]}).json()
+    check("an unknown product is a different reason", j["reason"], "no_match")
+    check("...and the caller is shown what the shop does sell",
+          "Americano" in j["sample"], True)
+    check("...with the catalog's size", j["catalog_size"] > 0, True)
+
+    # 3. The same silence, but because the shop has no prices at all — the opposite fix.
+    async def empty(shop_id):
+        return []
+    real, db.get_products = db.get_products, empty
+    j = client.post("/api/orders", headers=head,
+                    json={"items": [{"name": "Americano"}]}).json()
+    check("an empty catalog is named as such", j["reason"], "empty_catalog")
+    check("...and does not pretend the name was wrong", "unmatched" in j, False)
+    db.get_products = real
+
+    # A body with no items at all is a 400, not a 422 — nothing was malformed, there was
+    # simply nothing to order.
+    check("an empty order is 400, not 422",
+          client.post("/api/orders", headers=head, json={"items": []}).status_code, 400)
+
+
+def test_dry_run():
+    """Wiring up an integration means getting it wrong several times. Without this, every
+    attempt lands in a real queue as an order somebody has to refuse."""
+    reset()
+    key = make_key()
+    j = client.post("/api/orders", headers={"X-Order-Key": key}, json={
+        "dry_run": True,
+        "items": [{"text": "800 gram plantation double A plus 200 gram cherry peaberry"}]}).json()
+    check("a dry run succeeds", j["ok"], True)
+    check("...and says it saved nothing", j["status"], "not_saved")
+    near("...while pricing it for real", j["total"], 1000.0)
+    check("...and nothing reached the queue", STORE["orders"], [])
+
+
 def test_auth():
     reset()
     key = make_key(SHOP)
@@ -316,6 +377,8 @@ def test_counter_order():
 if __name__ == "__main__":
     test_intake()
     test_unmatched()
+    test_422_is_explained()
+    test_dry_run()
     test_auth()
     test_accept()
     test_reject()
