@@ -207,3 +207,68 @@ insert into shops (id, name) values ('demo', 'Demo Shop')
 -- PostgREST caches the schema. Without this, a change that applied cleanly still 404s from
 -- the API until the cache expires, which is indistinguishable from it never having run.
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- What a thing is, and what it is made of
+-- ---------------------------------------------------------------------------
+
+-- A coffee shop's shelf holds four different kinds of thing, and lumping them together is
+-- why its stock screen never made sense:
+--   raw        beans, milk, ice — bought by weight, consumed to make something else
+--   consumable cups, straws, tissue — bought by the box, leave with the customer
+--   menu       Espresso, Americano — sold, but never sat on a shelf as itself
+--   resale     a French press, a bag of beans — bought and sold unchanged
+-- Only the first two can meaningfully shrink. A menu item has no stock of its own, which
+-- is exactly why its sales have to be exploded into components before the ledger sees them.
+alter table products add column if not exists category text not null default 'resale';
+
+-- The recipe, one row per component: [{"component_id": "...", "qty": 0.02}]
+-- Quantities are in the *component's own* stock unit, never the recipe's. Twenty grams of
+-- beans is stored as 0.02 against a product priced per kg, so the consumption path stays a
+-- multiplication and cannot get a conversion wrong at the one moment nobody is watching.
+alter table products add column if not exists recipe jsonb not null default '[]'::jsonb;
+
+create index if not exists products_shop_cat on products (shop_id, category);
+
+-- ---------------------------------------------------------------------------
+-- Sales aggregation
+-- ---------------------------------------------------------------------------
+
+-- Summing in the API meant pulling every bill of the month over HTTP into a serverless
+-- function to add up a single number. Postgres already has the rows and the index; this
+-- returns the whole KPI block and the daily series in one round trip.
+--
+-- Day boundaries are IST, computed here rather than in Python. A bill rung up at 00:30
+-- IST is 19:00 UTC the previous day, so a naive UTC date would file a shop's late evening
+-- under yesterday and quietly understate every single-day figure.
+create or replace function sales_report(p_shop text, p_from timestamptz, p_to timestamptz)
+returns jsonb language sql stable security invoker
+set search_path = public, pg_temp as $$
+  with b as (
+    select total, payment_state, payment_method, created_at
+      from bills
+     where shop_id = p_shop and created_at >= p_from and created_at < p_to
+  )
+  select jsonb_build_object(
+    'count', (select count(*) from b),
+    'total', (select coalesce(sum(total), 0) from b),
+    'paid',  (select coalesce(sum(total) filter (where payment_state = 'confirmed'), 0) from b),
+    'cash',  (select coalesce(sum(total) filter (where payment_method = 'cash'), 0) from b),
+    'upi',   (select coalesce(sum(total) filter (where payment_method = 'upi'), 0) from b),
+    'days',  (select coalesce(jsonb_agg(x order by x->>'day'), '[]'::jsonb) from (
+                select jsonb_build_object(
+                         'day',   to_char((created_at at time zone 'Asia/Kolkata')::date, 'YYYY-MM-DD'),
+                         'total', sum(total),
+                         'count', count(*),
+                         -- Carried per day so a caller can slice a week or a month out of
+                         -- one query. A split that only existed on the envelope could not
+                         -- be narrowed to a window and would have to be quietly mislabelled.
+                         'paid',  coalesce(sum(total) filter (where payment_state = 'confirmed'), 0),
+                         'cash',  coalesce(sum(total) filter (where payment_method = 'cash'), 0),
+                         'upi',   coalesce(sum(total) filter (where payment_method = 'upi'), 0)) as x
+                  from b
+                 group by (created_at at time zone 'Asia/Kolkata')::date) s)
+  );
+$$;
+
+notify pgrst, 'reload schema';

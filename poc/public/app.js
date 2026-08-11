@@ -15,8 +15,12 @@
 const MIN_CLIP_MS = 250;    // shorter than this is a mis-tap, not speech
 
 const $ = (id) => document.getElementById(id);
-const screens = ["auth", "main", "payment", "receipt", "settings", "staffScreen",
-                 "billdoc", "history", "stock"];
+/* Read from the document, not written out by hand. The hand-written list was a screen
+   whose name you had to remember to add: a section could be built, styled, linked from the
+   menu and reachable by a working handler, and still render as a blank page because show()
+   deactivated every screen and activated none. Import shipped that way. A list derived
+   from the markup cannot fall out of step with it. */
+const screens = [...document.querySelectorAll("section.screen")].map((s) => s.id);
 const show = (n) => screens.forEach((s) => $(s).classList.toggle("active", s === n));
 const rupees = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
@@ -1013,7 +1017,8 @@ function renderCatalog() {
         (p.aliases || []).length ? `<span class="aliases">${(p.aliases || []).map((a, k) =>
           `<button class="alias" data-unalias="${i}:${k}" title="${t("removeAlias")}">${a}<i>×</i></button>`
         ).join("")}</span>` : ""}</span>
-      <span class="sku-u">${p.unit}</span>
+      <span class="sku-u">${p.unit}${p.category && p.category !== "resale"
+        ? `<i class="catmark cat-${p.category}">${catLabel(p.category)}</i>` : ""}</span>
       <span class="sku-p">${p.unit_price > 0 ? rupees(p.unit_price) : "—"}</span>
       <button class="sku-e" data-edit="${i}" aria-label="Edit">✎</button>
       <button class="sku-d" data-del="${i}" aria-label="Delete">🗑</button>
@@ -1062,13 +1067,23 @@ function deleteSku(p) {
   });
 }
 
+/* Four kinds of thing sit on a café's shelf and they answer different questions, so the
+   editor asks which one this is. `resale` is the default everywhere, because it is the
+   inert answer: it decrements itself on sale, exactly as everything did before categories
+   existed. Nothing a shop already has changes behaviour until someone says otherwise. */
+const CATEGORIES = ["raw", "consumable", "menu", "resale"];
+const catLabel = (c) => t(`cat_${c}`) || c;
+
 function editSku(p) {
   const box = $("skuList");
   const row = document.createElement("div");
   row.className = "skuedit";
-  row.innerHTML = `<input class="e-n" value="${p.name}" placeholder="Item">
-    <input class="e-u" value="${p.unit}" placeholder="UOM">
+  const cat = p.category || "resale";
+  row.innerHTML = `<input class="e-n" value="${esc(p.name)}" placeholder="Item">
+    <input class="e-u" value="${esc(p.unit)}" placeholder="UOM">
     <input class="e-p" type="number" step="0.01" value="${p.unit_price || ""}" placeholder="Price">
+    <select class="e-c">${CATEGORIES.map((c) =>
+      `<option value="${c}"${c === cat ? " selected" : ""}>${catLabel(c)}</option>`).join("")}</select>
     <button class="mini go">${t("save")}</button><button class="mini x">✕</button>`;
   box.prepend(row);
   row.querySelector(".x").onclick = () => row.remove();
@@ -1077,6 +1092,7 @@ function editSku(p) {
       method: "POST",
       body: { shop_id: state.shop.id, id: p.id, name: row.querySelector(".e-n").value.trim(),
               unit: row.querySelector(".e-u").value.trim() || "piece",
+              category: row.querySelector(".e-c").value,
               unit_price: parseFloat(row.querySelector(".e-p").value) || 0 },
     });
     if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000); return; }
@@ -1460,18 +1476,194 @@ async function openStock() {
       lost.hidden = false;
       lost.innerHTML = `<b>${rupees(j.total_lost)}</b><span>${t("unaccountedFor")}</span>`;
     } else { lost.hidden = true; }
-    box.innerHTML = (j.items || []).map((r) => {
-      // Only a shortfall gets colour. A surplus is usually a miscount, not a windfall.
-      const gap = r.unaccounted < 0
-        ? `<span class="pill unpaid">${fmtNum(r.unaccounted)} ${r.unit} · ${rupees(r.value_lost)}</span>`
-        : r.unaccounted > 0 ? `<span class="pill">+${fmtNum(r.unaccounted)} ${r.unit}</span>` : "";
-      return `<div class="hrow"><div class="hmain">
-        <b>${r.name}</b> ${gap}
-        <div class="hsub">${t("onShelf")} ${fmtNum(r.stock)} ${r.unit} · ${t("soldWord")} ${fmtNum(r.sold)} · ${t("inWord")} ${fmtNum(r.inward)}</div>
-      </div></div>`;
+
+    // Grouped, because the four kinds of thing answer different questions. Beans running
+    // short is a supply problem; cups running short is a purchasing one; a menu item has
+    // no shelf at all and is here only to say so.
+    const groups = j.groups && j.groups.length
+      ? j.groups
+      : [{ category: "", items: j.items || [], value_lost: j.total_lost, on_hand: 0 }];
+    box.innerHTML = groups.map((g) => {
+      const head = g.category ? `<div class="grouphead">
+        <span class="catmark cat-${g.category}">${catLabel(g.category)}</span>
+        <span class="dim">${g.on_hand > 0 ? `${t("onShelfWorth")} ${rupees(g.on_hand)}` : ""}${
+          g.value_lost > 0 ? ` · ${rupees(g.value_lost)} ${t("lostWord")}` : ""}</span>
+      </div>` : "";
+      return head + g.items.map(stockRow).join("");
     }).join("") || `<p class="empty small">${t("noStock")}</p>`;
   } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
 }
+
+function stockRow(r) {
+  // Only a shortfall gets colour. A surplus is usually a miscount, not a windfall.
+  const gap = r.unaccounted < 0
+    ? `<span class="pill unpaid">${fmtNum(r.unaccounted)} ${r.unit} · ${rupees(r.value_lost)}</span>`
+    : r.unaccounted > 0 ? `<span class="pill">+${fmtNum(r.unaccounted)} ${r.unit}</span>` : "";
+  // A menu item is assembled at the moment of sale and never sat on a shelf, so a stock
+  // figure for it would be a fiction. Say what it is instead of printing a zero.
+  const sub = r.category === "menu"
+    ? `<div class="hsub">${t("madeToOrder")}</div>`
+    : `<div class="hsub">${t("onShelf")} ${fmtNum(r.stock)} ${r.unit} · ${t("soldWord")} ${fmtNum(r.sold)} · ${t("inWord")} ${fmtNum(r.inward)}</div>`;
+  return `<div class="hrow"><div class="hmain"><b>${esc(r.name)}</b> ${gap}${sub}</div></div>`;
+}
+
+/* ---------- recipes ---------- */
+
+/* The link between "an Americano was sold" and "20 g of beans left the shelf". Without it
+   a café's entire input side is invisible to the stock screen — the only things it can
+   see are the finished items, which were never on a shelf to begin with. */
+let recipeState = { items: [], components: [] };
+
+async function openRecipes() {
+  goScreen("recipes");
+  const box = $("recipeList");
+  box.innerHTML = `<p class="empty small">${t("working")}</p>`;
+  try {
+    const j = await api("/api/recipes");
+    if (!j.ok) { box.innerHTML = `<p class="empty small">${j.error || t("notSaved")}</p>`; return; }
+    recipeState = { items: j.items || [], components: j.components || [] };
+    renderRecipes();
+  } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
+}
+$("miRecipes").onclick = openRecipes;
+
+function renderRecipes() {
+  const box = $("recipeList");
+  if (!recipeState.items.length) {
+    box.innerHTML = `<p class="empty small">${t("noSellable")}</p>`;
+    return;
+  }
+  // No ingredients categorised yet means every draft would come back empty, and the AI
+  // button would look broken. Say what is actually missing.
+  const noParts = !recipeState.components.length;
+  box.innerHTML = (noParts ? `<p class="empty small">${t("noComponents")}</p>` : "")
+    + recipeState.items.map((s, i) => {
+      const parts = s.components.map((c) =>
+        `<div class="rpart">${esc(c.name)} <b>${fmtQtyUnit(c.qty, c.unit)}</b></div>`).join("");
+      // Materials cost against selling price, when both are known. This is the first
+      // honest answer the app can give to "what am I making on this".
+      const margin = s.cost > 0 && s.unit_price > 0
+        ? `<span class="pill${s.cost >= s.unit_price ? " unpaid" : " paid"}">${
+            t("costsWord")} ${rupees(s.cost)} · ${Math.round((1 - s.cost / s.unit_price) * 100)}%</span>`
+        : "";
+      return `<div class="hrow rrow">
+        <div class="hmain">
+          <b>${esc(s.name)}</b> ${margin}
+          <div class="rparts">${parts || `<i class="dim">${t("noRecipeYet")}</i>`}</div>
+        </div>
+        <div class="hacts">
+          <button class="mini" data-redit="${i}">${t("editWord")}</button>
+          ${noParts ? "" : `<button class="mini go" data-rai="${i}">${t("askAi")}</button>`}
+        </div></div>`;
+    }).join("");
+  box.querySelectorAll("[data-redit]").forEach((b) => {
+    b.onclick = () => editRecipe(recipeState.items[+b.dataset.redit]);
+  });
+  box.querySelectorAll("[data-rai]").forEach((b) => {
+    b.onclick = () => withBusy(b, () => draftRecipe(recipeState.items[+b.dataset.rai]));
+  });
+}
+
+/* 0.02 kg is a true number and an unreadable one. Shown in whatever unit a person would
+   say out loud, while what is stored stays the component's own stock unit — the display
+   bends, the arithmetic does not. */
+function fmtQtyUnit(qty, unit) {
+  const q = +qty || 0;
+  if (unit === "kg" && q < 1) return `${fmtNum(q * 1000)} g`;
+  if (unit === "litre" && q < 1) return `${fmtNum(q * 1000)} ml`;
+  return `${fmtNum(q)} ${unit}`;
+}
+
+async function draftRecipe(item) {
+  try {
+    const j = await api("/api/recipe/draft", {
+      method: "POST", body: { product_id: item.id },
+    });
+    if (!j.ok) {
+      toast(j.error === "no_components" ? t("noComponents") : (j.error || t("notSaved")),
+            5000, true);
+      return;
+    }
+    // Opened for editing, never saved. A recipe applied silently would start consuming
+    // stock on every later sale from numbers nobody read.
+    editRecipe({ ...item, components: j.components }, j.note);
+  } catch (err) { toast(t("network"), 3000, true); }
+}
+
+function editRecipe(item, note = "") {
+  let parts = item.components.map((c) => ({ ...c }));
+  const box = $("recipeList");
+  const sheet = document.createElement("div");
+  sheet.className = "rsheet";
+  box.prepend(sheet);
+
+  const draw = () => {
+    const rows = parts.map((c, i) => `<div class="rline">
+      <span>${esc(c.name)}</span>
+      <input type="number" step="any" inputmode="decimal" value="${displayQty(c)}"
+             data-rq="${i}"><span class="dim">${displayUnit(c)}</span>
+      <button class="mini danger" data-rx="${i}">✕</button></div>`).join("");
+    const options = recipeState.components
+      .filter((c) => !parts.some((p) => p.component_id === c.id))
+      .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    sheet.innerHTML = `<div class="rsheethead"><b>${esc(item.name)}</b>
+        <button class="mini x" data-rclose>✕</button></div>
+      ${note ? `<p class="fineprint dim">${esc(note)}</p>` : ""}
+      ${rows || `<p class="fineprint dim">${t("noRecipeYet")}</p>`}
+      ${options ? `<div class="rline"><select data-radd>${options}</select>
+        <button class="mini" data-raddgo>+ ${t("addWord")}</button></div>` : ""}
+      <button class="primary wide" data-rsave>${t("save")}</button>`;
+
+    sheet.querySelector("[data-rclose]").onclick = () => sheet.remove();
+    sheet.querySelectorAll("[data-rq]").forEach((el) => {
+      el.oninput = () => { parts[+el.dataset.rq].shown = el.value; };
+    });
+    sheet.querySelectorAll("[data-rx]").forEach((el) => {
+      el.onclick = () => { parts.splice(+el.dataset.rx, 1); draw(); };
+    });
+    const addGo = sheet.querySelector("[data-raddgo]");
+    if (addGo) {
+      addGo.onclick = () => {
+        const id = sheet.querySelector("[data-radd]").value;
+        const c = recipeState.components.find((x) => x.id === id);
+        if (c) { parts.push({ component_id: c.id, name: c.name, unit: c.unit, qty: 0 }); draw(); }
+      };
+    }
+    sheet.querySelector("[data-rsave]").onclick = () =>
+      withBusy(sheet.querySelector("[data-rsave]"), async () => {
+        const components = parts.map(toStockQty).filter((c) => c.qty > 0);
+        try {
+          const j = await api("/api/recipe", {
+            method: "POST", body: { product_id: item.id, components },
+          });
+          if (!j.ok) { toast(`${t("notSaved")}: ${j.error || ""}`, 4000, true); return; }
+          sheet.remove();
+          speak(`${item.name} — ${j.components} ${t("componentsWord")}`);
+          openRecipes();
+        } catch (err) { toast(t("network"), 3000, true); }
+      });
+  };
+  draw();
+}
+
+/* The editor shows grams; the store holds kilos. Which of the two a field is in depends on
+   the component's stock unit and nothing else — never on the current value. Deriving it
+   from the quantity meant the unit flipped underneath the shopkeeper as they typed: a box
+   reading "18 g" became a box meaning kilos the moment they cleared it to type 20, and
+   saved twenty kilos of beans per cup. */
+const smallUnit = (u) => (u === "kg" ? "g" : u === "litre" ? "ml" : u);
+const displayUnit = (c) => smallUnit(c.unit);
+const inSmall = (c) => smallUnit(c.unit) !== c.unit;
+const displayQty = (c) => {
+  if (c.shown !== undefined) return c.shown;
+  const q = +c.qty || 0;
+  return inSmall(c) ? +(q * 1000).toFixed(3) : q;
+};
+const toStockQty = (c) => {
+  const raw = c.shown !== undefined ? parseFloat(c.shown) : +c.qty;
+  const v = isFinite(raw) ? raw : 0;
+  return { component_id: c.component_id, qty: inSmall(c) ? v / 1000 : v };
+};
 /* Trailing zeros only mean nothing AFTER a decimal point. Stripping them unconditionally
    turned 20 kg into "2 kg" and 100 into "1" — the amount stayed right, so the bill was
    correct and the screen was lying, which is the worse of the two. */
@@ -1659,16 +1851,126 @@ $("impSave").onclick = () => withBusy($("impSave"), async () => {
    both actions are one tap from it. */
 async function openHistory() {
   goScreen("history");
+  $("histMobile").value = "";
+  $("rangeBox").hidden = true;
+  $("histNote").hidden = true;
+  loadSales();
+  loadBills();
+}
+$("miHistory").onclick = openHistory;
+
+async function loadBills(mobile = "") {
   const box = $("histList");
   box.innerHTML = `<p class="empty small">${t("working")}</p>`;
   try {
-    const j = await api("/api/bills?limit=40");
+    const q = mobile ? `&mobile=${encodeURIComponent(mobile)}` : "";
+    const j = await api(`/api/bills?limit=${mobile ? 100 : 40}${q}`);
     if (!j.ok) { box.innerHTML = `<p class="empty small">${j.error || t("notSaved")}</p>`; return; }
     state.bills = j.bills || [];
+    // A search that found nobody has to say so. Falling back to the full list would look
+    // like the customer's entire history, which is the one wrong answer here.
+    if (mobile && !state.bills.length) {
+      showHistNote(`${t("noCustomerBills")} ${mobile}`, false);
+    } else if (j.customer) {
+      const c = j.customer;
+      showHistNote(`<b>${rupees(c.total)}</b><span>${c.count} ${t("bills")} · ${c.mobile}${
+        c.unpaid > 0 ? ` · ${rupees(c.unpaid)} ${t("unpaid").toLowerCase()}` : ""}${
+        c.capped ? ` · ${t("lastN")}` : ""}</span>`, c.unpaid > 0);
+    } else {
+      $("histNote").hidden = true;
+    }
     renderHistoryList();
   } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
 }
-$("miHistory").onclick = openHistory;
+
+function showHistNote(html, warn) {
+  const el = $("histNote");
+  el.hidden = false;
+  el.classList.toggle("calm", !warn);
+  el.innerHTML = html;
+}
+
+/* ---------- takings ---------- */
+
+/* The owner "doesn't know objectively how much margin he is making" — this is the first
+   half of the answer, and the cheapest half: what came in, over the three periods anyone
+   running a shop already thinks in. Billed and collected are shown apart, because a total
+   that silently includes unpaid bills is a number that will be believed and shouldn't be. */
+let salesRows = {};
+
+async function loadSales(frm = "", to = "") {
+  const custom = frm && to;
+  try {
+    const j = await api(custom
+      ? `/api/sales?frm=${frm}&to=${to}`
+      : "/api/sales");
+    if (!j.ok) return;
+    if (custom) {
+      // A specific question deserves an undivided answer: the three standing periods step
+      // aside rather than sitting alongside a range that means something else.
+      salesRows = { range: j.range };
+      $("kpiRow").innerHTML = `<button class="kpi wide on" data-kpi="range">
+        <b>${rupees(j.range.total)}</b><span>${fmtDay(j.range.from)} — ${fmtDay(j.range.to)}</span></button>`;
+      showKpi("range");
+    } else {
+      salesRows = { today: j.today, week: j.week, month: j.month };
+      ["today", "week", "month"].forEach((k) => {
+        const el = document.querySelector(`[data-kpi="${k}"] b`);
+        if (el) el.textContent = rupees(j[k].total);
+      });
+      showKpi("today");
+    }
+    $("kpiRow").querySelectorAll("[data-kpi]").forEach((b) => {
+      b.onclick = () => showKpi(b.dataset.kpi);
+    });
+    if (j.partial) toast(t("salesPartial"), 5000, true);
+  } catch (err) { /* the bill list is the screen's real job; KPIs are a bonus */ }
+}
+
+function showKpi(which) {
+  const r = salesRows[which];
+  if (!r) return;
+  $("kpiRow").querySelectorAll("[data-kpi]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.kpi === which);
+  });
+  const bits = [`${r.count} ${t("bills")}`];
+  if (r.unpaid > 0) bits.push(`${rupees(r.unpaid)} ${t("stillUnpaid")}`);
+  if (r.cash > 0) bits.push(`${t("cashWord")} ${rupees(r.cash)}`);
+  if (r.upi > 0) bits.push(`UPI ${rupees(r.upi)}`);
+  $("kpiDetail").textContent = bits.join(" · ");
+}
+
+const fmtDay = (iso) => {
+  const [y, m, d] = (iso || "").split("-");
+  return d ? `${d}/${m}` : iso;
+};
+
+$("histFind").onclick = () => {
+  const m = digits($("histMobile").value);
+  if (!m) { openHistory(); return; }
+  if (m.length < 10) { toast(t("noNumber"), 3200); return; }
+  loadBills(m);
+};
+$("histMobile").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("histFind").click(); }
+});
+$("histRange").onclick = () => { $("rangeBox").hidden = !$("rangeBox").hidden; };
+$("rangeGo").onclick = () => {
+  const a = $("rangeFrom").value, b = $("rangeTo").value;
+  if (!a || !b) { toast(t("pickBothDates"), 3200); return; }
+  loadSales(a, b);
+};
+$("rangeClear").onclick = () => {
+  $("rangeFrom").value = "";
+  $("rangeTo").value = "";
+  $("rangeBox").hidden = true;
+  // Rebuilt rather than un-hidden: the range view replaced the three buttons, so the
+  // markup they lived in is gone.
+  $("kpiRow").innerHTML = ["today", "week", "month"].map((k) =>
+    `<button class="kpi" data-kpi="${k}"><b>—</b><span>${t(
+      k === "today" ? "kpiToday" : k === "week" ? "kpiWeek" : "kpiMonth")}</span></button>`).join("");
+  loadSales();
+};
 
 function renderHistoryList() {
   const box = $("histList");

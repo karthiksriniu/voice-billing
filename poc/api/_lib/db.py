@@ -11,6 +11,7 @@ and the whole point of this product is that it works when the network doesn't.
 from __future__ import annotations
 
 import csv
+import json
 import os
 import re
 import time
@@ -76,7 +77,35 @@ def _row(r: dict) -> dict:
         "unit_price": float(r.get("unit_price") or 0),
         "stock": float(r.get("stock") or 0),
         "aliases": aliases,
+        # raw | consumable | menu | resale. The default is deliberately the inert one:
+        # a shop that has never opened the categoriser keeps behaving exactly as before,
+        # and no existing product silently acquires a recipe or stops decrementing.
+        "category": (r.get("category") or "resale").strip() or "resale",
+        "recipe": _recipe(r.get("recipe")),
     }
+
+
+def _recipe(raw) -> list[dict]:
+    """[{component_id, qty}] — anything that is not that shape is dropped rather than
+    carried, because a malformed component would consume an unknown amount of an unknown
+    thing on the next sale."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw or "[]")
+        except ValueError:
+            return []
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for c in raw:
+        if isinstance(c, dict) and c.get("component_id"):
+            try:
+                qty = float(c.get("qty") or 0)
+            except (TypeError, ValueError):
+                continue
+            if qty > 0:
+                out.append({"component_id": str(c["component_id"]), "qty": qty})
+    return out
 
 
 def _seed() -> list[dict]:
@@ -134,7 +163,8 @@ async def upsert_product(shop_id: str, product: dict) -> tuple[dict, str]:
         items.append(row)
         return row, ""
     invalidate(shop_id)
-    payload = {k: v for k, v in row.items() if k != "is_template"}
+    payload = {k: v for k, v in row.items()
+               if k != "is_template" and k not in _absent}
     payload["shop_id"] = shop_id
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
@@ -144,12 +174,46 @@ async def upsert_product(shop_id: str, product: dict) -> tuple[dict, str]:
                          "Prefer": "resolution=merge-duplicates,return=representation"},
                 json=payload,
             )
+            # The schema is applied by hand, so the code can be ahead of the database. A
+            # column this deploy knows about and that database does not must not take
+            # price editing down with it — drop the unknown field, remember it, and write
+            # what the shop actually has. The feature behind it degrades; billing does not.
+            if r.status_code == 400:
+                missing = _unknown_columns(r.text, payload)
+                if missing:
+                    _absent.update(missing)
+                    for k in missing:
+                        payload.pop(k, None)
+                    r = await c.post(
+                        f"{SUPABASE_URL}/rest/v1/products",
+                        headers={**_headers(),
+                                 "Prefer": "resolution=merge-duplicates,return=representation"},
+                        json=payload,
+                    )
     except Exception as exc:                           # noqa: BLE001
         return row, f"{type(exc).__name__}: {exc}"
     if r.status_code >= 400:
         return row, f"supabase {r.status_code}: {r.text[:200]}"
     body = r.json()
     return ((body or [row])[0], "")
+
+
+# Columns this deploy knows about that the live database does not. Learned from the first
+# rejection rather than probed up front, so a shop with an up-to-date schema pays nothing.
+_absent: set[str] = set()
+
+# Only ever the columns added after the original schema. A typo in a core column has to
+# stay a loud failure — quietly dropping `unit_price` would save a product with no price.
+OPTIONAL_COLUMNS = ("category", "recipe", "description", "name_ta", "long_desc")
+
+
+def _unknown_columns(body: str, payload: dict) -> set[str]:
+    """PostgREST reports an unknown column as PGRST204 naming it. Trust the name, but only
+    act on it for columns we are willing to lose."""
+    text = (body or "").lower()
+    if "pgrst204" not in text and "column" not in text:
+        return set()
+    return {k for k in OPTIONAL_COLUMNS if k in payload and f"'{k}'" in text}
 
 
 async def upsert_shop(shop_id: str, name: str, vpa: str) -> str:
@@ -192,6 +256,92 @@ async def next_receipt_no(shop_id: str, fy: str) -> int:
     except Exception:                                  # noqa: BLE001
         pass
     return 0
+
+
+EMPTY_REPORT = {"count": 0, "total": 0.0, "paid": 0.0, "cash": 0.0, "upi": 0.0, "days": []}
+
+
+def _fold(rows: list[dict]) -> dict:
+    """Sum bills the hard way, when Postgres cannot do it for us.
+
+    Day bucketing here is IST-correct for the same reason it is in the SQL — see period.py.
+    """
+    from datetime import datetime, timedelta, timezone
+    ist = timezone(timedelta(hours=5, minutes=30))
+    out = {**EMPTY_REPORT, "days": []}
+    per_day: dict[str, dict] = {}
+    for r in rows:
+        total = float(r.get("total") or 0)
+        out["count"] += 1
+        out["total"] += total
+        if r.get("payment_state") == "confirmed":
+            out["paid"] += total
+        method = r.get("payment_method") or ""
+        if method in ("cash", "upi"):
+            out[method] += total
+        try:
+            when = datetime.fromisoformat((r.get("created_at") or "").replace("Z", "+00:00"))
+            key = when.astimezone(ist).date().isoformat()
+        except ValueError:
+            continue
+        d = per_day.setdefault(key, {"day": key, "total": 0.0, "count": 0,
+                                     "paid": 0.0, "cash": 0.0, "upi": 0.0})
+        d["total"] += total
+        d["count"] += 1
+        if r.get("payment_state") == "confirmed":
+            d["paid"] += total
+        if method in ("cash", "upi"):
+            d[method] += total
+    out["days"] = [{**per_day[k],
+                    **{f: round(per_day[k][f], 2) for f in ("total", "paid", "cash", "upi")}}
+                   for k in sorted(per_day)]
+    for k in ("total", "paid", "cash", "upi"):
+        out[k] = round(out[k], 2)
+    return out
+
+
+# The row-fetch fallback is bounded. A shop doing 200 bills a day fits a month inside this;
+# one doing far more would silently under-report, which is worse than being slow — so the
+# caller is told the figure is partial rather than being handed a confident wrong number.
+FALLBACK_CAP = 4000
+
+
+async def sales_report(shop_id: str, start_iso: str, end_iso: str,
+                       mobile: str = "") -> dict:
+    """Takings between two instants: the totals, and the daily series behind them.
+
+    Aggregated inside Postgres where possible. The fallback exists because the schema is
+    applied by hand and can lag a deploy — a missing function must degrade to a slower
+    correct answer, not to an empty screen that looks like a shop with no sales.
+    """
+    if not configured():
+        rows = [b for b in _memory.get("bills", []) if b.get("shop_id") == shop_id]
+        return _fold(rows)
+    params = {"p_shop": shop_id, "p_from": start_iso, "p_to": end_iso}
+    if not mobile:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as c:
+                r = await c.post(f"{SUPABASE_URL}/rest/v1/rpc/sales_report",
+                                 headers=_headers(), json=params)
+            if r.status_code < 400:
+                data = r.json() or {}
+                return {**EMPTY_REPORT, **data,
+                        **{k: float(data.get(k) or 0)
+                           for k in ("total", "paid", "cash", "upi")}}
+        except Exception:                              # noqa: BLE001
+            pass
+    # Both ends in one `and=(...)` group: PostgREST takes a column name once per query, so
+    # a second `created_at` key would silently replace the first and widen the window.
+    q = {"shop_id": f"eq.{shop_id}",
+         "select": "total,payment_state,payment_method,created_at",
+         "and": f"(created_at.gte.{start_iso},created_at.lt.{end_iso})",
+         "order": "created_at.desc", "limit": str(FALLBACK_CAP)}
+    if mobile:
+        q["customer_mobile"] = f"eq.{mobile}"
+    rows = await _get("bills", q)
+    out = _fold(rows)
+    out["partial"] = len(rows) >= FALLBACK_CAP
+    return out
 
 
 async def move_stock(shop_id: str, moves: list[dict], reason: str,
@@ -500,18 +650,27 @@ async def update_bill(shop_id: str, bill_id: str, fields: dict) -> str:
         return f"{type(exc).__name__}: {exc}"
 
 
-async def customer_bills(shop_id: str, mobile: str, limit: int = 5) -> list[dict]:
+async def customer_bills(shop_id: str, mobile: str, limit: int = 5,
+                         select: str = "id,total,items,created_at") -> list[dict]:
     """This customer's most recent bills, newest first. Scoped to the shop: one customer's
-    history at one shop is that shop's own record, and must not leak across businesses."""
+    history at one shop is that shop's own record, and must not leak across businesses.
+
+    Matched on the last ten digits rather than exactly. Numbers reach the bill from two
+    places — spoken at the start of a sale, and typed by the customer on the pay screen —
+    and one of them may carry a 91. An exact match would tell a shopkeeper that a regular
+    has never been in, which is worse than no search at all.
+    """
     if not configured() or not mobile:
         return []
+    key = shop_key(mobile)
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.get(
                 f"{SUPABASE_URL}/rest/v1/bills",
                 headers=_headers(),
-                params={"shop_id": f"eq.{shop_id}", "customer_mobile": f"eq.{mobile}",
-                        "select": "id,total,items,created_at",
+                params={"shop_id": f"eq.{shop_id}",
+                        "customer_mobile": f"like.*{key}",
+                        "select": select,
                         "order": "created_at.desc", "limit": str(limit)},
             )
         return r.json() if r.status_code < 400 else []

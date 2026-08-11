@@ -32,6 +32,8 @@ import gst                                             # noqa: E402
 import receipt as receipts                            # noqa: E402
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
+import period                                          # noqa: E402
+import recipes                                         # noqa: E402
 import vision                                          # noqa: E402
 
 app = FastAPI(title="Vaakku PoC")
@@ -165,6 +167,8 @@ class ProductRequest(BaseModel):
     unit_price: float = 0
     stock: float = 0
     aliases: list[str] = []
+    category: str = "resale"
+    recipe: list[dict] = []
 
 
 def serialise(item) -> dict:
@@ -592,6 +596,37 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     return payload
 
 
+# A recipe may name something that itself has a recipe (a shop that sells "Iced Latte" out
+# of a "Latte"). Depth is bounded because a recipe cycle entered by hand — A contains B
+# contains A — would otherwise spin until the request times out, at the moment of sale.
+RECIPE_DEPTH = 4
+
+
+def explode(products: dict[str, dict], product_id: str, qty: float,
+            depth: int = 0, seen: tuple = ()) -> list[dict]:
+    """One sold line, as the movements it actually causes.
+
+    A product with a recipe has no stock of its own — what leaves the shelf is its
+    components, scaled by how many were sold. A product without one decrements itself,
+    which is every shop that has never opened the recipe screen.
+    """
+    p = products.get(product_id)
+    recipe = (p or {}).get("recipe") or []
+    if not recipe or depth >= RECIPE_DEPTH or product_id in seen:
+        return [{"product_id": product_id, "delta": -qty}]
+    out: list[dict] = []
+    for c in recipe:
+        cid = c.get("component_id")
+        if not cid or cid not in products:
+            continue                     # a component that was deleted consumes nothing
+        out += explode(products, cid, qty * float(c.get("qty") or 0),
+                       depth + 1, seen + (product_id,))
+    # A recipe whose every component has since been deleted must not make the sale
+    # invisible. Falling back to the item itself keeps the ledger honest about the fact
+    # that something was sold.
+    return out or [{"product_id": product_id, "delta": -qty}]
+
+
 @router.post("/finalize")
 async def finalize(req: FinalizeRequest):
     total = round(sum(float(i["amount"]) for i in req.items), 2)
@@ -615,12 +650,17 @@ async def finalize(req: FinalizeRequest):
     bill_id = await db.save_bill(req.shop_id, {**bill, "receipt_no": number,
                                                "receipt": doc})
     # What was sold leaves the shelf. Combos are expanded so a blend decrements both of its
-    # parts rather than one invented line.
-    moves = []
+    # parts rather than one invented line, and a prepared item is expanded again into what
+    # it is made of — nobody buys an Americano off a shelf, so decrementing "Americano"
+    # records nothing, while the beans and the cup it actually consumed silently vanish.
+    products = {p["id"]: p for p in await db.get_products(req.shop_id)}
+    moves: list[dict] = []
     for it in req.items:
         for part in (it.get("combo") or [it]):
-            if part.get("product_id") and part.get("qty"):
-                moves.append({"product_id": part["product_id"], "delta": -abs(float(part["qty"]))})
+            pid, qty = part.get("product_id"), part.get("qty")
+            if not pid or not qty:
+                continue
+            moves += explode(products, pid, abs(float(qty)))
     await db.move_stock(req.shop_id, moves, "sale", bill_id)
     return {
         "bill_id": bill_id, "total": total, "ref": ref,
@@ -737,13 +777,24 @@ async def remove_alias(req: AliasRequest, request: Request):
 
 
 @router.get("/bills")
-async def bills_list(request: Request, limit: int = 40):
+async def bills_list(request: Request, limit: int = 40, mobile: str = ""):
     """The shop's own recent bills. Exists to answer two questions at a counter: did that
-    one get paid, and can you send me that receipt again."""
+    one get paid, and can you send me that receipt again.
+
+    With `mobile`, the same list narrowed to one customer — "what did she buy last time",
+    which is the question a regular's arrival actually raises.
+    """
     c = claims_of(request)
     if not c:
         return deny("Sign in required")
-    rows = await db.recent_bills(c["shop"], max(1, min(limit, 100)))
+    n = max(1, min(limit, 100))
+    # Normalised through the same function that makes a shop id, so a number searched as
+    # "+91 98400 12345" finds bills stored as "9840012345". A search that silently returns
+    # nothing because of a space reads as "this customer has never been here".
+    if mobile:
+        rows = await db.customer_bills(c["shop"], mobile, n, select="*")
+    else:
+        rows = await db.recent_bills(c["shop"], n)
     out = []
     for r in rows:
         doc = r.get("receipt") or {}
@@ -761,7 +812,68 @@ async def bills_list(request: Request, limit: int = 40):
             "receipt_status": r.get("receipt_status", "none"),
             "title": doc.get("title", ""),
         })
-    return {"ok": True, "bills": out}
+    # For a customer search the sum of what is on screen is the answer to "how much has
+    # she spent here", so it is computed from these rows rather than fetched again.
+    summary = None
+    if mobile and out:
+        summary = {"mobile": out[0]["customer_mobile"] or db.shop_key(mobile),
+                   "count": len(out),
+                   "total": round(sum(b["total"] for b in out), 2),
+                   "unpaid": round(sum(b["total"] for b in out if not b["paid"]), 2),
+                   "last": out[0]["created_at"], "first": out[-1]["created_at"],
+                   # Truthful about its own limits: at the cap this is the last N bills,
+                   # not the customer's lifetime, and saying so beats a confident number
+                   # that quietly stops growing.
+                   "capped": len(out) >= n}
+    return {"ok": True, "bills": out, "customer": summary}
+
+
+@router.get("/sales")
+async def sales(request: Request, frm: str = "", to: str = "", mobile: str = ""):
+    """What the shop took, over the periods a shopkeeper actually thinks in.
+
+    Today, this week and this month come back together from a single query, because they
+    overlap and the shopkeeper reads them as one row. A custom range replaces all three:
+    having asked a specific question, the answer should not be buried among three others.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+
+    custom = period.range_bounds(frm, to) if (frm or to) else None
+    if frm or to:
+        if not custom:
+            return deny("Dates must be YYYY-MM-DD", 400)
+        rep = await db.sales_report(c["shop"], custom[0], custom[1], mobile)
+        a, b = period.span_ist(custom[0], custom[1])
+        rep["unpaid"] = round(float(rep.get("total") or 0) - float(rep.get("paid") or 0), 2)
+        return {"ok": True, "range": {**rep, "from": a, "to": b}}
+
+    now = period.now_ist()
+    day, week, month = (period.day_bounds(now), period.week_bounds(now),
+                        period.month_bounds(now))
+    # One fetch covering all three. On the 1st of a month that falls mid-week, the week
+    # reaches further back than the month does, so the start is whichever is earliest —
+    # not the month's, which would truncate the week and understate it.
+    start = period.earliest(day, week, month)
+    end = max(day[1], week[1], month[1])
+    rep = await db.sales_report(c["shop"], start, end, mobile)
+
+    def slice_of(window) -> dict:
+        a, b = period.span_ist(*window)
+        days = [d for d in rep.get("days", []) if a <= (d.get("day") or "") <= b]
+        out = {"count": sum(int(d.get("count") or 0) for d in days), "from": a, "to": b}
+        for f in ("total", "paid", "cash", "upi"):
+            out[f] = round(sum(float(d.get(f) or 0) for d in days), 2)
+        # Billed and collected are different numbers, and the gap is the one a shopkeeper
+        # wants at a glance. Showing only "total sales" would quietly count money that has
+        # not arrived.
+        out["unpaid"] = round(out["total"] - out["paid"], 2)
+        return out
+
+    return {"ok": True, "today": slice_of(day), "week": slice_of(week),
+            "month": slice_of(month), "days": rep.get("days", []),
+            "partial": rep.get("partial", False)}
 
 
 @router.get("/receipt/{bill_id}")
@@ -897,6 +1009,156 @@ async def stock_write(req: StockRequest, request: Request):
                         status_code=200 if not error else 502)
 
 
+# ---------------------------------------------------------------------------
+# Categories and recipes
+# ---------------------------------------------------------------------------
+# A café's shelf holds four different kinds of thing, and treating them as one list is why
+# its stock screen never made sense. Only raw and consumable can meaningfully shrink; a
+# menu item never sat on a shelf as itself, which is precisely why its sales have to be
+# exploded into components before the ledger sees them.
+CATEGORIES = ("raw", "consumable", "menu", "resale")
+
+# What a recipe may draw on. A prepared item made of other prepared items is a real thing,
+# but letting the AI reach for one turns a flat ingredient list into a tree the shopkeeper
+# has to hold in their head — so the draft is offered only over things that are bought.
+COMPONENT_CATEGORIES = ("raw", "consumable")
+
+
+class RecipeRequest(BaseModel):
+    product_id: str
+    components: list[dict] = []      # [{component_id, qty}]
+
+
+class RecipeDraftRequest(BaseModel):
+    product_id: str
+    hint: str = ""
+
+
+def clean_recipe(components: list[dict], known: dict[str, dict],
+                 product_id: str) -> list[dict]:
+    """Only real components, only positive quantities, and never the item itself.
+
+    A recipe that names its own product would loop on the next sale; one naming a deleted
+    product would consume something that no longer exists. Both are dropped here rather
+    than defended against at the counter.
+    """
+    out, seen = [], set()
+    for c in components:
+        cid = str(c.get("component_id") or "")
+        try:
+            qty = float(c.get("qty") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not cid or cid == product_id or cid in seen or cid not in known or qty <= 0:
+            continue
+        seen.add(cid)
+        out.append({"component_id": cid, "qty": round(qty, 6)})
+    return out
+
+
+@router.post("/recipe")
+async def recipe_save(req: RecipeRequest, request: Request):
+    """Store what a menu item is made of. Owner only — this decides what every future sale
+    takes off the shelf."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    products = {p["id"]: p for p in await db.get_products(c["shop"])}
+    target = products.get(req.product_id)
+    if not target:
+        return deny("No such item", 404)
+    recipe = clean_recipe(req.components, products, req.product_id)
+    # A saved recipe makes this a menu item by definition: it is assembled, not stocked.
+    # Clearing the recipe hands it back to whatever it was, defaulting to resale.
+    payload = {**target, "recipe": recipe,
+               "category": "menu" if recipe else (
+                   target.get("category") if target.get("category") != "menu" else "resale")}
+    row, error = await db.upsert_product(c["shop"], payload)
+    # The database is migrated by hand, so it can be behind this deploy. If the write went
+    # through with the recipe column quietly stripped, saying "saved" would be a lie the
+    # shopkeeper only discovers when their stock never moves.
+    if not error and "recipe" in db._absent:
+        error = "Recipes need a database update — run the latest schema.sql"
+    return JSONResponse({"ok": not error, "error": error, "product": row,
+                         "components": len(recipe)},
+                        status_code=200 if not error else 502)
+
+
+@router.post("/recipe/draft")
+async def recipe_draft(req: RecipeDraftRequest, request: Request):
+    """Ask for a first draft. Returns it for editing; writes nothing.
+
+    Entering twenty recipes by hand on a phone is the kind of task that never gets done,
+    and an empty recipe means the café's whole input side stays invisible. A draft the
+    shopkeeper corrects in two taps is a far better trade than a screen they abandon.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    products = await db.get_products(c["shop"])
+    target = next((p for p in products if p["id"] == req.product_id), None)
+    if not target:
+        return deny("No such item", 404)
+    components = [{"id": p["id"], "name": p["name"], "unit": p["unit"],
+                   "category": p.get("category", "")}
+                  for p in products
+                  if p.get("category") in COMPONENT_CATEGORIES and p["id"] != req.product_id]
+    out = await recipes.propose(target["name"], components, req.hint)
+    if not out.get("ok"):
+        return JSONResponse(out, status_code=502)
+    known = {p["id"]: p for p in products}
+    drafted = []
+    for comp in out["components"]:
+        p = known.get(comp["component_id"])
+        if p:
+            drafted.append({"component_id": p["id"], "name": p["name"], "unit": p["unit"],
+                            "qty": comp["qty"], "why": comp.get("why", "")})
+    return {"ok": True, "product_id": target["id"], "name": target["name"],
+            "components": drafted, "note": out.get("note", ""),
+            "cost_paise": out.get("cost_paise", 0)}
+
+
+@router.get("/recipes")
+async def recipes_list(request: Request):
+    """Everything sellable, with what it is made of — the recipe screen's whole payload.
+
+    Menu items first and unrecipe'd ones before the rest, because the screen exists to
+    close gaps and the gaps should not need looking for.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    products = await db.get_products(c["shop"])
+    by_id = {p["id"]: p for p in products}
+    sellable, components = [], []
+    for p in products:
+        cat = p.get("category") or "resale"
+        if cat in COMPONENT_CATEGORIES:
+            components.append({"id": p["id"], "name": p["name"], "unit": p["unit"],
+                               "category": cat, "stock": float(p.get("stock") or 0)})
+            continue
+        parts = []
+        for comp in (p.get("recipe") or []):
+            src = by_id.get(comp["component_id"])
+            if src:
+                parts.append({"component_id": src["id"], "name": src["name"],
+                              "unit": src["unit"], "qty": comp["qty"],
+                              # What one serving costs the shop in materials. The first
+                              # honest answer this app can give to "what is my margin".
+                              "cost": round(comp["qty"] * float(src["unit_price"] or 0), 4)})
+        sellable.append({"id": p["id"], "name": p["name"], "unit": p["unit"],
+                         "unit_price": float(p["unit_price"] or 0), "category": cat,
+                         "components": parts,
+                         "cost": round(sum(x["cost"] for x in parts), 2)})
+    sellable.sort(key=lambda s: (bool(s["components"]), s["name"].lower()))
+    return {"ok": True, "items": sellable, "components": components,
+            "categories": list(CATEGORIES)}
+
+
 @router.get("/stock")
 async def stock_report(request: Request):
     """What should be on the shelf, against what was counted.
@@ -926,9 +1188,11 @@ async def stock_report(request: Request):
     rows = []
     for p in products:
         a = agg.get(p["id"], {"sold": 0.0, "inward": 0.0, "counted": 0.0, "wastage": 0.0})
+        cat = p.get("category") or "resale"
         # A count correction IS the shrinkage: it is the amount the shelf disagreed with
         # the ledger by. Negative means goods left without being billed.
         rows.append({"id": p["id"], "name": p["name"], "unit": p["unit"],
+                     "category": cat,
                      "unit_price": float(p["unit_price"] or 0),
                      "stock": float(p.get("stock") or 0),
                      "sold": round(a["sold"], 3), "inward": round(a["inward"], 3),
@@ -936,7 +1200,25 @@ async def stock_report(request: Request):
                      "unaccounted": round(a["counted"], 3),
                      "value_lost": round(-a["counted"] * float(p["unit_price"] or 0), 2)})
     rows.sort(key=lambda r: r["value_lost"], reverse=True)
-    return {"ok": True, "items": rows,
+
+    # Grouped because the four kinds of thing on a café's shelf answer different questions.
+    # Beans running short is a supply problem; cups running short is a purchasing one; a
+    # menu item has no shelf at all and only appears here to be told so.
+    groups = []
+    for cat in CATEGORIES:
+        members = [r for r in rows if r["category"] == cat]
+        if not members:
+            continue
+        groups.append({
+            "category": cat, "items": members, "count": len(members),
+            "value_lost": round(sum(r["value_lost"] for r in members
+                                    if r["value_lost"] > 0), 2),
+            # What the shelf is worth at selling price. Not a loss figure — it is the
+            # answer to "how much of my money is sitting in the back room", which is the
+            # other thing a shopkeeper has never been able to see.
+            "on_hand": round(sum(r["stock"] * r["unit_price"] for r in members), 2),
+        })
+    return {"ok": True, "items": rows, "groups": groups,
             "total_lost": round(sum(r["value_lost"] for r in rows if r["value_lost"] > 0), 2)}
 
 
