@@ -93,3 +93,39 @@ def read_token(token: str) -> dict | None:
 
 def normalise_passcode(p: str) -> str:
     return "".join(ch for ch in (p or "") if ch.isdigit())
+
+
+# --- Order keys ------------------------------------------------------------
+# The credential an automated caller — a phone agent, an ordering bot — uses to place
+# orders on a shop's behalf. Deliberately not a session token: it belongs to a machine, it
+# does not expire on a schedule a machine can notice, and it must be revocable on its own
+# without signing the shopkeeper out of their counter.
+#
+# It authorises exactly one thing: creating a pending order. It cannot read the catalog,
+# the bills or the settings, and it cannot accept an order — only the shopkeeper standing
+# in the shop can turn one into a sale.
+
+ORDER_KEY_PREFIX = "bolo_ord_"
+
+
+def new_order_key() -> str:
+    """32 bytes of entropy. Prefixed so a leaked one is recognisable in a log or a repo,
+    which is what makes automated secret scanning able to catch it."""
+    return ORDER_KEY_PREFIX + secrets.token_urlsafe(32)
+
+
+def order_key_hash(key: str) -> str:
+    """SHA-256, not PBKDF2.
+
+    The slow hash exists to make a six-digit passcode survive a brute force. This secret is
+    32 random bytes, where an attacker gains nothing from speed, and the endpoint has to
+    look it up on every call — so the fast digest is both sufficient and correct here.
+    """
+    key = (key or "").strip()
+    if not key:
+        return ""
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def looks_like_order_key(key: str) -> bool:
+    return (key or "").strip().startswith(ORDER_KEY_PREFIX)

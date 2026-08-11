@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/style.css?v=a6cd610-2247">
+<link rel="stylesheet" href="/style.css?v=fb00c13-2321">
 </head>
 <body>
 
@@ -140,6 +140,10 @@
     </form>
     <button id="typeToggle" class="ghost small">⌨ தட்டச்சு / Type instead</button>
     <button id="finalize" class="primary finalize" hidden data-t="finalise">Finalise bill</button>
+    <!-- For the customer who orders now and collects later. Sits beside Finalise rather
+         than replacing it: both end the bill on screen, but only one of them takes money
+         and moves stock. -->
+    <button id="placeOrder" class="ghost wide" hidden data-t="placeOrderBtn">Place order (collect later)</button>
   </div>
 </section>
 
@@ -255,6 +259,19 @@
   </div>
 </section>
 
+<!-- Orders taken before the customer is at the counter — by phone, by an agent, or at the
+     till for collection. Each one is a decision the shopkeeper has not made yet: serve it,
+     or say no because the shelf cannot cover it. -->
+<section id="orders" class="screen">
+  <header class="bar">
+    <button class="iconbtn" data-back aria-label="Back">←</button>
+    <b data-t="ordersHead">Pending orders</b>
+  </header>
+  <div class="pad">
+    <div id="orderList" class="histlist"></div>
+  </div>
+</section>
+
 <!-- What each sold item is made of. A café's stock problem is invisible without this:
      nobody buys an Americano off a shelf, so until a sale can be exploded into beans, ice
      and a cup, the whole input side of the business is unmeasured. -->
@@ -323,6 +340,9 @@
     <button id="miRecipes" class="menuitem" role="menuitem">
       <svg class="mi" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8.1 13.34l2.83-2.83L3.91 3.5a4 4 0 0 0 0 5.66zm6.78-1.81a5.5 5.5 0 0 0 5.17-1.44 5.5 5.5 0 0 0 0-7.78l-9.2 9.2L3.7 19.46 5.11 20.9l5.66-5.66 5.66 5.66 1.41-1.41-5.66-5.66z"/></svg>
       <span data-t="recipesHead">Recipes</span></button>
+    <button id="miOrders" class="menuitem" role="menuitem">
+      <svg class="mi" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M19 2H5a2 2 0 0 0-2 2v16l4-2 4 2 4-2 4 2V4a2 2 0 0 0-2-2zm-2 9H7V9h10zm0-4H7V5h10zm-4 8H7v-2h6z"/></svg>
+      <span data-t="ordersHead">Pending orders</span><span id="miOrdersCount" class="mistate"></span></button>
     <button id="miDebug" class="menuitem" role="menuitemcheckbox" aria-checked="false">
       <svg class="mi" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20 8h-2.81a6 6 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17a6 6 0 0 0-2.83 0L8.41 3 7 4.41l1.62 1.63A6 6 0 0 0 6.81 8H4v2h2.09A6.6 6.6 0 0 0 6 11v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81a5.99 5.99 0 0 0 10.38 0H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20zm-6 8h-4v-2h4zm0-4h-4v-2h4z"/></svg><span data-t="debugInfo">Debug info</span><span id="miDebugState" class="mistate">Off</span></button>
     <div id="miDiv" class="menudiv"></div>
@@ -418,10 +438,10 @@
 </section>
 
 <div id="toast" class="toast"></div>
-<script>window.BOLO_BUILD="a6cd610-2247"</script>
-<script src="/i18n.js?v=a6cd610-2247"></script>
-<script src="/app.js?v=a6cd610-2247"></script>
-<script src="/print.js?v=a6cd610-2247"></script>
-<script src="/wake.js?v=a6cd610-2247"></script>
+<script>window.BOLO_BUILD="fb00c13-2321"</script>
+<script src="/i18n.js?v=fb00c13-2321"></script>
+<script src="/app.js?v=fb00c13-2321"></script>
+<script src="/print.js?v=fb00c13-2321"></script>
+<script src="/wake.js?v=fb00c13-2321"></script>
 </body>
 </html>

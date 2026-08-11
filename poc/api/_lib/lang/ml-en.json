@@ -544,6 +544,14 @@
       "எடு",
       "நீக்கு"
     ],
+    "place_order": [
+         "place order",
+         "order idu",
+         "save order",
+         "ഓർഡർ ഇടൂ",
+         "ഓർഡർ സേവ്",
+         "പ്ലേസ് ഓർഡർ"
+    ],
     "new_bill": [
       "new bill",
       "next bill",

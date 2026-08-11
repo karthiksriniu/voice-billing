@@ -990,11 +990,12 @@ button.busy,button.busy:disabled{opacity:1}
 .cover{margin-top:var(--space-2)}
 .covertrack{
   position:relative;height:8px;border-radius:var(--radius-full);
-  /* Red to green, left to right, with the turn placed around the reorder flag at 40% so
-     the colour and the flag agree about where "order now" begins. */
+  /* Green to red, left to right — full shelf to empty one, in the reading direction. The
+     turn sits around the reorder flag at 60% so the colour and the flag agree about where
+     "order now" begins. */
   background:linear-gradient(90deg,
-    var(--stock-out) 0%, var(--stock-out) 12%,
-    var(--stock-low) 40%, var(--stock-ok) 68%, var(--stock-ok) 100%);
+    var(--stock-ok) 0%, var(--stock-ok) 32%,
+    var(--stock-low) 60%, var(--stock-out) 88%, var(--stock-out) 100%);
   opacity:.55;                     /* the markers carry the message; this is the scale */
 }
 .cover.low .covertrack,.cover.out .covertrack{opacity:.9}
@@ -1040,4 +1041,45 @@ button.busy,button.busy:disabled{opacity:1}
   font-size:var(--type-body-small-size);color:var(--color-on-surface-variant);
   opacity:.7;margin:var(--space-4) 0 var(--space-2);line-height:1.35;
   padding-top:var(--space-3);border-top:1px solid var(--color-outline-variant);
+}
+
+/* -- Pending orders ---------------------------------------------- */
+/* Each order is a decision, so each gets a card rather than a list row: the shopkeeper is
+   about to make this, and needs every line of it in one glance. */
+.orow{
+  padding:var(--space-3);margin-bottom:var(--space-3);
+  border:1px solid var(--color-outline-variant);border-radius:var(--radius-md);
+  background:var(--color-surface-container-low);
+}
+.ohead{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2)}
+.owho{font-size:var(--type-title-medium-size);font-weight:700}
+.olines{margin:var(--space-3) 0 var(--space-2)}
+.oline{
+  display:grid;grid-template-columns:1fr auto auto;gap:var(--space-2);
+  align-items:baseline;padding:var(--space-1) 0;
+  border-bottom:1px solid var(--color-outline-variant);
+}
+.oname{font-weight:600}
+/* What a blend is actually made of. Indented under its own line because 800g of one bean
+   and 200g of another is the order — collapsing it to "1 kg blend" hides the instruction. */
+.oparts{display:block;margin-top:2px}
+.opart{
+  font-size:var(--type-body-small-size);color:var(--color-on-surface-variant);
+  padding-left:var(--space-3);
+}
+.oqty{font-size:var(--type-body-small-size);color:var(--color-on-surface-variant);
+  white-space:nowrap}
+.oamt{font-weight:700;white-space:nowrap;min-width:4.5em;text-align:right}
+.ototal{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding-top:var(--space-2);font-size:var(--type-title-medium-size);
+}
+.ototal b{font-weight:800}
+.oacts{display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-3)}
+.oacts .primary{flex:1}
+/* A waiting order is a customer standing outside, so the count is visible without opening
+   anything. */
+.menuitem.hasnew #miOrdersCount{
+  background:var(--color-error-container);color:var(--color-on-error-container);
+  padding:0 var(--space-2);border-radius:var(--radius-full);font-weight:700;
 }

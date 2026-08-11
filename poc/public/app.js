@@ -300,6 +300,7 @@ function setMode(mode) {
   $("adminPanel").hidden = !admin;
   $("billPanel").hidden = admin;
   $("finalize").hidden = true;
+  $("placeOrder").hidden = true;
   $("totalRow").hidden = true;
   document.querySelectorAll("#modeSwitch button")
     .forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
@@ -634,6 +635,7 @@ function apply(data, roundTripMs) {
   }
   if (data.command === "clear_all") { state.items = []; render(); toast(t("cleared")); return; }
   if (data.command === "total" && state.items.length) { finalize(); return; }
+  if (data.command === "place_order") { placeOrder(); return; }
 
   let added = 0, asked = 0;
   for (const it of data.items) {
@@ -1346,6 +1348,7 @@ function render() {
       health.asr_configured ? t("emptyHint") : t("emptyHintType")}</span></p>`;
     $("totalRow").hidden = true;
     $("finalize").hidden = true;
+    $("placeOrder").hidden = true;
     return;
   }
 
@@ -1388,6 +1391,7 @@ function render() {
   // Only an unresolved line already on the bill blocks finalising. An unanswered price
   // question does not — that item was never added, so there is nothing wrong to bill.
   $("finalize").hidden = pending.length > 0;
+  $("placeOrder").hidden = pending.length > 0;
   if (pending.length) setStatus(t("confirmFirst"));
 }
 
@@ -1433,6 +1437,25 @@ function showPaymentPending() {
   show("payment");
 }
 
+/* The pay screen, filled in from a bill. Reached two ways — the counter's Finalise, and
+   accepting a phone order — and it has to look identical either way, because to the person
+   holding the phone it is the same moment: the amount, and a QR to point at. */
+function showPayment(d) {
+  if (state.customer) $("custMobile").value = state.customer;
+  $("payAmount").textContent = rupees(d.total);
+  $("paidAmount").textContent = rupees(d.total);
+  $("qr").src = d.qr;
+  $("qr").classList.remove("loading");
+  $("sendReceipt").disabled = false;
+  $("nextSale").disabled = false;
+  // The number and the moment, both fixed at finalise. Shown here as well as on the
+  // receipt so the shopkeeper can read them back to a customer without printing.
+  $("payRef").textContent = d.receipt_no
+    ? `${d.receipt_no} · ${stamp(d.receipt && d.receipt.issued_at)}`
+    : d.ref;
+  show("payment");
+}
+
 async function finalize() {
   if (!state.items.length || state.items.some((i) => i.pending)) return;
   $("finalize").disabled = true;
@@ -1448,20 +1471,7 @@ async function finalize() {
     // Held from the finalise response, not fetched on demand. Opening WhatsApp has to
     // happen in the same tick as the tap, and anything awaited first ends the gesture —
     // which is exactly why the button appeared to do nothing.
-    state.doc = { receipt: d.receipt, text: d.receipt_text, message: d.receipt_message };
-    /* Already identified by voice at the start of the bill: no reason to ask again. */
-    if (state.customer) $("custMobile").value = state.customer;
-    $("payAmount").textContent = rupees(d.total);
-    $("paidAmount").textContent = rupees(d.total);
-    $("qr").src = d.qr;
-    $("qr").classList.remove("loading");
-    $("sendReceipt").disabled = false;
-    $("nextSale").disabled = false;
-    // The number and the moment, both fixed at finalise. Shown here as well as on the
-    // receipt so the shopkeeper can read them back to a customer without printing.
-    $("payRef").textContent = d.receipt_no
-      ? `${d.receipt_no} · ${stamp(d.receipt && d.receipt.issued_at)}`
-      : d.ref;
+    showPayment(d);
   } catch (err) {
     // Back to the bill rather than stranded on a payment screen with no QR.
     $("qr").classList.remove("loading");
@@ -1604,18 +1614,24 @@ async function openStock() {
  * "4.64 kg" and "484 pieces" cannot be compared; "9 days left" and "31 days left" can, so
  * the bar is scaled in days of cover rather than in the item's own unit. The flag is the
  * reorder point, and it sits at the same place on every bar — which turns a screenful of
- * different products into one repeated question: is the marker left of the flag?
+ * different products into one repeated question: has the marker passed the flag?
  *
- * Green to red runs left to right in the reading direction of the danger, so the eye lands
- * on the red end first. Nothing is drawn at all when there is no honest forecast: an
- * item never sold would otherwise show as a full green bar, which is exactly the wrong
- * thing to tell someone about a product that has never moved.
+ * Green on the left, red on the right, and the AXIS RUNS THE SAME WAY. Colour alone could
+ * have been flipped in one line, but then a fuller shelf would move the marker leftward —
+ * backwards against the reading direction, and backwards against how the thing being drawn
+ * actually behaves. Instead the bar reads as depletion: full at the left, empty at the
+ * right, the marker travelling toward the red end as the shelf runs down. Time and the eye
+ * move the same way, and the end of the bar is the end of the stock.
+ *
+ * Nothing is drawn at all when there is no honest forecast: an item never sold would
+ * otherwise show as a full green bar, which is exactly the wrong thing to say about the
+ * product we know least about.
  */
 function coverBar(r) {
   if (r.days_cover == null || !r.horizon_days) return "";
-  // Held just inside the ends. A marker at a literal 0% or 100% is half-swallowed by the
-  // track's rounded cap and reads as clipped rather than as "off the end of the scale".
-  const pct = (d) => Math.max(3, Math.min(95, (d / r.horizon_days) * 100));
+  // Inverted: plenty of days sits left, zero days sits hard right. Held just inside the
+  // ends so a marker is not half-swallowed by the track's rounded cap.
+  const pct = (d) => Math.max(3, Math.min(97, 100 - (d / r.horizon_days) * 100));
   const at = pct(r.days_cover), flag = pct(r.reorder_days);
   const state = r.state === "out" ? "out" : r.state === "low" ? "low" : "ok";
   return `<div class="cover ${state}">
@@ -2018,6 +2034,166 @@ $("impSave").onclick = () => withBusy($("impSave"), async () => {
     if (imp.kind === "catalog") loadCatalog();
   } catch (err) { toast(t("network"), 3000, true); }
 });
+
+/* Park what is on screen as an order rather than billing it now. For the customer who
+   asks for something and comes back for it — the goods have not changed hands, so nothing
+   is billed, nothing is numbered and nothing leaves the shelf until they do. */
+async function placeOrder() {
+  if (!state.items.length || state.items.some((i) => i.pending)) {
+    speak(t("nothingToOrder"));
+    return;
+  }
+  try {
+    const j = await api("/api/orders", { method: "POST", body: {
+      customer_mobile: state.customer || "",
+      // Sent as plain names with their quantities: the server re-parses against the same
+      // catalog, so an order made here and one made by an agent are resolved identically.
+      items: state.items.map((i) => ({ name: i.name, qty: i.qty })),
+    }});
+    if (!j.ok) { toast(j.error || t("notSaved"), 4000, true); return; }
+    state.items = [];
+    clearCustomer();
+    render();
+    speak(t("orderPlaced"));
+    refreshOrderCount();
+  } catch (err) { toast(t("network"), 3000, true); }
+}
+$("placeOrder").onclick = () => withBusy($("placeOrder"), placeOrder);
+
+/* ---------- pending orders ---------- */
+
+/* An order is a decision the shopkeeper has not made yet. The screen exists to make that
+   decision quick and hard to get wrong: who it is for, exactly what was asked for including
+   what a blend is made of, and two buttons.
+
+   Accepting bills it and puts the QR up. Refusing bills nothing at all — no receipt number,
+   no stock movement — because a refused order is not a cancelled sale, it is a sale that
+   never happened. Either way the customer has to be told, so either way a message is
+   prepared and WhatsApp is opened on the same tap. */
+
+let orderState = [];
+
+async function openOrders() {
+  goScreen("orders");
+  const box = $("orderList");
+  box.innerHTML = `<p class="empty small">${t("working")}</p>`;
+  try {
+    const j = await api("/api/orders?status=pending");
+    if (!j.ok) { box.innerHTML = `<p class="empty small">${j.error || t("notSaved")}</p>`; return; }
+    orderState = j.orders || [];
+    renderOrders();
+  } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
+}
+$("miOrders").onclick = openOrders;
+
+/* The queue's length, on the menu item itself. A pending order the shopkeeper never
+   looks at is a customer standing outside, so it has to be visible without opening
+   anything. Refreshed quietly; failure is silence, never a toast mid-sale. */
+async function refreshOrderCount() {
+  if (!state.token) return;
+  try {
+    const j = await api("/api/orders?status=pending");
+    const n = j.ok ? (j.orders || []).length : 0;
+    const el = $("miOrdersCount");
+    if (el) el.textContent = n ? String(n) : "";
+    $("miOrders").classList.toggle("hasnew", !!n);
+  } catch (err) { /* the counter must not care */ }
+}
+
+function renderOrders() {
+  const box = $("orderList");
+  if (!orderState.length) {
+    box.innerHTML = `<p class="empty small">${t("noOrders")}</p>`;
+    return;
+  }
+  box.innerHTML = orderState.map((o, i) => {
+    // Every line, and every part of a blend. The shopkeeper is about to make this; a
+    // collapsed "1 item" would hide the 800g/200g split that is the whole order.
+    const lines = (o.items || []).map((it) => {
+      const parts = (it.combo || []).map((c) =>
+        `<div class="opart">${esc(c.name)} — ${fmtNum(c.qty)} ${esc(c.unit || "")}</div>`).join("");
+      return `<div class="oline">
+        <span class="oname">${esc(it.name)}${parts ? `<span class="oparts">${parts}</span>` : ""}</span>
+        <span class="oqty">${fmtNum(it.qty)} ${esc(it.unit || "")}</span>
+        <span class="oamt">${rupees(it.amount)}</span>
+      </div>`;
+    }).join("");
+    const who = o.customer_name || o.customer_mobile
+      ? `${o.customer_name ? esc(o.customer_name) + " " : ""}${
+          o.customer_mobile ? "📱 " + esc(o.customer_mobile) : ""}`
+      : `<i>${t("noCustomer")}</i>`;
+    return `<div class="orow">
+      <div class="ohead">
+        <span class="owho">${who}</span>
+        <span class="pill">${o.source === "counter" ? t("srcCounter") : t("srcPhone")}</span>
+      </div>
+      <div class="hsub">${stamp(o.created_at)}${o.note ? ` · ${esc(o.note)}` : ""}</div>
+      <div class="olines">${lines}</div>
+      <div class="ototal"><span>${t("total")}</span><b>${rupees(o.total)}</b></div>
+      <div class="oacts">
+        <button class="primary" data-oacc="${i}">${t("orderReady")}</button>
+        <button class="mini danger" data-orej="${i}">${t("orderReject")}</button>
+      </div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-oacc]").forEach((b) => {
+    b.onclick = () => withBusy(b, () => acceptOrder(orderState[+b.dataset.oacc]));
+  });
+  box.querySelectorAll("[data-orej]").forEach((b) => {
+    b.onclick = () => rejectOrder(orderState[+b.dataset.orej]);
+  });
+}
+
+async function acceptOrder(o) {
+  try {
+    const j = await api("/api/orders/accept", { method: "POST", body: { order_id: o.id } });
+    if (!j.ok) { toast(j.error || t("notSaved"), 4500, true); openOrders(); return; }
+    // Held before anything else awaits: opening WhatsApp has to happen in the same gesture
+    // as the tap, and the pay screen needs the bill it just made.
+    state.bill = j;
+    state.doc = { receipt: j.receipt, text: j.receipt_text, message: j.receipt_message };
+    state.customer = j.mobile || "";
+    tellCustomer(j.mobile, j.message);
+    speak(t("orderAccepted"));
+    showPayment(j);
+  } catch (err) { toast(t("network"), 3000, true); }
+}
+
+function rejectOrder(o) {
+  showPrompt({
+    kind: t("orderReject"),
+    main: `${o.customer_mobile || t("noCustomer")} — ${rupees(o.total)}`,
+    note: t("rejectNote"),
+    warn: true,
+    onOk: async () => {
+      hidePrompt();
+      try {
+        const j = await api("/api/orders/reject", { method: "POST", body: { order_id: o.id } });
+        if (!j.ok) { toast(j.error || t("notSaved"), 4500, true); }
+        else { tellCustomer(j.mobile, j.message); speak(t("orderRejected")); }
+      } catch (err) { toast(t("network"), 3000, true); }
+      openOrders();
+      refreshOrderCount();
+    },
+    onCancel: hidePrompt,
+  });
+}
+
+/* Telling the customer.
+ *
+ * There is no WhatsApp Business provider wired up, so nothing is sent automatically and
+ * this does not pretend otherwise: it opens WhatsApp with the message already written, and
+ * the shopkeeper taps send. When a provider is connected the message is already built
+ * server-side, so what changes is where it is posted — not what it says.
+ */
+function tellCustomer(mobile, message) {
+  const to = digits(mobile || "");
+  if (to.length < 10 || !message) return;
+  const wa = `https://wa.me/91${to.slice(-10)}?text=${encodeURIComponent(message)}`;
+  const a = document.createElement("a");
+  a.href = wa; a.target = "_blank"; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+}
 
 /* ---------- past bills ---------- */
 

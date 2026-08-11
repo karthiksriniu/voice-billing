@@ -405,14 +405,24 @@ async def stock_ledger(shop_id: str, since_days: int = 90) -> list[dict]:
                                           "order": "occurred_at.desc", "limit": "2000"})
 
 
+def _mem_bills(shop_id: str) -> list[dict]:
+    """Newest first, out of the offline store."""
+    rows = [b for b in _memory.get("bills", []) if b.get("shop_id") == shop_id]
+    return sorted(rows, key=lambda b: b.get("created_at") or "", reverse=True)
+
+
 async def recent_bills(shop_id: str, limit: int = 40) -> list[dict]:
     """Newest first, this shop only. The index on (shop_id, created_at desc) exists for
     exactly this query."""
+    if not configured():
+        return _mem_bills(shop_id)[:limit]
     return await _get("bills", {"shop_id": f"eq.{shop_id}", "select": "*",
                                 "order": "created_at.desc", "limit": str(limit)})
 
 
 async def get_bill(shop_id: str, bill_id: str) -> dict | None:
+    if not configured():
+        return next((b for b in _mem_bills(shop_id) if b.get("id") == bill_id), None)
     rows = await _get("bills", {"id": f"eq.{bill_id}", "shop_id": f"eq.{shop_id}",
                                 "select": "*", "limit": "1"})
     return rows[0] if rows else None
@@ -421,7 +431,9 @@ async def get_bill(shop_id: str, bill_id: str) -> dict | None:
 async def save_bill(shop_id: str, bill: dict) -> str:
     bill_id = bill.get("id") or str(uuid.uuid4())
     if not configured():
-        _memory.setdefault("bills", []).append({**bill, "id": bill_id})
+        _memory.setdefault("bills", []).append({
+            **bill, "id": bill_id, "shop_id": shop_id,
+            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
         return bill_id
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
@@ -705,9 +717,12 @@ async def customer_bills(shop_id: str, mobile: str, limit: int = 5,
     and one of them may carry a 91. An exact match would tell a shopkeeper that a regular
     has never been in, which is worse than no search at all.
     """
-    if not configured() or not mobile:
+    if not mobile:
         return []
     key = shop_key(mobile)
+    if not configured():
+        return [b for b in _mem_bills(shop_id)
+                if key and key in (b.get("customer_mobile") or "")][:limit]
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.get(
@@ -721,3 +736,95 @@ async def customer_bills(shop_id: str, mobile: str, limit: int = 5,
         return r.json() if r.status_code < 400 else []
     except Exception:                                  # noqa: BLE001
         return []
+
+
+# --- Orders ----------------------------------------------------------------
+
+async def shop_by_order_key(key_hash: str) -> dict | None:
+    """Which shop this key belongs to. Looked up by digest, so the raw key is never stored
+    and a database dump does not hand anyone the ability to place orders."""
+    if not key_hash:
+        return None
+    if not configured():
+        return next((s for s in _local_shops.values()
+                     if s.get("order_key_hash") == key_hash), None)
+    rows = await _get("shops", {"order_key_hash": f"eq.{key_hash}",
+                                "select": "*", "limit": "1"})
+    return rows[0] if rows else None
+
+
+async def set_order_key(shop_id: str, key_hash: str) -> str:
+    if not configured():
+        _local_shops.setdefault(shop_id, {"id": shop_id})["order_key_hash"] = key_hash
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.patch(f"{SUPABASE_URL}/rest/v1/shops", headers=_headers(),
+                              params={"id": f"eq.{shop_id}"},
+                              json={"order_key_hash": key_hash})
+        return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
+    except Exception as exc:                           # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"
+
+
+async def save_order(shop_id: str, order: dict) -> tuple[str, str]:
+    """Returns (order_id, error). The id is generated here so a caller gets one back even
+    when the write fails and the order has to be retried."""
+    order_id = order.get("id") or str(uuid.uuid4())
+    row = {**order, "id": order_id, "shop_id": shop_id}
+    if not configured():
+        _memory.setdefault("orders", []).append(
+            {**row, "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
+        return order_id, ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(f"{SUPABASE_URL}/rest/v1/orders", headers=_headers(), json=row)
+        if r.status_code >= 400:
+            return order_id, f"supabase {r.status_code}: {r.text[:200]}"
+    except Exception as exc:                           # noqa: BLE001
+        return order_id, f"{type(exc).__name__}: {exc}"
+    return order_id, ""
+
+
+async def list_orders(shop_id: str, status: str = "pending", limit: int = 50) -> list[dict]:
+    """Oldest first: a queue is served in the order it arrived, and the customer who has
+    been waiting longest is the one the shopkeeper should see at the top."""
+    if not configured():
+        rows = [o for o in _memory.get("orders", [])
+                if o.get("shop_id") == shop_id and (not status or o.get("status") == status)]
+        return sorted(rows, key=lambda o: o.get("created_at") or "")[:limit]
+    params = {"shop_id": f"eq.{shop_id}", "select": "*",
+              "order": "created_at.asc", "limit": str(limit)}
+    if status:
+        params["status"] = f"eq.{status}"
+    return await _get("orders", params)
+
+
+async def get_order(shop_id: str, order_id: str) -> dict | None:
+    if not configured():
+        return next((o for o in _memory.get("orders", [])
+                     if o.get("id") == order_id and o.get("shop_id") == shop_id), None)
+    rows = await _get("orders", {"id": f"eq.{order_id}", "shop_id": f"eq.{shop_id}",
+                                 "select": "*", "limit": "1"})
+    return rows[0] if rows else None
+
+
+async def settle_order(shop_id: str, order_id: str, fields: dict) -> str:
+    """Close an order out — accepted or rejected. Scoped by shop_id as well as id so one
+    shop's token can never touch another shop's queue."""
+    fields = {**fields,
+              "settled_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
+    if not configured():
+        for o in _memory.get("orders", []):
+            if o.get("id") == order_id and o.get("shop_id") == shop_id:
+                o.update(fields)
+                return ""
+        return "no such order"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.patch(f"{SUPABASE_URL}/rest/v1/orders", headers=_headers(),
+                              params={"id": f"eq.{order_id}", "shop_id": f"eq.{shop_id}"},
+                              json=fields)
+        return "" if r.status_code < 400 else f"supabase {r.status_code}: {r.text[:200]}"
+    except Exception as exc:                           # noqa: BLE001
+        return f"{type(exc).__name__}: {exc}"

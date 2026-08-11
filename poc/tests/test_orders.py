@@ -1,0 +1,313 @@
+"""Orders taken before the customer is at the counter.
+
+This is the first endpoint in the product that an unattended machine calls. Everything a
+person would notice — a wrong name, a missing item, a double charge — has to be caught here
+instead, because on the other end is an agent reading a total down a phone line and a
+shopkeeper who will make whatever this says.
+
+Three things it must never do: bill twice for one order, let one shop's key reach another
+shop's queue, or silently drop an item it could not understand.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "api" / "_lib"))
+
+from fastapi.testclient import TestClient          # noqa: E402
+
+import api.index as api_index                      # noqa: E402
+import auth                                        # noqa: E402
+import db                                          # noqa: E402
+
+client = TestClient(api_index.fastapi_app)
+FAILS = 0
+
+SHOP, OTHER = "t_orders", "t_other"
+CATALOG = [
+    {"id": "pda", "name": "Plantation Double A", "unit": "kg", "unit_price": 900.0,
+     "stock": 20.0, "category": "resale", "recipe": [], "aliases": []},
+    {"id": "cpb", "name": "Cherry Peaberry", "unit": "kg", "unit_price": 1400.0,
+     "stock": 10.0, "category": "resale", "recipe": [], "aliases": []},
+    {"id": "beans", "name": "Coffee Beans", "unit": "kg", "unit_price": 900.0,
+     "stock": 5.0, "category": "raw", "recipe": [], "aliases": []},
+    {"id": "cup", "name": "Takeaway Cup", "unit": "piece", "unit_price": 4.0,
+     "stock": 400.0, "category": "consumable", "recipe": [], "aliases": []},
+    {"id": "americano", "name": "Americano", "unit": "piece", "unit_price": 140.0,
+     "stock": 0.0, "category": "menu", "aliases": [],
+     "recipe": [{"component_id": "beans", "qty": 0.018},
+                {"component_id": "cup", "qty": 1}]},
+]
+
+STORE: dict = {}
+
+
+def check(label, got, want):
+    global FAILS
+    ok = got == want
+    if not ok:
+        FAILS += 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label}"
+          + ("" if ok else f"\n     got  {got!r}\n     want {want!r}"))
+
+
+def near(label, got, want, tol=0.01):
+    global FAILS
+    ok = got is not None and abs(got - want) <= tol
+    if not ok:
+        FAILS += 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label}" + ("" if ok else f"\n     got {got!r} want ~{want}"))
+
+
+def reset():
+    STORE.clear()
+    STORE.update({"orders": [], "bills": [], "moves": [], "keys": {}})
+
+    async def fake_products(shop_id):
+        return [dict(p) for p in CATALOG]
+
+    async def fake_shop(shop_id):
+        return {"id": shop_id, "name": "Ragas Coffee", "lang": "en",
+                "upi_vpa": "ragas@upi"}
+
+    async def fake_save_order(shop_id, order):
+        oid = f"o{len(STORE['orders']) + 1}"
+        STORE["orders"].append({**order, "id": oid, "shop_id": shop_id,
+                                "created_at": f"2026-08-08T0{len(STORE['orders'])}:00:00Z"})
+        return oid, ""
+
+    async def fake_list_orders(shop_id, status="pending", limit=50):
+        return [o for o in STORE["orders"] if o["shop_id"] == shop_id
+                and (not status or o.get("status") == status)]
+
+    async def fake_get_order(shop_id, order_id):
+        return next((o for o in STORE["orders"]
+                     if o["id"] == order_id and o["shop_id"] == shop_id), None)
+
+    async def fake_settle(shop_id, order_id, fields):
+        for o in STORE["orders"]:
+            if o["id"] == order_id and o["shop_id"] == shop_id:
+                o.update(fields)
+                return ""
+        return "no such order"
+
+    async def fake_by_key(key_hash):
+        sid = STORE["keys"].get(key_hash)
+        return {"id": sid, "name": "Ragas Coffee", "upi_vpa": "ragas@upi"} if sid else None
+
+    async def fake_set_key(shop_id, key_hash):
+        STORE["keys"] = {h: s for h, s in STORE["keys"].items() if s != shop_id}
+        STORE["keys"][key_hash] = shop_id
+        return ""
+
+    async def fake_save_bill(shop_id, bill):
+        bid = f"b{len(STORE['bills']) + 1}"
+        STORE["bills"].append({**bill, "id": bid})
+        return bid
+
+    async def fake_receipt_no(shop_id, fy):
+        return len(STORE["bills"]) + 1
+
+    async def fake_move(shop_id, moves, reason, bill_id=None):
+        STORE["moves"].append((reason, moves))
+        return ""
+
+    db.get_products = fake_products
+    db.get_shop = fake_shop
+    db.save_order = fake_save_order
+    db.list_orders = fake_list_orders
+    db.get_order = fake_get_order
+    db.settle_order = fake_settle
+    db.shop_by_order_key = fake_by_key
+    db.set_order_key = fake_set_key
+    db.save_bill = fake_save_bill
+    db.next_receipt_no = fake_receipt_no
+    db.move_stock = fake_move
+    db.invalidate = lambda s: None
+
+
+def owner(shop=SHOP):
+    return {"Authorization": f"Bearer {auth.issue_token(shop, '9000000000', 'owner')}"}
+
+
+def make_key(shop=SHOP):
+    return client.post("/api/order-key", headers=owner(shop), json={}).json()["key"]
+
+
+# ---------------------------------------------------------------------------
+
+def test_intake():
+    reset()
+    key = make_key()
+    check("the key is returned once, and looks like one",
+          key.startswith(auth.ORDER_KEY_PREFIX), True)
+
+    # The shape the brief asked for: a blend named the way a person says it.
+    r = client.post("/api/orders", headers={"X-Order-Key": key}, json={
+        "customer_mobile": "+91 98400 12345",
+        "items": [{"text": "800 gram plantation double A plus 200 gram cherry peaberry"},
+                  {"name": "Americano", "qty": 2}]})
+    check("an agent's order is accepted", r.status_code, 201)
+    j = r.json()
+    check("two lines came back", len(j["items"]), 2)
+    # 0.8 x 900 + 0.2 x 1400 = 720 + 280
+    near("the blend is priced from its parts", j["items"][0]["amount"], 1000.0)
+    check("...and its parts are named back to the caller",
+          [(p["name"], p["qty"]) for p in j["items"][0]["parts"]],
+          [("Plantation Double A", 0.8), ("Cherry Peaberry", 0.2)])
+    near("a plain menu line is priced too", j["items"][1]["amount"], 280.0)
+    near("the total is the sum", j["total"], 1280.0)
+    check("the number is normalised for later lookup",
+          STORE["orders"][0]["customer_mobile"], "9840012345")
+    # Taking an order commits nothing: no bill, no stock movement, no receipt number.
+    check("nothing was billed", STORE["bills"], [])
+    check("nothing left the shelf", STORE["moves"], [])
+
+
+def test_unmatched():
+    reset()
+    key = make_key()
+    # One good line, one the shop does not sell. The good one must survive and the bad one
+    # must be reported — an order that quietly loses an item is worse than a flagged one.
+    j = client.post("/api/orders", headers={"X-Order-Key": key}, json={
+        "items": [{"name": "Americano", "qty": 1},
+                  {"text": "two kilo unobtainium"}]}).json()
+    check("the line it knew is kept", len(j["items"]), 1)
+    check("the line it did not is named", any("unobtainium" in u.lower()
+                                              for u in j["unmatched"]), True)
+
+    # Nothing understood at all is a failure, not an empty order for the shop to puzzle over.
+    r = client.post("/api/orders", headers={"X-Order-Key": key},
+                    json={"items": [{"text": "two kilo unobtainium"}]})
+    check("an order of pure nonsense is refused", r.status_code, 422)
+    check("...and nothing is queued", len(STORE["orders"]), 1)
+
+
+def test_auth():
+    reset()
+    key = make_key(SHOP)
+    body = {"items": [{"name": "Americano", "qty": 1}]}
+
+    check("no credential at all is refused",
+          client.post("/api/orders", json=body).status_code, 401)
+    check("a made-up key is refused",
+          client.post("/api/orders", headers={"X-Order-Key": "bolo_ord_nope"},
+                      json=body).status_code, 401)
+
+    # A key names its own shop. A body cannot talk it into another one.
+    client.post("/api/orders", headers={"X-Order-Key": key},
+                json={**body, "shop_id": OTHER})
+    check("the key's shop wins over the body's", STORE["orders"][0]["shop_id"], SHOP)
+
+    # Rotating replaces: the old key must stop working the moment a new one exists.
+    old = key
+    new = make_key(SHOP)
+    check("a new key is different", new != old, True)
+    check("the old key is dead",
+          client.post("/api/orders", headers={"X-Order-Key": old},
+                      json=body).status_code, 401)
+    check("the new key works",
+          client.post("/api/orders", headers={"X-Order-Key": new},
+                      json=body).status_code, 201)
+
+    # An order key places orders. It does not get to accept them — that commits the shop.
+    check("an order key cannot accept an order",
+          client.post("/api/orders/accept", headers={"X-Order-Key": new},
+                      json={"order_id": "o1"}).status_code, 401)
+    check("an order key cannot read the queue",
+          client.get("/api/orders", headers={"X-Order-Key": new}).status_code, 401)
+    check("an order key cannot mint another key",
+          client.post("/api/order-key", headers={"X-Order-Key": new},
+                      json={}).status_code, 401)
+    check("staff cannot mint one either",
+          client.post("/api/order-key",
+                      headers={"Authorization":
+                               f"Bearer {auth.issue_token(SHOP, '9111111111', 'staff')}"},
+                      json={}).status_code, 403)
+
+
+def test_accept():
+    reset()
+    key = make_key()
+    client.post("/api/orders", headers={"X-Order-Key": key}, json={
+        "customer_mobile": "9840012345",
+        "items": [{"name": "Americano", "qty": 10}]})
+
+    q = client.get("/api/orders", headers=owner()).json()
+    check("the shopkeeper sees it waiting", q["orders"][0]["status"], "pending")
+    check("...with the customer's number", q["orders"][0]["customer_mobile"], "9840012345")
+
+    j = client.post("/api/orders/accept", headers=owner(),
+                    json={"order_id": "o1"}).json()
+    check("accepting issues a bill", bool(j.get("bill_id")), True)
+    check("...with a receipt number", bool(j.get("receipt_no")), True)
+    check("...and a QR carrying the amount", j["qr"].startswith("data:image"), True)
+    near("the amount is the order's", j["total"], 1400.0)
+
+    # Ten Americanos: the recipe is what leaves the shelf, not ten of a thing never stocked.
+    reason, moves = STORE["moves"][0]
+    check("a sale is recorded", reason, "sale")
+    took = {m["product_id"]: round(m["delta"], 4) for m in moves}
+    check("the recipe was exploded", took, {"beans": -0.18, "cup": -10.0})
+
+    check("the order is closed out", STORE["orders"][0]["status"], "accepted")
+    check("...and linked to its bill", STORE["orders"][0]["bill_id"], j["bill_id"])
+    check("the customer is told it is ready", "ready" in j["message"].lower(), True)
+    check("...and how to pay", "ragas@upi" in j["message"], True)
+
+    # The one that would cost a customer real money: a second tap on a slow connection.
+    r2 = client.post("/api/orders/accept", headers=owner(), json={"order_id": "o1"})
+    check("accepting twice is refused", r2.status_code, 409)
+    check("...and bills once", len(STORE["bills"]), 1)
+
+
+def test_reject():
+    reset()
+    key = make_key()
+    client.post("/api/orders", headers={"X-Order-Key": key},
+                json={"customer_mobile": "9840012345",
+                      "items": [{"name": "Americano", "qty": 1}]})
+    j = client.post("/api/orders/reject", headers=owner(),
+                    json={"order_id": "o1", "reason": "Out of milk today"}).json()
+    check("rejecting works", j["ok"], True)
+    check("the reason reaches the customer", "Out of milk today" in j["message"], True)
+    check("the order is marked refused", STORE["orders"][0]["status"], "rejected")
+    # A refusal is not a sale: no bill, no receipt number, no stock movement.
+    check("nothing was billed", STORE["bills"], [])
+    check("nothing left the shelf", STORE["moves"], [])
+    check("rejecting twice is refused",
+          client.post("/api/orders/reject", headers=owner(),
+                      json={"order_id": "o1"}).status_code, 409)
+
+
+def test_counter_order():
+    reset()
+    # The counter's own "place order": a session, not a key, and marked as such so the
+    # shopkeeper can tell a phone order from one taken at the till.
+    j = client.post("/api/orders", headers=owner(),
+                    json={"items": [{"name": "Americano", "qty": 1}],
+                          "customer_mobile": "9840099887"}).json()
+    check("the counter can queue an order", j["ok"], True)
+    check("...and it is marked as taken there", STORE["orders"][0]["source"], "counter")
+
+    # One shop's queue is not another's.
+    check("another shop sees nothing",
+          client.get("/api/orders", headers=owner(OTHER)).json()["orders"], [])
+    check("another shop cannot accept it",
+          client.post("/api/orders/accept", headers=owner(OTHER),
+                      json={"order_id": "o1"}).status_code, 404)
+
+
+if __name__ == "__main__":
+    test_intake()
+    test_unmatched()
+    test_auth()
+    test_accept()
+    test_reject()
+    test_counter_order()
+    print("\nall order checks passed" if not FAILS else f"\n{FAILS} FAILED")
+    raise SystemExit(1 if FAILS else 0)

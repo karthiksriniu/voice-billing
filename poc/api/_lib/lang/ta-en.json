@@ -470,6 +470,15 @@
       "எடு",
       "நீக்கு"
     ],
+    "place_order": [
+         "place order",
+         "order podu",
+         "save order",
+         "pending order",
+         "ஆர்டர் போடு",
+         "ஆர்டர் சேமி",
+         "பிளேஸ் ஆர்டர்"
+    ],
     "new_bill": [
       "bill podu",
       "new bill",

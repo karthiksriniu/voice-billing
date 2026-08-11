@@ -632,50 +632,290 @@ def explode(products: dict[str, dict], product_id: str, qty: float,
     return out or [{"product_id": product_id, "delta": -qty}]
 
 
-@router.post("/finalize")
-async def finalize(req: FinalizeRequest):
-    total = round(sum(float(i["amount"]) for i in req.items), 2)
-    # Short ref and no note, on purpose: every character grows the QR symbol version, and a
-    # denser symbol is measurably harder for a cheap camera to read in bad light. A `tn` of
-    # "Bill" tells the customer nothing and costs ~10 characters.
+async def make_bill(shop_id: str, items: list[dict], vpa: str, payee: str,
+                    customer_mobile: str = "") -> dict:
+    """Issue a bill: number it, store the document as issued, and take the goods off the
+    shelf. Shared by the counter's Finalise and by accepting an order, because those are the
+    same event reached two ways — and a second copy of this would be a second place for the
+    receipt series to skip a number."""
+    total = round(sum(float(i["amount"]) for i in items), 2)
     ref = f"VK{uuid.uuid4().hex[:8].upper()}"
-    uri = build_uri(req.vpa, req.payee, total, ref=ref)
+    uri = build_uri(vpa, payee, total, ref=ref)
 
-    # The number is allotted here, at the moment the bill is issued, and the document is
-    # stored as issued rather than rebuilt on demand — prices move and shops get renamed,
-    # and a reprint next year has to say what it said on the day.
-    shop = await db.get_shop(req.shop_id) or {}
+    shop = await db.get_shop(shop_id) or {}
     now = datetime.now(receipts.IST)
     fy = receipts.financial_year(now)
-    n = await db.next_receipt_no(req.shop_id, fy)
+    n = await db.next_receipt_no(shop_id, fy)
     number = receipts.serial(fy, n) if n else ""
-    bill = {"total": total, "items": req.items, "upi_ref": ref,
-            "payment_state": "pending", "customer_mobile": req.customer_mobile}
+    bill = {"total": total, "items": items, "upi_ref": ref,
+            "payment_state": "pending", "customer_mobile": customer_mobile}
     doc = receipts.build(shop, bill, number, now)
-    bill_id = await db.save_bill(req.shop_id, {**bill, "receipt_no": number,
-                                               "receipt": doc})
-    # What was sold leaves the shelf. Combos are expanded so a blend decrements both of its
-    # parts rather than one invented line, and a prepared item is expanded again into what
-    # it is made of — nobody buys an Americano off a shelf, so decrementing "Americano"
-    # records nothing, while the beans and the cup it actually consumed silently vanish.
-    products = {p["id"]: p for p in await db.get_products(req.shop_id)}
+    bill_id = await db.save_bill(shop_id, {**bill, "receipt_no": number, "receipt": doc})
+
+    products = {p["id"]: p for p in await db.get_products(shop_id)}
     moves: list[dict] = []
-    for it in req.items:
+    for it in items:
         for part in (it.get("combo") or [it]):
             pid, qty = part.get("product_id"), part.get("qty")
             if not pid or not qty:
                 continue
             moves += explode(products, pid, abs(float(qty)))
-    await db.move_stock(req.shop_id, moves, "sale", bill_id)
-    return {
-        "bill_id": bill_id, "total": total, "ref": ref,
-        "upi_uri": uri, "qr": qr_data_uri(uri),
-        "receipt_no": number, "receipt": doc,
-        "receipt_text": receipts.as_text(doc),
-        "receipt_message": receipts.as_whatsapp(doc),
-        # Stated plainly because the demo must not imply we detect payment (D5).
-        "confirmation": "manual",
-    }
+    await db.move_stock(shop_id, moves, "sale", bill_id)
+    return {"bill_id": bill_id, "total": total, "ref": ref,
+            "upi_uri": uri, "qr": qr_data_uri(uri),
+            "receipt_no": number, "receipt": doc,
+            "receipt_text": receipts.as_text(doc),
+            "receipt_message": receipts.as_whatsapp(doc),
+            "confirmation": "manual"}
+
+
+@router.post("/finalize")
+async def finalize(req: FinalizeRequest):
+    """The counter's Finalise. Everything it does is in make_bill, which accepting an order
+    also calls — the two are the same event reached from different screens."""
+    return await make_bill(req.shop_id, req.items, req.vpa, req.payee, req.customer_mobile)
+
+
+# ---------------------------------------------------------------------------
+# Orders
+# ---------------------------------------------------------------------------
+# An order is not a bill. It is what somebody asked for — over the phone, through an agent,
+# or at the counter for collection later — and it can be refused, can sit for an hour, and
+# may name something the shop has run out of. Keeping the two apart means a refusal never
+# has to be explained as a cancelled bill, and an order nobody has accepted cannot take a
+# receipt number out of the shop's series.
+#
+# The text arrives in the same shape a shopkeeper would say it, and goes through the same
+# parser: "800 gram plantation double A plus 200 gram cherry peaberry" resolves to one
+# blended line over two products, priced from the shop's own catalog. There is no second
+# grammar for machines to get wrong.
+
+
+class OrderLine(BaseModel):
+    text: str = ""                  # "800 gram plantation double A plus 200 gram cherry peaberry"
+    name: str = ""                  # or a plain catalog name
+    qty: float = 1
+
+
+class OrderRequest(BaseModel):
+    items: list[OrderLine] = []
+    customer_mobile: str = ""
+    customer_name: str = ""
+    note: str = ""
+    shop_id: str = ""               # only honoured for a counter session, never for a key
+
+
+class OrderActionRequest(BaseModel):
+    order_id: str
+    reason: str = ""
+
+
+async def order_caller(request: Request) -> tuple[str, str, dict | None]:
+    """Who is placing this order: an automated caller with a key, or the counter.
+
+    Returns (shop_id, source, error). The key is looked up by digest — the raw value exists
+    only in the caller's configuration, and a database dump does not confer the ability to
+    place orders.
+    """
+    header = request.headers.get("authorization", "")
+    token = header[7:] if header.lower().startswith("bearer ") else ""
+    key = request.headers.get("x-order-key", "") or (token if auth.looks_like_order_key(token) else "")
+    if key:
+        shop = await db.shop_by_order_key(auth.order_key_hash(key))
+        if not shop:
+            return "", "", {"error": "Unknown order key", "code": 401}
+        return shop["id"], "api", None
+    c = claims_of(request)
+    if c:
+        return c["shop"], "counter", None
+    return "", "", {"error": "Sign in required", "code": 401}
+
+
+async def resolve_lines(shop_id: str, lines: list[OrderLine]) -> tuple[list[dict], list[str]]:
+    """Turn what was asked for into priced catalog lines, and say what could not be turned.
+
+    Unreadable lines are returned rather than dropped. An order that quietly loses an item
+    is worse than one that arrives flagged: the shopkeeper can fix a flagged line, and
+    cannot fix one they never saw.
+    """
+    p = await parser_for(shop_id)
+    items, unmatched = [], []
+    for line in lines:
+        text = (line.text or line.name or "").strip()
+        if not text:
+            continue
+        qty = float(line.qty or 1)
+        # A bare catalog name carries its quantity separately, so it is spoken back to the
+        # parser the way a shopkeeper would say it — "two americano", not "americano".
+        spoken = text if line.text else f"{qty:g} {text}"
+        res = p.parse(spoken, mode="billing")
+        good = [serialise(i) for i in res.items if i.verdict != "reject"]
+        if not good:
+            unmatched.append(text)
+            continue
+        # An explicit qty multiplies a parsed line only when the text did not carry one
+        # itself, so "two americano" with qty 3 is not silently six coffees.
+        if line.text and qty != 1:
+            for it in good:
+                it["qty"] = round(it["qty"] * qty, 3)
+                it["amount"] = round(it["amount"] * qty, 2)
+                for part in (it.get("combo") or []):
+                    part["qty"] = round(float(part["qty"]) * qty, 3)
+        items += good
+        unmatched += [u.get("name", "") if isinstance(u, dict) else str(u)
+                      for u in (res.unmatched or [])]
+    return items, [u for u in unmatched if u]
+
+
+@router.post("/orders")
+async def order_create(req: OrderRequest, request: Request):
+    """Take an order. Reachable by an automated caller holding an order key, or from the
+    counter with a signed-in session — the same queue either way."""
+    shop_id, source, err = await order_caller(request)
+    if err:
+        return deny(err["error"], err["code"])
+    if not req.items:
+        return deny("No items", 400)
+
+    items, unmatched = await resolve_lines(shop_id, req.items)
+    if not items and unmatched:
+        # Nothing understood at all. Refused rather than queued, so an agent gets a clear
+        # failure it can read back to the customer instead of the shop receiving a blank
+        # order it cannot serve.
+        return JSONResponse({"ok": False, "error": "Could not match any item",
+                             "unmatched": unmatched}, status_code=422)
+
+    total = round(sum(float(i["amount"]) for i in items), 2)
+    order_id, error = await db.save_order(shop_id, {
+        "source": source, "items": items, "total": total,
+        "customer_mobile": db.shop_key(req.customer_mobile) if req.customer_mobile else "",
+        "customer_name": tidy_name(req.customer_name), "note": req.note[:300],
+        "status": "pending"})
+    if error:
+        return JSONResponse({"ok": False, "error": error}, status_code=502)
+    return JSONResponse({
+        "ok": True, "order_id": order_id, "status": "pending", "total": total,
+        # Echoed back so the caller can read the order to the customer before hanging up.
+        # An agent that cannot confirm what was understood will confirm what it assumed.
+        "items": [{"name": i["name"], "qty": i["qty"], "unit": i["unit"],
+                   "amount": i["amount"],
+                   "parts": [{"name": c["name"], "qty": c["qty"]} for c in (i.get("combo") or [])]}
+                  for i in items],
+        "unmatched": unmatched}, status_code=201)
+
+
+@router.get("/orders")
+async def orders_list(request: Request, status: str = "pending"):
+    """The queue. Oldest first — the customer who has waited longest is at the top."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    rows = await db.list_orders(c["shop"], status if status != "all" else "")
+    return {"ok": True, "orders": [{
+        "id": r.get("id"), "source": r.get("source", "api"),
+        "status": r.get("status", "pending"),
+        "customer_mobile": r.get("customer_mobile", ""),
+        "customer_name": r.get("customer_name", ""),
+        "note": r.get("note", ""), "total": float(r.get("total") or 0),
+        "items": r.get("items") or [], "created_at": r.get("created_at"),
+        "bill_id": r.get("bill_id"), "reject_reason": r.get("reject_reason", ""),
+    } for r in rows]}
+
+
+@router.post("/orders/accept")
+async def order_accept(req: OrderActionRequest, request: Request):
+    """Turn an order into a bill. Only from the counter, and only by someone signed in:
+    accepting commits the shop to making it, and takes the goods off the shelf."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    order = await db.get_order(c["shop"], req.order_id)
+    if not order:
+        return deny("No such order", 404)
+    if order.get("status") != "pending":
+        # Two taps on a slow connection must not bill a customer twice.
+        return JSONResponse({"ok": False, "error": f"Already {order.get('status')}",
+                             "status": order.get("status")}, status_code=409)
+
+    shop = await db.get_shop(c["shop"]) or {}
+    bill = await make_bill(c["shop"], order.get("items") or [],
+                           shop.get("upi_vpa", ""), shop.get("name", "Shop"),
+                           order.get("customer_mobile", ""))
+    error = await db.settle_order(c["shop"], req.order_id,
+                                  {"status": "accepted", "bill_id": bill["bill_id"]})
+    return JSONResponse({"ok": not error, "error": error, "order_id": req.order_id,
+                         **bill,
+                         "message": order_message(shop, order, bill),
+                         "mobile": order.get("customer_mobile", "")},
+                        status_code=200 if not error else 502)
+
+
+@router.post("/orders/reject")
+async def order_reject(req: OrderActionRequest, request: Request):
+    """Refuse an order — usually because the shelf cannot cover it. No bill, no receipt
+    number, no stock movement: nothing happened except that the customer must be told."""
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    order = await db.get_order(c["shop"], req.order_id)
+    if not order:
+        return deny("No such order", 404)
+    if order.get("status") != "pending":
+        return JSONResponse({"ok": False, "error": f"Already {order.get('status')}",
+                             "status": order.get("status")}, status_code=409)
+    error = await db.settle_order(c["shop"], req.order_id,
+                                  {"status": "rejected", "reject_reason": req.reason[:200]})
+    shop = await db.get_shop(c["shop"]) or {}
+    return JSONResponse({"ok": not error, "error": error, "order_id": req.order_id,
+                         "message": order_message(shop, order, None, req.reason),
+                         "mobile": order.get("customer_mobile", "")},
+                        status_code=200 if not error else 502)
+
+
+def order_message(shop: dict, order: dict, bill: dict | None, reason: str = "") -> str:
+    """What the customer is told. Built server-side so the wording is the same whether it
+    goes out through a provider or through a tap on wa.me."""
+    name = shop.get("name", "")
+    lines = [f"*{name}*", ""]
+    if bill:
+        lines.append("Your order is ready.")
+        lines.append("")
+        for i in (order.get("items") or []):
+            qty = f"{float(i.get('qty') or 0):g} {i.get('unit', '')}".strip()
+            lines.append(f"{i.get('name', '')} — {qty} — ₹{receipts.rupees(float(i.get('amount') or 0))}")
+        lines += ["", f"*Total ₹{receipts.rupees(bill['total'])}*",
+                  "", "Scan the QR at the counter, or pay to:",
+                  shop.get("upi_vpa", "")]
+    else:
+        lines.append("Sorry — we cannot fulfil your order.")
+        if reason:
+            lines.append(reason)
+        lines.append("Please call the shop if you would like to change it.")
+    return "\n".join([x for x in lines if x is not None])
+
+
+class OrderKeyRequest(BaseModel):
+    confirm: bool = False
+
+
+@router.post("/order-key")
+async def order_key_make(req: OrderKeyRequest, request: Request):
+    """Generate (or replace) this shop's order key. Owner only.
+
+    Returned exactly once, in this response, and never again — only its digest is stored.
+    Generating a new one immediately invalidates the old, which is what makes it possible
+    to cut off an integration that has gone wrong without touching anything else.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    key = auth.new_order_key()
+    error = await db.set_order_key(c["shop"], auth.order_key_hash(key))
+    return JSONResponse({"ok": not error, "error": error, "key": "" if error else key,
+                         "shop_id": c["shop"]},
+                        status_code=200 if not error else 502)
 
 
 @router.get("/lang")

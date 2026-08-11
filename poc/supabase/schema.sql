@@ -272,3 +272,45 @@ set search_path = public, pg_temp as $$
 $$;
 
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- Orders taken before the customer is at the counter
+-- ---------------------------------------------------------------------------
+
+-- A bill is what the shopkeeper hands over. An order is what somebody asked for, and the
+-- two are not the same thing: an order can be refused, can sit for an hour, and may name
+-- something the shop has run out of. Kept separate so a refused order never has to be
+-- explained as a cancelled bill, and so an order that has not been accepted cannot take a
+-- receipt number out of the shop's series.
+create table if not exists orders (
+  id               uuid primary key default gen_random_uuid(),
+  shop_id          text not null,
+  source           text not null default 'api',   -- api | counter
+  customer_mobile  text default '',
+  customer_name    text default '',
+  items            jsonb not null default '[]',
+  note             text default '',
+  total            numeric(10,2) not null default 0,
+  status           text not null default 'pending',  -- pending | accepted | rejected
+  bill_id          uuid,                             -- set when accepted
+  reject_reason    text default '',
+  created_at       timestamptz not null default now(),
+  settled_at       timestamptz
+);
+-- The pending list is the query this table exists for: one shop, oldest first, because a
+-- queue is served in the order it arrived.
+create index if not exists orders_pending on orders (shop_id, status, created_at);
+
+-- The key an automated caller uses to place orders. Stored as a SHA-256 digest and looked
+-- up by digest, so the raw key exists only in the caller's configuration and is shown to
+-- the owner exactly once, at the moment it is generated.
+--
+-- SHA-256 rather than the PBKDF2 used for passcodes, deliberately: a passcode is six digits
+-- and needs the slow hash to survive a brute force, whereas this is 32 random bytes, where
+-- an attacker gains nothing from speed and the endpoint needs a fast lookup on every call.
+alter table shops add column if not exists order_key_hash text default '';
+create index if not exists shops_order_key on shops (order_key_hash);
+
+alter table orders enable row level security;
+
+notify pgrst, 'reload schema';
