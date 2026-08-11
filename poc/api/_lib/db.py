@@ -552,7 +552,19 @@ async def probe() -> dict:
         "staff": {"select": "id", "limit": "1"},
         "products": {"select": "id", "limit": "1"},
         "products.description": {"select": "description", "limit": "1"},
+        "products.category": {"select": "category", "limit": "1"},
+        "products.recipe": {"select": "recipe", "limit": "1"},
         "bills": {"select": "id", "limit": "1"},
+        "stock_movements": {"select": "id", "limit": "1"},
+    }
+    # Functions are the half of a migration that fails silently. A missing column shows up
+    # as a rejected write the shopkeeper sees; a missing function is caught, fallen back
+    # from, and never mentioned — so it has to be asked about explicitly.
+    rpcs = {
+        "rpc.bump_stock": {"p_id": "__probe__", "p_delta": 0},
+        "rpc.next_receipt_no": None,
+        "rpc.sales_report": {"p_shop": "__probe__", "p_from": "2000-01-01T00:00:00Z",
+                             "p_to": "2000-01-02T00:00:00Z"},
     }
     # The project ref is the SUPABASE_URL subdomain — not a secret (it appears in every
     # browser-side Supabase call) and the fastest way to confirm the SQL editor and this
@@ -573,6 +585,20 @@ async def probe() -> dict:
                 r = await c.get(f"{SUPABASE_URL}/rest/v1/{table}",
                                 headers=_headers(), params=params)
                 out[label] = "ok" if r.status_code < 400 else f"{r.status_code} {r.text[:90]}"
+            except Exception as exc:                   # noqa: BLE001
+                out[label] = f"{type(exc).__name__}"
+        for label, body in rpcs.items():
+            if body is None:
+                continue                               # no side-effect-free way to call it
+            name = label.split(".", 1)[1]
+            try:
+                r = await c.post(f"{SUPABASE_URL}/rest/v1/rpc/{name}",
+                                 headers=_headers(), json=body)
+                # 404 is the one that matters: the function is not there. Anything else
+                # means it exists and merely disliked the probe's arguments.
+                out[label] = ("missing" if r.status_code == 404
+                              else "ok" if r.status_code < 400
+                              else f"{r.status_code} {r.text[:90]}")
             except Exception as exc:                   # noqa: BLE001
                 out[label] = f"{type(exc).__name__}"
     return out

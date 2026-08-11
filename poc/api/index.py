@@ -294,6 +294,10 @@ async def health():
         "ok": True,
         "asr_backend": asr.name,
         "asr_configured": SarvamASR().configured,
+        # Whether a key is present, never any part of it. Import and recipe drafting both
+        # fail with a message the shopkeeper cannot act on if this is missing, and there
+        # was no way to tell that apart from a broken feature without checking here.
+        "ai_configured": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "db": "supabase" if db.configured() else "seed-csv (in memory)",
         "lang": LANG.data["code"],
         "products": len(await db.get_products(DEFAULT_SHOP)),
