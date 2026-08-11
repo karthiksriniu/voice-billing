@@ -255,12 +255,20 @@ button{font-family:var(--font-ui);cursor:pointer;border:none}
 
 /* The one thing on screen that needs an answer — a price we don't know, or a
    catalog change about to be committed. */
+/* Floats over whatever screen asked the question, rather than sitting in one screen's
+   flow. Deliberately no scrim: during billing this asks "what price?" while the shopkeeper
+   is still holding goods and may want to keep dictating, and a modal that blocks the rest
+   of the app would be worse than the question. */
 .prompt{
-  margin:var(--space-3) var(--space-3) 0;padding:var(--space-4);
+  position:fixed;left:var(--space-3);right:var(--space-3);
+  bottom:calc(var(--space-4) + env(safe-area-inset-bottom));
+  z-index:60;padding:var(--space-4);
   border-radius:var(--radius-md);
   background:var(--color-tertiary-container);color:var(--color-on-tertiary-container);
-  display:flex;align-items:center;gap:var(--space-3);box-shadow:var(--elevation-1);
+  display:flex;align-items:center;gap:var(--space-3);box-shadow:var(--elevation-3);
+  max-height:70dvh;overflow-y:auto;
 }
+.prompt[hidden]{display:none}
 .prompt .promptbody{flex:1;min-width:0}
 .prompt b{
   display:block;font-size:var(--type-label-medium-size);

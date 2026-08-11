@@ -1362,7 +1362,7 @@ async function loadStaff() {
 const hidePrompt = () => { $("prompt").hidden = true; $("prompt").innerHTML = ""; };
 
 function showPrompt({ kind, main, note, warn, onOk, onCancel,
-                     chips, extra, scroll, onChip, onExtra }) {
+                     chips, extra, scroll, onChip, onExtra, okLabel }) {
   const box = $("prompt");
   box.hidden = false;
   const chipRow = (chips || []).length
@@ -1375,7 +1375,8 @@ function showPrompt({ kind, main, note, warn, onOk, onCancel,
       <div class="promptmain">${main}</div>
       ${note ? `<div class="promptnote${warn ? " warn" : ""}">${note}</div>` : ""}
       ${chipRow}${extraRow}</div>
-    <div class="promptacts">${onOk ? `<button class="yes" data-ok>${t("yes")}</button>` : ""}
+    <div class="promptacts">${onOk
+      ? `<button class="yes" data-ok>${okLabel || t("yes")}</button>` : ""}
       <button class="del" data-no aria-label="Cancel">✕</button></div>`;
   const ok = box.querySelector("[data-ok]");
   if (ok) ok.onclick = onOk;
@@ -2271,6 +2272,7 @@ function rejectOrder(o) {
     note: t("rejectNote"),
     warn: true,
     chips: REJECT_REASONS.map((r) => ({ id: r.id, label: t(r.key) })),
+    okLabel: t("rejNoReason"),
     onChip: (id) => refuse(t((REJECT_REASONS.find((r) => r.id === id) || {}).key) || ""),
     // The unadorned refusal is still one tap away, for the reasons that are nobody's
     // business but the shop's.
