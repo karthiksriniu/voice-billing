@@ -33,6 +33,7 @@ import receipt as receipts                            # noqa: E402
 from sarvam import SarvamASR, get_asr                  # noqa: E402
 from upi import build_uri, qr_data_uri                 # noqa: E402
 import period                                          # noqa: E402
+import reorder                                         # noqa: E402
 import recipes                                         # noqa: E402
 import vision                                          # noqa: E402
 
@@ -1218,6 +1219,12 @@ async def stock_report(request: Request):
                      "wastage": round(a["wastage"], 3),
                      "unaccounted": round(a["counted"], 3),
                      "value_lost": round(-a["counted"] * float(p["unit_price"] or 0), 2)})
+    # How long each shelf lasts at the rate this shop actually sells, and the point at
+    # which ordering has to start. Demand is measured from the ledger's own span — not the
+    # 90-day fetch window, which would divide a new shop's week of trade by ninety and tell
+    # it the beans will last a year.
+    days_seen = reorder.observed_days(ledger)
+    reorder.annotate(rows, days_seen)
     rows.sort(key=lambda r: r["value_lost"], reverse=True)
 
     # Grouped because the four kinds of thing on a café's shelf answer different questions.
@@ -1238,7 +1245,13 @@ async def stock_report(request: Request):
             "on_hand": round(sum(r["stock"] * r["unit_price"] for r in members), 2),
         })
     return {"ok": True, "items": rows, "groups": groups,
-            "total_lost": round(sum(r["value_lost"] for r in rows if r["value_lost"] > 0), 2)}
+            "total_lost": round(sum(r["value_lost"] for r in rows if r["value_lost"] > 0), 2),
+            "reorder": reorder.summarise(rows),
+            # Stated so the screen can say which numbers were measured and which assumed.
+            # A forecast presented without its basis gets trusted further than it has earned.
+            "basis": {"days_observed": round(days_seen, 1),
+                      "min_days": reorder.MIN_DAYS_OBSERVED,
+                      "lead_days": reorder.LEAD_DAYS}}
 
 
 # ---------------------------------------------------------------------------

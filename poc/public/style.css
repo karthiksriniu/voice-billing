@@ -977,3 +977,67 @@ button.busy,button.busy:disabled{opacity:1}
    while its fields are being edited. */
 .skurow.editing,.hrow.editing{opacity:.45}
 .skurow.editing{background:var(--color-surface-container-high)}
+
+/* -- Cover bar: how long the shelf lasts -------------------------- */
+/* The scheme has an error red but no amber or green, so the scale defines its own. Pitched
+   for the dark surface this app runs on and kept desaturated enough that the marker and the
+   flag stay readable on top of them — the bar is a backdrop, not the message. */
+:root{
+  --stock-out:   rgb(214, 88, 78);
+  --stock-low:   rgb(226, 165, 74);
+  --stock-ok:    rgb(108, 184, 128);
+}
+.cover{margin-top:var(--space-2)}
+.covertrack{
+  position:relative;height:8px;border-radius:var(--radius-full);
+  /* Red to green, left to right, with the turn placed around the reorder flag at 40% so
+     the colour and the flag agree about where "order now" begins. */
+  background:linear-gradient(90deg,
+    var(--stock-out) 0%, var(--stock-out) 12%,
+    var(--stock-low) 40%, var(--stock-ok) 68%, var(--stock-ok) 100%);
+  opacity:.55;                     /* the markers carry the message; this is the scale */
+}
+.cover.low .covertrack,.cover.out .covertrack{opacity:.9}
+
+/* The reorder point. A notch through the bar rather than a blob, so it reads as a
+   threshold on the scale and never competes with the marker for attention. */
+.coverflag{
+  position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;
+  background:var(--color-on-surface);opacity:.75;border-radius:1px;
+}
+/* Where the shelf actually is. Ringed in the surface colour so it stays visible wherever
+   it lands on the gradient. */
+.covermark{
+  position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;
+  border-radius:50%;background:var(--stock-ok);
+  border:2px solid var(--color-surface);
+  box-shadow:0 0 0 1px rgba(0,0,0,.35);
+}
+.cover.low .covermark{background:var(--stock-low)}
+.cover.out .covermark{background:var(--stock-out)}
+
+.coverlabel{
+  display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);
+  margin-top:6px;font-size:var(--type-body-small-size);
+}
+.coverlabel b{font-weight:700}
+.coverlabel span{color:var(--color-on-surface-variant);opacity:.85}
+.cover.low .coverlabel b{color:var(--stock-low)}
+.cover.out .coverlabel b{color:var(--stock-out)}
+.stockrow .hsub.dim{opacity:.7;font-style:italic}
+
+/* What to buy, above the list. Calmer than the shrinkage banner on purpose: running low is
+   a normal part of trading, and losing stock is not. */
+.reordertop{
+  padding:var(--space-3);margin-bottom:var(--space-3);
+  border:1px solid var(--stock-low);border-radius:var(--radius-md);
+  background:var(--color-surface-container-low);
+}
+.reordertop b{font-size:var(--type-title-medium-size)}
+.reordertop ul{margin:var(--space-2) 0 0;padding-left:1.1em}
+.reordertop li{font-size:var(--type-body-small-size);color:var(--color-on-surface-variant)}
+.basisnote{
+  font-size:var(--type-body-small-size);color:var(--color-on-surface-variant);
+  opacity:.7;margin:var(--space-4) 0 var(--space-2);line-height:1.35;
+  padding-top:var(--space-3);border-top:1px solid var(--color-outline-variant);
+}

@@ -102,6 +102,7 @@ print(hits[-1] if hits else "")
     .venv/bin/python tests/test_parser.py
     .venv/bin/python tests/test_aggregates.py
     .venv/bin/python tests/test_import.py
+    .venv/bin/python tests/test_reorder.py
     node tests/test_units.js
     ;;
   login)  exec gh auth login ;;

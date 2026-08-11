@@ -1566,6 +1566,25 @@ async function openStock() {
     // Grouped, because the four kinds of thing answer different questions. Beans running
     // short is a supply problem; cups running short is a purchasing one; a menu item has
     // no shelf at all and is here only to say so.
+    // What needs buying, and on what basis. The basis line matters: demand is measured
+    // from this shop's own ledger, lead time is a category default, and a forecast that
+    // does not say which is which gets trusted further than it has earned.
+    const ro = j.reorder || { count: 0, items: [] };
+    const top = $("reorderTop");
+    top.hidden = !ro.count;
+    if (ro.count) {
+      top.innerHTML = `<b>${ro.count} ${t(ro.count === 1 ? "itemToOrder" : "itemsToOrder")}</b>
+        <ul>${ro.items.map((i) => `<li>${esc(i.name)} — ${
+          i.state === "out" ? t("outOfStock") : `${fmtNum(i.days_cover)} ${t("daysLeft")}`
+        } · ${t("buyAbout")} ${fmtNum(i.suggest)} ${esc(i.unit)}</li>`).join("")}</ul>`;
+    }
+    const basis = $("stockBasis");
+    const seen = (j.basis || {}).days_observed || 0;
+    basis.hidden = false;
+    basis.textContent = seen >= ((j.basis || {}).min_days || 3)
+      ? `${t("basisFrom")} ${fmtNum(seen)} ${t("basisDays")} ${t("basisLead")}`
+      : t("basisThin");
+
     const groups = j.groups && j.groups.length
       ? j.groups
       : [{ category: "", items: j.items || [], value_lost: j.total_lost, on_hand: 0 }];
@@ -1580,6 +1599,37 @@ async function openStock() {
   } catch (err) { box.innerHTML = `<p class="empty small">${t("network")}</p>`; }
 }
 
+/* How full the shelf is, as one bar.
+ *
+ * "4.64 kg" and "484 pieces" cannot be compared; "9 days left" and "31 days left" can, so
+ * the bar is scaled in days of cover rather than in the item's own unit. The flag is the
+ * reorder point, and it sits at the same place on every bar — which turns a screenful of
+ * different products into one repeated question: is the marker left of the flag?
+ *
+ * Green to red runs left to right in the reading direction of the danger, so the eye lands
+ * on the red end first. Nothing is drawn at all when there is no honest forecast: an
+ * item never sold would otherwise show as a full green bar, which is exactly the wrong
+ * thing to tell someone about a product that has never moved.
+ */
+function coverBar(r) {
+  if (r.days_cover == null || !r.horizon_days) return "";
+  // Held just inside the ends. A marker at a literal 0% or 100% is half-swallowed by the
+  // track's rounded cap and reads as clipped rather than as "off the end of the scale".
+  const pct = (d) => Math.max(3, Math.min(95, (d / r.horizon_days) * 100));
+  const at = pct(r.days_cover), flag = pct(r.reorder_days);
+  const state = r.state === "out" ? "out" : r.state === "low" ? "low" : "ok";
+  return `<div class="cover ${state}">
+    <div class="covertrack">
+      <i class="coverflag" style="left:${flag}%"></i>
+      <i class="covermark" style="left:${at}%"></i>
+    </div>
+    <div class="coverlabel">
+      <b>${r.state === "out" ? t("outOfStock") : `${fmtNum(r.days_cover)} ${t("daysLeft")}`}</b>
+      <span>${t("orderAt")} ${fmtNum(r.reorder_days)}${t("dayShort")}</span>
+    </div>
+  </div>`;
+}
+
 function stockRow(r) {
   // Only a shortfall gets colour. A surplus is usually a miscount, not a windfall.
   const gap = r.unaccounted < 0
@@ -1590,7 +1640,11 @@ function stockRow(r) {
   const sub = r.category === "menu"
     ? `<div class="hsub">${t("madeToOrder")}</div>`
     : `<div class="hsub">${t("onShelf")} ${fmtNum(r.stock)} ${r.unit} · ${t("soldWord")} ${fmtNum(r.sold)} · ${t("inWord")} ${fmtNum(r.inward)}</div>`;
-  return `<div class="hrow"><div class="hmain"><b>${esc(r.name)}</b> ${gap}${sub}</div></div>`;
+  // Said, not left blank. "No forecast yet" is information; an empty space is a bug.
+  const note = r.state === "unknown"
+    ? `<div class="hsub dim">${t("noForecastYet")}</div>` : "";
+  return `<div class="hrow stockrow"><div class="hmain"><b>${esc(r.name)}</b> ${gap}${sub}${
+    coverBar(r)}${note}</div></div>`;
 }
 
 /* ---------- recipes ---------- */

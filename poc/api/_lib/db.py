@@ -16,6 +16,7 @@ import os
 import re
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -355,8 +356,14 @@ async def move_stock(shop_id: str, moves: list[dict], reason: str,
     """
     if not moves:
         return ""
+    # occurred_at is filled by the column default in Postgres, but nothing fills it in the
+    # in-memory fallback — and the reorder forecast measures its observation window from the
+    # oldest movement. Without a timestamp the window is zero days, demand is unknown, and
+    # the offline demo silently shows no forecast at all.
+    stamped = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     rows = [{"shop_id": shop_id, "product_id": m["product_id"],
-             "delta": float(m["delta"]), "reason": reason, "bill_id": bill_id}
+             "delta": float(m["delta"]), "reason": reason, "bill_id": bill_id,
+             "occurred_at": m.get("occurred_at") or stamped}
             for m in moves if m.get("product_id")]
     if not rows:
         return ""

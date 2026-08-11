@@ -461,3 +461,66 @@ usually sitting down, and the shop bills perfectly well without ever using it (D
 match this without a network — at which point the interface stays and the reader is swapped
 behind it — or if measured cost per shop turns out an order of magnitude above 7 paise a
 page, which would mean rate limiting imports rather than removing them.
+
+---
+
+## D12. Reorder forecasting — days of cover, measured demand, assumed lead time
+
+**Decision.** The stock screen shows, per item, a green-to-red bar scaled in **days of
+cover** with two markers: where the shelf is now, and the reorder point. Demand comes from
+the shop's own ledger. Lead time is a category default and is labelled as an assumption.
+Per-item lead time is deferred to the premium configuration tier.
+
+**Why days of cover and not units.** "4.64 kg" and "484 pieces" cannot be compared, so a bar
+scaled in an item's own unit answers nothing across a list. "9 days left" and "31 days left"
+compare instantly, and the reorder point lands in the same unit — which is what lets one bar
+carry both numbers. It also makes the flag's position constant across every row, so a
+screenful of different products reduces to one repeated question: is the marker left of the
+flag?
+
+**The model.** The standard formula, unchanged:
+
+    reorder point = average daily demand x lead time + safety stock
+
+with two departures forced by what a shop this size can be asked for.
+
+**Demand is measured.** From this shop's movement ledger — sales, and the components those
+sales consumed — divided by *the days the ledger actually spans*, not the window it was
+fetched over. This distinction is the single most dangerous number on the screen: a shop
+three days in, fetched over ninety days, would have its demand divided by thirty and be told
+its beans last a year. Errors here are asymmetric — overstating cover means running out
+mid-service, understating it means buying early — so every judgement call is made toward
+the pessimistic side, and the tests are written to catch the optimistic failure.
+
+**Lead time is assumed, and says so.** It belongs to a supplier relationship the app knows
+nothing about. Defaults follow how Indian general trade actually replenishes — dairy and
+fresh goods daily, dry goods and packaging on a weekly distributor cycle — so ingredients
+assume 3 days and packaging and resale goods 7. The screen carries a line saying which
+figures were measured and which assumed. A forecast presented without its basis gets trusted
+further than it has earned.
+
+**Safety stock scales with ABC class**, by annual consumption value (demand x price, not
+price alone — a one-rupee straw turning over five hundred times a week is an A item and a
+₹1,850 pot that sells twice a year is not). A items are held tight because that is where the
+shop's money sits; C items carry a fatter buffer, being cheap to over-hold and painful to be
+without. Expressed as a multiple of lead time rather than a Z-score, because the demand
+variance a Z-score needs is not something this data can honestly supply yet.
+
+**What it refuses to do.** An item with no sales history, or a shop with under three days of
+trade, gets "not enough history yet" rather than a bar. Left to itself, zero demand computes
+as infinite cover and draws as a full green bar — the most confident possible statement
+about the product we know least about. A menu item gets no bar at all: it is assembled at the
+till and never sat on a shelf.
+
+**Sources.** Reorder point and safety stock: [Netstock](https://www.netstock.com/blog/reorder-point-formula/),
+[Brightpearl](https://www.brightpearl.com/blog/how-to-calculate-reorder-points),
+[GAINS](https://gainsystems.com/blog/reorder-point-vs-safety-stock-balancing-inventory-in-retail/).
+ABC thresholds and the demand-x-value basis: [MRPeasy](https://www.mrpeasy.com/blog/abc-analysis/),
+[EazyStock](https://www.eazystock.com/blog/calculate-apply-abc-classification-inventory/).
+Indian replenishment cadence: [Kirana Club](https://kirana.club/resources/fmcg-distribution-india-guide),
+[Crimson Cup](https://www.crimsoncup.com/whats-new/inventory-tips-to-keep-your-cafe-running-smoothly).
+
+**Reverses if:** shops turn out to reorder on a fixed calendar rather than on stock level, in
+which case the bar becomes a "will you make it to Friday" indicator instead — or once
+per-item lead times exist, at which point the category default becomes a fallback rather than
+the rule and the assumption line comes off the screen for any item that has been configured.
