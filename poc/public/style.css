@@ -937,3 +937,23 @@ button.busy,button.busy:disabled{opacity:1}
   color:var(--color-on-surface-variant);opacity:.8;line-height:1.3;margin-top:2px;
 }
 .rline > span:first-child{align-self:center}
+/* The type picker is a sixth control in a row built for five, so it gets its own line
+   rather than shoving the close button onto one of its own. Placed explicitly: on a 375px
+   phone auto-flow puts things wherever they happen to land, which is how the ✕ ended up
+   orphaned under the name field. */
+.skuedit .e-n{grid-area:1/1}
+.skuedit .e-u{grid-area:1/2}
+.skuedit .e-p{grid-area:1/3}
+.skuedit .go{grid-area:1/4}
+.skuedit .x{grid-area:1/5}
+.skuedit .e-c{grid-area:2/1/auto/4}
+/* The one thing the type picker has to say for itself: it does not gate selling. */
+.catnote{
+  grid-area:2/4/auto/-1;font-size:var(--type-body-small-size);
+  color:var(--color-on-surface-variant);opacity:.85;line-height:1.25;
+  align-self:center;padding-left:var(--space-2);
+}
+@media (max-width: 420px){
+  /* No room beside the picker on a phone — the note takes the line below it. */
+  .catnote{grid-area:3/1/auto/-1;padding:0 var(--space-1)}
+}

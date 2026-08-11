@@ -1070,7 +1070,14 @@ function deleteSku(p) {
 /* Four kinds of thing sit on a café's shelf and they answer different questions, so the
    editor asks which one this is. `resale` is the default everywhere, because it is the
    inert answer: it decrements itself on sale, exactly as everything did before categories
-   existed. Nothing a shop already has changes behaviour until someone says otherwise. */
+   existed. Nothing a shop already has changes behaviour until someone says otherwise.
+
+   The type does NOT decide what can be sold. Every product in the catalog is billable by
+   voice whatever its type, so a café that grinds beans into Americanos and also sells
+   them by the bag needs no second SKU — both take from the same shelf. What the type
+   decides is what may go INTO something else. The stored values are unchanged; only the
+   labels say so, because "Resale" read as "the things I resell", which made "Raw" read
+   as the things you cannot. */
 const CATEGORIES = ["raw", "consumable", "menu", "resale"];
 const catLabel = (c) => t(`cat_${c}`) || c;
 
@@ -1084,7 +1091,8 @@ function editSku(p) {
     <input class="e-p" type="number" step="0.01" value="${p.unit_price || ""}" placeholder="Price">
     <select class="e-c">${CATEGORIES.map((c) =>
       `<option value="${c}"${c === cat ? " selected" : ""}>${catLabel(c)}</option>`).join("")}</select>
-    <button class="mini go">${t("save")}</button><button class="mini x">✕</button>`;
+    <button class="mini go">${t("save")}</button><button class="mini x">✕</button>
+    <small class="catnote">${t("catNote")}</small>`;
   box.prepend(row);
   row.querySelector(".x").onclick = () => row.remove();
   row.querySelector(".go").onclick = async () => {
