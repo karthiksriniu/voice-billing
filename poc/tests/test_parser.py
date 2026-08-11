@@ -337,6 +337,32 @@ def run():
         check(f"unit {stored!r}", it and it[0].qty == 0.5 and it[0].amount == 25.0,
               f"-> {[(i.qty, i.amount) for i in it]} (want 0.5 kg, Rs25)")
 
+    print("volume converts, and never into mass")
+    from parser import Catalog as _C5b
+    # Litre and millilitre carried no conversion factor at all, so "500 ml" against a
+    # per-litre product left the 500 alone and billed 500 litres — Rs30,000 for half a
+    # litre of milk. Mass had been fixed; volume had not, and a coffee shop is mostly
+    # volume. Every language pack, because the factors live in the pack.
+    for code in ("ta-en", "ml-en", "hi-en", "te-en", "kn-en"):
+        pv = Parser(Lang(code), _C5b([
+            {"id": "M", "name": "Milk", "unit": "l", "unit_price": 60.0},
+            {"id": "O", "name": "Oil", "unit": "ml", "unit_price": 0.5},
+        ]))
+        for said, want_qty, want_amt in (("500 ml milk", 0.5, 30.0),
+                                         ("one litre milk", 1.0, 60.0),
+                                         ("two litre oil", 2000.0, 1000.0)):
+            it = pv.parse(said).items
+            check(f"{code} {said!r}",
+                  it and abs(it[0].qty - want_qty) < 1e-6 and it[0].amount == want_amt,
+                  f"-> {[(i.qty, i.unit, i.amount) for i in it]} (want {want_qty}, Rs{want_amt})")
+
+    # A gram is not a millilitre. Converting between them would be assuming water, which
+    # is wrong for oil and honey — the quantity is left alone instead of being guessed at.
+    pmix = Parser(LANG, _C5b([{"id": "H", "name": "Honey", "unit": "ml", "unit_price": 2.0}]))
+    it = pmix.parse("500 gram honey").items
+    check("mass is not silently converted to volume",
+          it and it[0].qty == 500.0, f"-> {[(i.qty, i.unit) for i in it]}")
+
     print("wake word and command matrix, every language")
     from parser import Catalog as _C6
     import json as _json

@@ -4,7 +4,7 @@
     {
       "name": "bolo",
       "runtimeExecutable": "poc/.venv/bin/uvicorn",
-      "runtimeArgs": ["api.index:app", "--host", "127.0.0.1", "--port", "8078", "--app-dir", "poc"],
+      "runtimeArgs": ["api.index:app", "--host", "127.0.0.1", "--port", "8078", "--app-dir", "poc", "--reload"],
       "port": 8078
     }
   ]

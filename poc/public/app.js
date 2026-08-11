@@ -1569,9 +1569,9 @@ function renderRecipes() {
    bends, the arithmetic does not. */
 function fmtQtyUnit(qty, unit) {
   const q = +qty || 0;
-  if (unit === "kg" && q < 1) return `${fmtNum(q * 1000)} g`;
-  if (unit === "litre" && q < 1) return `${fmtNum(q * 1000)} ml`;
-  return `${fmtNum(q)} ${unit}`;
+  const small = smallUnit(unit);
+  return small !== unit && q < 1
+    ? `${fmtNum(q * 1000)} ${small}` : `${fmtNum(q)} ${unit}`;
 }
 
 async function draftRecipe(item) {
@@ -1591,7 +1591,12 @@ async function draftRecipe(item) {
 }
 
 function editRecipe(item, note = "") {
-  let parts = item.components.map((c) => ({ ...c }));
+  // Converted to display units once, here, so `shown` is the only quantity the sheet ever
+  // reads or writes. Carrying both and picking between them meant a line the shopkeeper
+  // did not touch was converted a second time on save: open a recipe, fix one number, and
+  // every other gram-scale line silently became a thousandth of itself. Beans then never
+  // depleted, and the shrinkage screen — the whole point of this — went quiet.
+  let parts = item.components.map((c) => ({ ...c, shown: displayQty(c) }));
   const box = $("recipeList");
   const sheet = document.createElement("div");
   sheet.className = "rsheet";
@@ -1626,7 +1631,7 @@ function editRecipe(item, note = "") {
       addGo.onclick = () => {
         const id = sheet.querySelector("[data-radd]").value;
         const c = recipeState.components.find((x) => x.id === id);
-        if (c) { parts.push({ component_id: c.id, name: c.name, unit: c.unit, qty: 0 }); draw(); }
+        if (c) { parts.push({ component_id: c.id, name: c.name, unit: c.unit, qty: 0, shown: 0 }); draw(); }
       };
     }
     sheet.querySelector("[data-rsave]").onclick = () =>
@@ -1651,16 +1656,22 @@ function editRecipe(item, note = "") {
    from the quantity meant the unit flipped underneath the shopkeeper as they typed: a box
    reading "18 g" became a box meaning kilos the moment they cleared it to type 20, and
    saved twenty kilos of beans per cup. */
-const smallUnit = (u) => (u === "kg" ? "g" : u === "litre" ? "ml" : u);
+/* Keyed on the canonical unit the catalog actually stores, which is "l" — not "litre".
+   Matching the spelled-out word meant milk, the one thing a coffee shop measures by
+   volume, fell through to being edited in litres while beans were edited in grams. */
+const smallUnit = (u) => ({ kg: "g", l: "ml", litre: "ml" }[u] || u);
 const displayUnit = (c) => smallUnit(c.unit);
 const inSmall = (c) => smallUnit(c.unit) !== c.unit;
+/* displayQty converts stock units -> what the box shows. It is called once per part when
+   the sheet opens; after that `shown` is authoritative and this is not consulted again. */
 const displayQty = (c) => {
-  if (c.shown !== undefined) return c.shown;
   const q = +c.qty || 0;
   return inSmall(c) ? +(q * 1000).toFixed(3) : q;
 };
+/* toStockQty is its exact inverse and reads `shown` only — never `qty`. Falling back to
+   `qty` is what caused the double conversion, because the two are in different units. */
 const toStockQty = (c) => {
-  const raw = c.shown !== undefined ? parseFloat(c.shown) : +c.qty;
+  const raw = parseFloat(c.shown);
   const v = isFinite(raw) ? raw : 0;
   return { component_id: c.component_id, qty: inSmall(c) ? v / 1000 : v };
 };

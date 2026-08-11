@@ -361,7 +361,17 @@ async def move_stock(shop_id: str, moves: list[dict], reason: str,
     if not rows:
         return ""
     if not configured():
+        # Applied to the products too, not merely logged. Without this the offline
+        # fallback wrote a ledger nothing ever read: Stock & loss showed every shelf
+        # frozen at its seed figure no matter how much was sold, which is exactly the
+        # silent-wrong-number failure this screen exists to expose. The demo has to be
+        # able to demonstrate the demo.
         _memory.setdefault("moves", []).extend(rows)
+        by_id = {p["id"]: p for p in _seed()}
+        for m in rows:
+            p = by_id.get(m["product_id"])
+            if p:
+                p["stock"] = round(float(p.get("stock") or 0) + m["delta"], 3)
         return ""
     invalidate(shop_id)
     try:
@@ -382,6 +392,8 @@ async def move_stock(shop_id: str, moves: list[dict], reason: str,
 
 
 async def stock_ledger(shop_id: str, since_days: int = 90) -> list[dict]:
+    if not configured():
+        return [m for m in _memory.get("moves", []) if m.get("shop_id") == shop_id]
     return await _get("stock_movements", {"shop_id": f"eq.{shop_id}", "select": "*",
                                           "order": "occurred_at.desc", "limit": "2000"})
 

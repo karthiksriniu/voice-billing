@@ -68,7 +68,15 @@ print(hits[-1] if hits else "")
     echo "Then redeploy:  ./bolo deploy   (and/or)   ./bolo staging"
     ;;
 
-  test)   exec .venv/bin/python tests/test_parser.py ;;
+  test)
+    # Everything, not just the parser. Each of these guards a bug that shipped: a wrong
+    # unit conversion, a review screen that wrote without being asked, a day boundary in
+    # the wrong timezone.
+    .venv/bin/python tests/test_parser.py
+    .venv/bin/python tests/test_aggregates.py
+    .venv/bin/python tests/test_import.py
+    node tests/test_units.js
+    ;;
   login)  exec gh auth login ;;
   *) echo "usage: ./bolo {dev|staging|deploy|env|test|login}"; exit 1 ;;
 esac

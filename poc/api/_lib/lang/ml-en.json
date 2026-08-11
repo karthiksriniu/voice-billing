@@ -359,6 +359,7 @@
       "divisible": true
     },
     "l": {
+      "base_ml": 1000,
       "aliases": [
         "liter",
         "liters",
@@ -372,6 +373,7 @@
       "divisible": true
     },
     "ml": {
+      "base_ml": 1,
       "aliases": [
         "millilitre",
         "millilitres",

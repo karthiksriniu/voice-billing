@@ -702,8 +702,15 @@ class Parser:
         target = self.lang.unit_spec.get(target_unit, {})
         if "multiplier" in spec:                                    # dozen -> pieces
             return qty * spec["multiplier"]
-        if "base_grams" in spec and "base_grams" in target:
-            return round(qty * spec["base_grams"] / target["base_grams"], 4)
+        # Mass and volume are converted separately, and never into each other. Litre and
+        # millilitre carried no factor at all until now, so "500 ml" against a per-litre
+        # product left the 500 untouched and billed 500 litres of milk — the identical
+        # failure the "Kg" fix addressed for mass, still live for volume, and volume is
+        # most of what a coffee shop stocks. Giving them base_grams instead would have
+        # worked by assuming water, and quietly mis-billed oil and honey forever.
+        for dim in ("base_grams", "base_ml"):
+            if dim in spec and dim in target:
+                return round(qty * spec[dim] / target[dim], 4)
         return qty
 
 
