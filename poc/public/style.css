@@ -928,3 +928,5 @@ button.busy,button.busy:disabled{opacity:1}
   border-radius:var(--radius-sm);background:var(--color-surface);
   color:var(--color-on-surface);font-family:inherit;font-size:var(--type-body-small-size);
 }
+/* A diagnostic that failed has to look like it failed. */
+.fineprint.bad{color:var(--color-error)}

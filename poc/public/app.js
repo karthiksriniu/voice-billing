@@ -1161,6 +1161,21 @@ $("micReportBtn").onclick = () => {
     : t("noData");
 };
 
+/* Says which of four things is true, because they need four different responses: no key,
+   a key the API rejects, a key that is fine but throttled, and a network that is simply
+   down. "It isn't working" is not something a shopkeeper can act on. */
+$("aiRun").onclick = () => withBusy($("aiRun"), async () => {
+  const out = $("aiOut");
+  out.textContent = t("working");
+  try {
+    const j = await api("/api/ai/check", { method: "POST" });
+    out.textContent = j.ok
+      ? `${t("aiReady")} · ${j.model}`
+      : `${t("ai_" + (j.state || "unreachable"))}${j.detail ? ` — ${j.detail}` : ""}`;
+    out.classList.toggle("bad", !j.ok);
+  } catch (err) { out.textContent = t("network"); out.classList.add("bad"); }
+});
+
 $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   e.preventDefault();
   const j = await api("/api/settings", {

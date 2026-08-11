@@ -1126,6 +1126,21 @@ async def recipe_draft(req: RecipeDraftRequest, request: Request):
             "cost_paise": out.get("cost_paise", 0)}
 
 
+@router.post("/ai/check")
+async def ai_check(request: Request):
+    """One real call, to tell a key that is present from a key that works.
+
+    Owner only and behind a tap: it costs a fraction of a paisa, but an open endpoint that
+    spends somebody else's credits is an open endpoint that will be found.
+    """
+    c = claims_of(request)
+    if not c:
+        return deny("Sign in required")
+    if c["role"] != "owner":
+        return deny("Owner only", 403)
+    return await recipes.check()
+
+
 @router.get("/recipes")
 async def recipes_list(request: Request):
     """Everything sellable, with what it is made of — the recipe screen's whole payload.

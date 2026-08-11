@@ -94,6 +94,46 @@ Rules:
   what you left out for them to add. Empty string if there is nothing worth saying."""
 
 
+async def check() -> dict:
+    """Is the key actually usable?
+
+    Presence and validity are different questions, and only the first one is free to
+    answer. A key that was rotated, mistyped, or set on the wrong Vercel environment reads
+    as configured and then fails at the moment a shopkeeper taps a button — as an error
+    message about an API they have never heard of. One real call, a handful of tokens, and
+    the answer is definite.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return {"ok": False, "state": "missing",
+                "detail": "No key is set on this deployment"}
+    try:
+        from anthropic import AsyncAnthropic
+    except ImportError:
+        return {"ok": False, "state": "missing", "detail": "anthropic package not installed"}
+    try:
+        client = AsyncAnthropic(timeout=20.0, max_retries=0)
+        msg = await client.messages.create(
+            model=MODEL, max_tokens=16,
+            # Nothing to think about, so nothing is spent thinking. This is a reachability
+            # probe, not a question.
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
+            messages=[{"role": "user", "content": "Reply with the word: ready"}],
+        )
+    except Exception as err:                           # noqa: BLE001
+        name = type(err).__name__
+        # Told apart because they need different things from the shopkeeper: a bad key is
+        # a key to replace, a rate limit is a minute to wait, and a network fault is
+        # neither of those and not their fault at all.
+        state = ("bad_key" if "Authentication" in name or "PermissionDenied" in name
+                 else "rate_limited" if "RateLimit" in name
+                 else "unreachable")
+        return {"ok": False, "state": state, "detail": f"{name}: {err}"[:180]}
+    u = msg.usage
+    return {"ok": True, "state": "ready", "model": msg.model,
+            "cost_paise": round(u.input_tokens * IN_PAISE + u.output_tokens * OUT_PAISE, 2)}
+
+
 async def propose(item: str, components: list[dict], hint: str = "") -> dict:
     """Draft a bill of materials for one menu item. Returns the draft, never writes it."""
     if not item.strip():
