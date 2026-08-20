@@ -6,7 +6,10 @@
     "0": [
       "zero",
       "பூஜ்யம்",
-      "poojyam"
+      "poojyam",
+      "ஸீரோ",
+      "சீரோ",
+      "ஜீரோ"
     ],
     "1": [
       "one",
@@ -15,7 +18,10 @@
       "onnu",
       "ondru",
       "oru",
-      "ஒரு"
+      "ஒரு",
+      "ஒன்",
+      "ஒண்",
+      "வன்"
     ],
     "1.5": [
       "ஒன்றரை",
@@ -31,7 +37,9 @@
       "இரண்டு",
       "rendu",
       "irandu",
-      "erandu"
+      "erandu",
+      "டூ",
+      "டு"
     ],
     "2.5": [
       "ரெண்டரை",
@@ -45,7 +53,9 @@
       "மூணு",
       "மூன்று",
       "moonu",
-      "moondru"
+      "moondru",
+      "த்ரீ",
+      "திரீ"
     ],
     "3.5": [
       "மூணரை",
@@ -58,7 +68,10 @@
       "நாலு",
       "நான்கு",
       "naalu",
-      "naangu"
+      "naangu",
+      "ஃபோர்",
+      "போர்",
+      "ஃபோ"
     ],
     "4.5": [
       "நாலரை",
@@ -70,7 +83,9 @@
       "ஐந்து",
       "anju",
       "ainthu",
-      "aindhu"
+      "aindhu",
+      "ஃபைவ்",
+      "பைவ்"
     ],
     "5.5": [
       "அஞ்சரை",
@@ -79,30 +94,41 @@
     "6": [
       "six",
       "ஆறு",
-      "aaru"
+      "aaru",
+      "சிக்ஸ்",
+      "ஸிக்ஸ்"
     ],
     "7": [
       "seven",
       "ஏழு",
       "ezhu",
-      "yezhu"
+      "yezhu",
+      "செவன்",
+      "ஸெவன்"
     ],
     "8": [
       "eight",
       "எட்டு",
-      "ettu"
+      "ettu",
+      "எயிட்",
+      "ஏட்",
+      "எய்ட்"
     ],
     "9": [
       "nine",
       "ஒன்பது",
       "onbathu",
-      "onbadhu"
+      "onbadhu",
+      "நைன்",
+      "நயின்"
     ],
     "10": [
       "ten",
       "பத்து",
       "pathu",
-      "paththu"
+      "paththu",
+      "டென்",
+      "டெண்"
     ],
     "10.5": [
       "பத்தரை",
@@ -111,18 +137,23 @@
     "11": [
       "eleven",
       "பதினொன்று",
-      "pathinonnu"
+      "pathinonnu",
+      "இலெவன்",
+      "எலவன்"
     ],
     "12": [
       "twelve",
       "பன்னிரண்டு",
       "panniradu",
-      "pannendu"
+      "pannendu",
+      "ட்வெல்வ்",
+      "டுவெல்வ்"
     ],
     "15": [
       "fifteen",
       "பதினைந்து",
-      "pathinanju"
+      "pathinanju",
+      "ஃபிஃப்டீன்"
     ],
     "20": [
       "twenty",
@@ -131,7 +162,9 @@
       "irupathu",
       "இருபத்தி",
       "irubathi",
-      "irubathy"
+      "irubathy",
+      "ட்வென்டி",
+      "டுவெண்டி"
     ],
     "25": [
       "twentyfive",
@@ -143,14 +176,16 @@
       "முப்பது",
       "muppathu",
       "முப்பத்தி",
-      "muppathi"
+      "muppathi",
+      "தர்ட்டி"
     ],
     "40": [
       "forty",
       "நாற்பது",
       "naarpathu",
       "நாற்பத்தி",
-      "naarpathi"
+      "naarpathi",
+      "ஃபோர்ட்டி"
     ],
     "50": [
       "fifty",
@@ -159,41 +194,49 @@
       "ambathu",
       "ஐம்பத்தி",
       "aimbathi",
-      "ambathi"
+      "ambathi",
+      "ஃபிஃப்டி",
+      "ஃபிப்டி"
     ],
     "60": [
       "sixty",
       "அறுபது",
       "arubathu",
       "அறுபத்தி",
-      "arubathi"
+      "arubathi",
+      "சிக்ஸ்டி"
     ],
     "70": [
       "seventy",
       "எழுபது",
       "ezhubathu",
       "எழுபத்தி",
-      "ezhubathi"
+      "ezhubathi",
+      "செவன்டி"
     ],
     "80": [
       "eighty",
       "எண்பது",
       "enbathu",
       "எண்பத்தி",
-      "enbathi"
+      "enbathi",
+      "எய்ட்டி"
     ],
     "90": [
       "ninety",
       "தொண்ணூறு",
       "thonnooru",
       "தொண்ணூற்றி",
-      "thonnootri"
+      "thonnootri",
+      "நைன்டி"
     ],
     "100": [
       "hundred",
       "நூறு",
       "nooru",
-      "நூற்று"
+      "நூற்று",
+      "ஹண்ட்ரட்",
+      "ஹண்ட்ரெட்"
     ],
     "200": [
       "இருநூறு",
@@ -230,7 +273,9 @@
     "1000": [
       "thousand",
       "ஆயிரம்",
-      "aayiram"
+      "aayiram",
+      "தௌசண்ட்",
+      "தவுசண்ட்"
     ]
   },
   "fractions": {
@@ -238,13 +283,17 @@
       "கால்",
       "kaal",
       "quarter",
-      "கால்வாசி"
+      "கால்வாசி",
+      "குவார்ட்டர்",
+      "கார்ட்டர்"
     ],
     "0.5": [
       "அரை",
       "arai",
       "half",
-      "அரைக்கால்"
+      "அரைக்கால்",
+      "ஹாஃப்",
+      "ஹாப்"
     ],
     "0.75": [
       "முக்கால்",
@@ -269,7 +318,9 @@
         "kilogrms",
         "kilos",
         "கிலோ",
-        "கிலோகிராம்"
+        "கிலோகிராம்",
+        "கே ஜி",
+        "கேஜி"
       ],
       "base_grams": 1000,
       "divisible": true
@@ -284,7 +335,8 @@
         "grm",
         "grms",
         "kiraam",
-        "கிராம்"
+        "கிராம்",
+        "ஜிராம்"
       ],
       "base_grams": 1,
       "divisible": true
@@ -298,7 +350,8 @@
         "litres",
         "ltr",
         "lts",
-        "லிட்டர்"
+        "லிட்டர்",
+        "லீட்டர்"
       ],
       "divisible": true
     },
@@ -339,6 +392,7 @@
         "unit",
         "units",
         "எண்ணிக்கை",
+        "நம்பர்",
         "பீஸ்"
       ],
       "divisible": false
@@ -900,5 +954,6 @@
     "தேங்க்ஸ்",
     "நன்றி",
     "வணக்கம்"
-  ]
+  ],
+  "_comment_translit": "Sarvam runs in the local language and writes ENGLISH number words in the local script — \"two filter coffee\" returns as \"டூ ஃபில்டர் காபி\". A code-mixed shop counts in English half the time, so these are first-class numerals, not a fallback. Without them a quantity is simply not seen, and the line bills at a defaulted one."
 }

@@ -37,7 +37,31 @@
   // so the wait afterwards is pure latency. Three seconds at a counter is an age; the
   // clip closed at 8.7s in a rehearsal that only watched for 8 and was called a failure
   // for it. This is the pause a shopkeeper leaves between items, not between customers.
-  const SILENCE_MS = 1700;
+  // How long a pause has to be before the sentence is treated as finished.
+  //
+  // This used to be 1700ms, chosen as "the pause a shopkeeper leaves between items". A
+  // recording from a real counter says that number cannot exist. In it, the pause INSIDE
+  // his order — between "one cup" and "one filter coffee" — is 1090ms, while the gap
+  // between the end of his order and the room starting up again is 520ms. The pause to be
+  // bridged is twice the gap that should close the clip. No single threshold does both,
+  // and 1700 resolved it the expensive way: nothing ever closed, and he waited out the cap
+  // for every bill.
+  //
+  // So the threshold is short, and being wrong is made cheap instead. A clip that ends
+  // mid-order is picked straight back up by the continuation below without him having to
+  // say the name again, and both halves bill to the same bill. Splitting a sentence now
+  // costs an extra transcription and nothing else.
+  const SILENCE_MS = 800;
+
+  // After a sentence ends the microphone stays on this long, listening for him to carry
+  // on. This is what makes a short SILENCE_MS safe. It is also the whole mic-on budget
+  // beyond the clip itself, which is why it is seconds and not minutes.
+  const CONTINUE_MS = 4000;
+
+  // A runaway would otherwise be unbounded: a loud room means every hold hears speech and
+  // starts another clip. The cap on the clip bounds one of them and this bounds the chain.
+  const MAX_CHAIN = 8;
+
   const MAX_CLIP_MS = 12000;    // the worst case when the room wins, kept short
   const GIVE_UP_AFTER = 4;      // consecutive failed starts before we stop and say so
 
@@ -53,6 +77,9 @@
   let hearing = false;          // the recogniser has actually got audio, not just started
   let fails = 0;
   let audioCtx, analyser, data, vadTimer, watchdog, micSource;
+  let holdTimer = null;         // waiting for him to carry on, microphone still open
+  let chain = 0;                // clips since the wake word, so a runaway is bounded
+  let rehearsing = false;       // the check drives capture by hand; it must not continue
   let lastAudioAt = 0, heartbeat = null;
   let words = ["chitti", "chithi", "chitty", "chiti"];
 
@@ -233,6 +260,10 @@
   const dB = (rms) => 20 * Math.log10(Math.max(rms, 1e-5));
 
   let vadTrace = [];
+  // The level his voice reached in the clip that just ended. The continuation below needs
+  // a reference for "close enough to be him", and it has no clip of its own to build one
+  // from.
+  let lastPeakDb = null;
   function watchForSilence() {
     const startedAt = Date.now();
     let quietSince = 0, spokeFor = 0, lastAt = Date.now();
@@ -269,6 +300,7 @@
       const vad = window.BoloVAD;
       const modelled = vad && vad.running;
       const nearField = cur > peakDb - DROP_DB;
+      lastPeakDb = peakDb;
       const speaking = modelled
         ? vad.speaking && nearField
         : nearField && cur > floorDb + OVER_FLOOR_DB;
@@ -286,7 +318,7 @@
       // "has he said anything yet" guard, so a capture that heard no speech at all —
       // the wake word answered by silence, which is what a misfire sounds like — never
       // reached it, and hung on the 16-second watchdog instead.
-      if (now - startedAt >= MAX_CLIP_MS) { endCapture(); return; }
+      if (now - startedAt >= MAX_CLIP_MS) { endCapture(true); return; }
       if (speaking) { spokeFor += dt; quietSince = 0; return; }
       if (spokeFor < MIN_SPEECH_MS) return;
       if (!quietSince) quietSince = now;
@@ -316,6 +348,8 @@
   async function beginCapture() {
     if (capturing || busy) return;
     capturing = true;
+    chain = 1;
+    clearInterval(holdTimer);
     tone(880, 90);
     // Nothing may leave this flag set. A capture that never ended used to make every
     // later wake word a no-op, so the feature went quietly dead until a reload.
@@ -333,16 +367,83 @@
     watchForSilence();
   }
 
-  function endCapture() {
+  /* `final` means stand down for good — go back to waiting for the name. Without it the
+     microphone is held for a few seconds first, in case he has only drawn breath. */
+  function endCapture(final) {
     if (!capturing) return;
     capturing = false;
     clearTimeout(watchdog);
     clearInterval(vadTimer);
-    tone(520, 70);
     stopRec();
+    fails = 0;
+    if (!final && on && stream && !rehearsing && chain < MAX_CHAIN) { holdForMore(); return; }
+    tone(520, 70);
+    standDown();
+  }
+
+  /* A sentence has ended. His ORDER may not have.
+   *
+   * The recording that prompted this has a 1090ms pause in the middle of one order, which
+   * is longer than the gap before the room starts talking again. Any endpointer short
+   * enough to be useful will therefore cut somebody off mid-order sooner or later, and the
+   * question is only what that costs. Before this it cost him the wake word: the clip
+   * closed, the doorbell went back on, and the rest of his order went to a phone that was
+   * no longer taking it down — while his hands were still full.
+   *
+   * So the microphone stays on for a few seconds and any speech in that window opens
+   * another clip, no name required. The bill is not touched in between, so the halves land
+   * on it in order and it reads as one dictation. That is what lets the threshold above be
+   * 800ms instead of 1700, and the first line of a bill now appears while he is still
+   * speaking rather than after the room has finished with him.
+   *
+   * It is bounded in three ways, because an always-open microphone is exactly what the
+   * design says we will not ship: the window itself, the cap on any one clip, and the
+   * chain length. */
+  function holdForMore() {
+    clearInterval(holdTimer);
+    setTalk("idle");
+    const until = Date.now() + CONTINUE_MS;
+    holdTimer = setInterval(() => {
+      if (!on || capturing) { clearInterval(holdTimer); return; }
+      const vad = window.BoloVAD;
+      // The model when it is there, the meter when it is not — the same fallback the
+      // endpointer makes everywhere else. And near-field on top of it, against the same
+      // reference the clip just used: without that, a customer answering his question
+      // reopens the recording as reliably as he does.
+      const cur = dB(level());
+      const near = lastPeakDb == null || cur > lastPeakDb - DROP_DB;
+      const speech = (vad && vad.running ? vad.speaking : cur > -34) && near;
+      if (speech) {
+        clearInterval(holdTimer);
+        resumeCapture();
+      } else if (Date.now() >= until) {
+        clearInterval(holdTimer);
+        tone(520, 70);
+        standDown();
+      }
+    }, 60);
+  }
+
+  /* The same capture, without the doorbell, the mic handover or the greeting tone — all
+     three already happened when he started talking. */
+  function resumeCapture() {
+    if (capturing || !stream || !on) return;
+    capturing = true;
+    chain++;
+    clearTimeout(watchdog);
+    watchdog = setTimeout(() => { if (capturing) endCapture(true); }, MAX_CLIP_MS + 4000);
+    setTalk("rec");
+    // Forced past `busy`: the previous sentence is very likely still being transcribed,
+    // and waiting for it would open the clip after his first word.
+    startRec(true);
+    watchForSilence();
+  }
+
+  function standDown() {
+    clearInterval(holdTimer);
+    chain = 0;
     // handleClip is async and the recorder still owns the stream; the doorbell goes back
     // on once it has let go.
-    fails = 0;
     setTimeout(() => {
       if (!on) return;
       releaseMic();
@@ -509,8 +610,9 @@
       warmVad();
     } else {
       clearInterval(heartbeat);
+      clearInterval(holdTimer);
       stopRecogniser();
-      endCapture();
+      endCapture(true);
       releaseMic();
     }
   }
@@ -637,6 +739,10 @@
     await openMic();
     if (!stream) { say("no microphone for the rehearsal"); return finish(); }
     listenToRoom();
+    // The check drives capture by hand and reads the result afterwards. Letting it hold
+    // the microphone open for a continuation would leave the rehearsal running after the
+    // rehearsal had ended.
+    rehearsing = true;
     capturing = true;
     watchForSilence();
     const began = Date.now();
@@ -648,6 +754,7 @@
     const ended = !capturing;
     const took = Date.now() - began;
     capturing = false;
+    rehearsing = false;
     clearInterval(vadTimer);
     releaseMic();
     const v = window.BoloVAD;
@@ -659,6 +766,7 @@
     say(window.handsFreeTrace());
     say(ended ? `clip would have closed after ${took}ms`
               : "clip did NOT close in 12s — the room is holding it open");
+    say(`then the microphone stays on ${CONTINUE_MS}ms for him to carry on without the name`);
     finish();
 
     function finish() {

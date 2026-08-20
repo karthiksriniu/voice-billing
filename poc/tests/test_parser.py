@@ -171,6 +171,40 @@ BILL_MULTI = [
 # The phonetic fallback covers the rest: an ASR spells a spoken number how it likes, and
 # Sarvam writes 300 as "முன்னூறு" where the table said "முந்நூறு" — which made it not a
 # number at all, so 300 g of onion billed as 7 paise.
+# The ASR runs in the local language and writes ENGLISH number words in the local script.
+# A Chennai counter says "two filter coffee" as often as "rendu", and it came back as
+# "டூ ஃபில்டர் காபி" — where "டூ" was not a number at all, so two coffees billed as one,
+# silently, on a counted unit where nothing else would have caught it. Found in a real
+# recording from a shop, not invented.
+NUMERALS_TRANSLITERATED = [
+    ("ta-en", "ஒன்", 1), ("ta-en", "டூ", 2), ("ta-en", "த்ரீ", 3), ("ta-en", "ஃபோர்", 4),
+    ("ta-en", "ஃபைவ்", 5), ("ta-en", "சிக்ஸ்", 6), ("ta-en", "செவன்", 7),
+    ("ta-en", "எயிட்", 8), ("ta-en", "நைன்", 9), ("ta-en", "டென்", 10),
+    ("ta-en", "ட்வெல்வ்", 12), ("ta-en", "ஃபிஃப்டி", 50), ("ta-en", "ஹண்ட்ரட்", 100),
+    ("ta-en", "ஹாஃப்", 0.5), ("ta-en", "குவார்ட்டர்", 0.25),
+    ("hi-en", "वन", 1), ("hi-en", "टू", 2), ("hi-en", "फाइव", 5), ("hi-en", "टेन", 10),
+    ("hi-en", "हाफ", 0.5), ("hi-en", "हंड्रेड", 100),
+    ("ml-en", "വൺ", 1), ("ml-en", "ടു", 2), ("ml-en", "ഫൈവ്", 5), ("ml-en", "ഹാഫ്", 0.5),
+    ("te-en", "వన్", 1), ("te-en", "టూ", 2), ("te-en", "ఫైవ్", 5), ("te-en", "హాఫ్", 0.5),
+    ("kn-en", "ವನ್", 1), ("kn-en", "ಟೂ", 2), ("kn-en", "ಫೈವ್", 5), ("kn-en", "ಹಾಫ್", 0.5),
+]
+
+# The line that started it, end to end. A counted unit gives the assumed-quantity cap
+# nothing to catch, so if the numeral is not read the bill is simply wrong and confident.
+TRANSLIT_CATALOG = [
+    {"id": "fc", "name": "Filter Coffee", "unit": "piece", "unit_price": 30,
+     "aliases": ["ஃபில்டர் காபி", "காபி"]},
+    {"id": "sug", "name": "Sugar", "unit": "kg", "unit_price": 45, "aliases": ["சர்க்கரை"]},
+]
+TRANSLIT_LINES = [
+    ("ஒன் ஃபீல்டர் காஃபி",        "fc", 1.0,  30.0),
+    ("டூ ஃபில்டர் காபி",          "fc", 2.0,  60.0),
+    ("ஃபைவ் ஃபில்டர் காபி",       "fc", 5.0, 150.0),
+    ("ட்வென்டி ஃபைவ் ஃபில்டர் காபி", "fc", 25.0, 750.0),
+    ("ஹாஃப் கிலோ சர்க்கரை",       "sug", 0.5, 22.5),
+]
+
+
 NUMERALS = [
     ("ta-en", "முன்னூறு", 300), ("ta-en", "முந்நூறு", 300), ("ta-en", "ஏழுபது", 70),
     ("ml-en", "ഇരുനൂറ്", 200), ("ml-en", "മുപ്പത്", 30), ("ml-en", "എഴുപത്", 70),
@@ -586,6 +620,23 @@ def run():
         r = op.parse(text, asr_confidence=1.0)
         check(text, bool(r.unmatched) or bool(r.items),
               f"-> dropped a real request as noise: {r.noise}")
+
+    print("english numerals written in the local script")
+    from parser import Catalog as _C6
+    for code, word, want in NUMERALS_TRANSLITERATED:
+        pp = Parser(Lang(code), _C6([]))
+        got = pp._value(word)
+        check(f"{code} {word}", got == want, f"-> {got} (want {want})")
+    tp = Parser(LANG, _C6(TRANSLIT_CATALOG))
+    for text, sku, qty, amount in TRANSLIT_LINES:
+        r = tp.parse(text, asr_confidence=1.0)
+        if not r.items:
+            check(text, False, "-> no item parsed")
+            continue
+        it = r.items[0]
+        check(text, it.product_id == sku, f"-> sku {it.product_id} (want {sku})")
+        check(text, abs(it.qty - qty) < 0.001, f"-> qty {it.qty} (want {qty})")
+        check(text, abs(it.amount - amount) < 0.01, f"-> amt {it.amount} (want {amount})")
 
     print("a unit that cannot be converted is shown, not billed")
     for text, sku, verdict in MISMATCHED_UNIT:

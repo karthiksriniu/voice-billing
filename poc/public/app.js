@@ -415,8 +415,13 @@ function setTalk(mode) {
 const pickMime = () => ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"]
   .find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
 
-function startRec() {
-  if (!stream || busy) return;
+/* `force` is the hands-free continuation: he has carried on talking while the previous
+   sentence is still being transcribed, and a clip that waits for the upload would open
+   after his first word. Two recordings never overlap — the previous one has stopped — and
+   handleClip takes its blob synchronously before awaiting, so resetting `chunks` under it
+   is safe. */
+function startRec(force) {
+  if (!stream || (busy && !force)) return;
   chunks = [];
   const mimeType = pickMime();
   recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
