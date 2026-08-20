@@ -241,6 +241,79 @@ CUSTOMER = [
 ]
 
 
+# Word order. A shop that names the thing before weighing it says "plantation A 500 gram";
+# a grocer reading a scale says "500 gram plantation A". Both are billing, and the split
+# used to assume only the second existed — so the first lost its weight to a defaulted
+# 1 kg, and in a two-item breath the weight drifted on to the NEXT item. Rs730 of coffee
+# billed as Rs1600, silently, with both lines marked accept.
+ORDER_CATALOG = [
+    {"id": "p1", "name": "Plantation A", "unit": "kg", "unit_price": 900,
+     "aliases": ["plantation"]},
+    {"id": "p2", "name": "Cherry Peaberry", "unit": "kg", "unit_price": 1400,
+     "aliases": ["peaberry"]},
+    {"id": "am", "name": "Americano", "unit": "piece", "unit_price": 140, "aliases": []},
+    {"id": "cup", "name": "Takeaway Cup", "unit": "piece", "unit_price": 4, "aliases": []},
+]
+# (utterance, [(sku, qty, amount), ...])
+WORD_ORDER = [
+    ("500 gram plantation A",             [("p1", 0.5, 450.0)]),
+    ("plantation A 500 gram",             [("p1", 0.5, 450.0)]),
+    ("plantation A half kg",              [("p1", 0.5, 450.0)]),
+    ("plantation A 500 gram cherry peaberry 200 gram",
+     [("p1", 0.5, 450.0), ("p2", 0.2, 280.0)]),
+    ("500 gram plantation A 200 gram cherry peaberry",
+     [("p1", 0.5, 450.0), ("p2", 0.2, 280.0)]),
+    ("plantation A 500 gram and two americano",
+     [("p1", 0.5, 450.0), ("am", 2.0, 280.0)]),
+    # The orders that already worked, which the fix must not cost us.
+    ("two kilo plantation A one kilo cherry peaberry",
+     [("p1", 2.0, 1800.0), ("p2", 1.0, 1400.0)]),
+    ("two americano",                     [("am", 2.0, 280.0)]),
+]
+
+# A quantity nobody spoke. On a counted unit one of them is what was meant; on a measured
+# unit it is an invention with a price on it, and must never reach the bill silently.
+ASSUMED_QTY = [
+    ("plantation A",   "p1", 1.0, "confirm"),   # 1 kg = Rs900, nobody said "one"
+    ("cherry peaberry", "p2", 1.0, "confirm"),
+    ("americano",      "am", 1.0, "accept"),    # one americano is what that means
+    ("two americano",  "am", 2.0, "accept"),
+    ("one kilo plantation A", "p1", 1.0, "accept"),   # he DID say one
+    ("plantation A 500 gram", "p1", 0.5, "accept"),
+]
+
+# Hands-free records the room, not just the shopkeeper. What comes back is mostly not
+# addressed to us, and every unrecognised fragment used to raise a modal card offering to
+# add it to the price list. A card that means nothing nine times in ten teaches the
+# shopkeeper to dismiss cards unread — including the tenth, which is the one asking
+# whether he really meant a kilo.
+NOISE = [
+    "thank you", "okay sir", "vanakkam", "uh okay so", "yes yes", "நன்றி",
+    "hello hello", "sorry sir", "acha theek hai", "hmm", "just a minute",
+]
+# ...but these are somebody trying to buy something the shop has not listed yet, or a
+# mishearing of something it has. Both still have to be asked about.
+STILL_ASK = [
+    "two kilo kismis",          # a real request, quantity and all
+    "half kg badam",
+    "ten rupees soap",
+]
+
+
+# A unit with no route to the one the shop prices in. "500 gram" of something sold by the
+# piece bills five hundred of them, and the pass-through that does it has now caused three
+# separate incidents (Rs25,000 of dal, 500 litres of milk, Rs21,000 of soap). The number is
+# still the best available guess, but it no longer goes on a bill without being shown.
+MISMATCHED_UNIT = [
+    ("500 gram americano",     "am", "confirm"),   # grams of a thing sold by the piece
+    ("two kilo americano",     "am", "confirm"),
+    ("half litre americano",   "am", "confirm"),
+    ("500 gram plantation A",  "p1", "accept"),    # converts cleanly, so it bills
+    ("two americano",          "am", "accept"),
+    ("two kilo plantation A",  "p1", "accept"),
+]
+
+
 def run():
     passed = failed = 0
 
@@ -466,6 +539,64 @@ def run():
               f"-> mobile {r.customer_mobile!r} (want {want_mobile!r})")
         check(text, len(r.items) == want_items,
               f"-> {len(r.items)} items (want {want_items})")
+
+    print("word order: the quantity may come before or after the item")
+    from parser import Catalog as _C5
+    op = Parser(LANG, _C5(ORDER_CATALOG))
+    for text, want in WORD_ORDER:
+        r = op.parse(text, asr_confidence=1.0)
+        got = [(i.product_id, i.qty, i.amount) for i in r.items]
+        check(text, len(got) == len(want), f"-> {len(got)} lines (want {len(want)}): {got}")
+        for (gs, gq, ga), (ws, wq, wa) in zip(got, want):
+            check(text, gs == ws, f"-> sku {gs} (want {ws})")
+            check(text, abs(gq - wq) < 0.001, f"-> qty {gq} (want {wq})")
+            check(text, abs(ga - wa) < 0.01, f"-> amount {ga} (want {wa})")
+        # Nothing may be left over: an orphaned quantity is what used to reattach itself
+        # to the following item.
+        check(text, r.number is None, f"-> orphaned number {r.number}")
+
+    print("a quantity nobody spoke is never silently accepted")
+    for text, sku, qty, verdict in ASSUMED_QTY:
+        r = op.parse(text, asr_confidence=1.0)
+        if not r.items:
+            check(text, False, "-> no item parsed")
+            continue
+        it = r.items[0]
+        check(text, it.product_id == sku, f"-> sku {it.product_id} (want {sku})")
+        check(text, abs(it.qty - qty) < 0.001, f"-> qty {it.qty} (want {qty})")
+        check(text, it.verdict == verdict,
+              f"-> {it.verdict} @ {it.confidence} (want {verdict})")
+
+    print("room noise is discarded, not turned into a question")
+    # Run against the KIRANA catalog as well as the coffee one. Fuzzy matching finds
+    # something for any string, and which something depends entirely on what the shop
+    # stocks: on this catalog "thank you" reaches Tomato and "okay okay" Coffee Powder,
+    # both well clear of the match bar — so they never appeared in the unmatched list
+    # where the first version of this check was looking.
+    for text in NOISE:
+        r = P.parse(text, asr_confidence=1.0)
+        check(f"kirana: {text}", not r.items and not r.unmatched,
+              f"-> items={[i.name for i in r.items]} ask={[u['name'] for u in r.unmatched]}")
+    for text in NOISE:
+        r = op.parse(text, asr_confidence=1.0)
+        check(text, not r.unmatched,
+              f"-> raised a card for {[u['name'] for u in r.unmatched]}")
+        check(text, not r.items, f"-> billed {[i.name for i in r.items]}")
+    for text in STILL_ASK:
+        r = op.parse(text, asr_confidence=1.0)
+        check(text, bool(r.unmatched) or bool(r.items),
+              f"-> dropped a real request as noise: {r.noise}")
+
+    print("a unit that cannot be converted is shown, not billed")
+    for text, sku, verdict in MISMATCHED_UNIT:
+        r = op.parse(text, asr_confidence=1.0)
+        if not r.items:
+            check(text, False, "-> no item parsed")
+            continue
+        it = r.items[0]
+        check(text, it.product_id == sku, f"-> sku {it.product_id} (want {sku})")
+        check(text, it.verdict == verdict,
+              f"-> {it.verdict} @ {it.confidence} qty {it.qty}{it.unit} (want {verdict})")
 
     print("rejects (must not yield an accepted line)")
     for text in REJECTS:

@@ -661,11 +661,19 @@ function apply(data, roundTripMs) {
   const lost = unknown.slice(1).map((u) => u.name).concat(data.unparsed || []);
   if (lost.length) toast(`${t("notBilled")}: ${lost.join(", ")}`, 3600, true);
 
-  if (!added && !asked && !data.customer_mobile) {
+  /* An utterance that was ONLY the room talking gets no message. Hands-free records
+     whatever is said near the counter, so "thank you" and "okay sir" arrive all day; a
+     complaint about each one is the same interruption as the card it replaced, just
+     quieter. Anything else still reports itself — a shopkeeper who spoke to the phone and
+     got nothing has to be told, or goods leave the shop unbilled. */
+  const onlyNoise = (data.noise || []).length && !(data.unmatched || []).length
+    && !(data.unparsed || []).length && !data.command && !data.mode_switch;
+  if (!added && !asked && !data.customer_mobile && !onlyNoise) {
     toast(data.transcript
       ? `“${data.transcript}” — ${t("couldNotParse")}`
       : t("notHeard"), 3200, true);
   }
+  if (onlyNoise) toast(`${t("notBilled")}: ${(data.noise || []).join(", ")}`);
   render();
 }
 

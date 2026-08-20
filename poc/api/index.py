@@ -308,6 +308,10 @@ def result_payload(res, took_ms: int, mode: str = "billing", parser=None) -> dic
                                  if parser else [])}
             for u in res.unmatched
         ],
+        # Heard, and not addressed to us. Reported so the client can tell "the room was
+        # talking" from "you said something and we failed you" — the second deserves a
+        # message on screen, the first deserves silence.
+        "noise": res.noise,
         "customer_mobile": res.customer_mobile,
         # Whether the phone was addressed by name. The client needs it to tell a hands-free
         # command from a button press that happened to contain the same words.
