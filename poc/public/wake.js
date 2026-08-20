@@ -180,6 +180,10 @@
     micSource.connect(analyser);
     data = new Uint8Array(analyser.fftSize);
     if (audioCtx.state === "suspended") audioCtx.resume();
+    // Its own tap on the same stream. Failure here is silent on purpose — the decibel
+    // gate above is a complete endpointer on its own and stays in charge if the model
+    // never loaded, could not start, or turned out too slow for this handset.
+    if (window.BoloVAD) window.BoloVAD.attach(stream);
   }
 
   function level() {
@@ -249,19 +253,44 @@
       peakDb = peakDb == null ? cur
         : cur > peakDb ? cur : Math.max(cur, peakDb - (PEAK_DECAY_DB_S / 1000) * dt);
 
-      const speaking = cur > peakDb - DROP_DB && cur > floorDb + OVER_FLOOR_DB;
+      // Two questions, and loudness can only answer one of them.
+      //
+      //   Is this speech at all?  A ceiling fan, traffic and a mixer sit within a few
+      //   decibels of a voice, so no level ever falls far enough to count as silence and
+      //   the clip runs to its cap. Silero settles this properly and is the fix for the
+      //   reported symptom: a clip that never closes in a noisy shop.
+      //
+      //   Is it HIM?  Silero cannot say — a television is speech by any honest measure —
+      //   so the near-field test stays exactly as it was, judging his voice at arm's
+      //   length against everything further away.
+      //
+      // The floor test is the one that goes when the model is running: it was the energy
+      // gate's own guess at speech-versus-room, and guessing is what has been replaced.
+      const vad = window.BoloVAD;
+      const modelled = vad && vad.running;
+      const nearField = cur > peakDb - DROP_DB;
+      const speaking = modelled
+        ? vad.speaking && nearField
+        : nearField && cur > floorDb + OVER_FLOOR_DB;
       if (vadTrace.length < 220) {
         vadTrace.push(`${now - startedAt}:${cur.toFixed(0)}/${peakDb.toFixed(0)}/${
-          floorDb.toFixed(0)}${speaking ? "S" : "."}`);
+          floorDb.toFixed(0)}${modelled ? "/p" + vad.prob.toFixed(2) : ""}${
+          speaking ? "S" : "."}`);
       }
       if (state.debug && now - startedAt > 300) {
         setStatus(`${cur.toFixed(0)}dB peak ${peakDb.toFixed(0)} floor ${
-          floorDb.toFixed(0)} ${speaking ? "SPEECH" : "-"}`);
+          floorDb.toFixed(0)}${modelled ? ` vad ${vad.prob.toFixed(2)}` : ""} ${
+          speaking ? "SPEECH" : "-"}`);
       }
+      // The cap is checked before anything else can return. It used to sit below the
+      // "has he said anything yet" guard, so a capture that heard no speech at all —
+      // the wake word answered by silence, which is what a misfire sounds like — never
+      // reached it, and hung on the 16-second watchdog instead.
+      if (now - startedAt >= MAX_CLIP_MS) { endCapture(); return; }
       if (speaking) { spokeFor += dt; quietSince = 0; return; }
       if (spokeFor < MIN_SPEECH_MS) return;
       if (!quietSince) quietSince = now;
-      if (now - quietSince >= SILENCE_MS || now - startedAt >= MAX_CLIP_MS) endCapture();
+      if (now - quietSince >= SILENCE_MS) endCapture();
     }, 60);
   }
   window.handsFreeTrace = () => vadTrace.join(" ");
@@ -325,6 +354,7 @@
 
   /* Nothing holds the microphone while we are only waiting for a name. */
   function releaseMic() {
+    if (window.BoloVAD) window.BoloVAD.detach();
     if (!stream) return;
     try { stream.getTracks().forEach((tr) => tr.stop()); } catch (err) { /* already gone */ }
     try { if (micSource) micSource.disconnect(); } catch (err) { /* already gone */ }
@@ -476,6 +506,7 @@
       // have worked when toggled and failed after every reload, which is the worst of
       // both: intermittent, and untraceable to the thing that changed.
       loadWords();
+      warmVad();
     } else {
       clearInterval(heartbeat);
       stopRecogniser();
@@ -485,6 +516,24 @@
   }
 
   window.handsFreeActive = () => on;
+
+  /* The speech model, fetched the first time the switch goes on and kept for ever after.
+     Deliberately not part of loading the app: it is about 5 MB, a shop's first bill must
+     not wait behind a download on a bad connection, and push-to-talk never needs it at
+     all. Until it arrives — and if it never does — the decibel gate runs the endpointer
+     exactly as it did before, so hands-free works throughout, just less well in a loud
+     room. Nothing here is awaited by anything the shopkeeper is waiting for. */
+  let warming = false;
+  async function warmVad() {
+    if (warming || !window.BoloVAD) return;
+    const v = window.BoloVAD;
+    if (v.status === "ready" || v.status === "running") return;
+    warming = true;
+    try {
+      const ok = await v.load();
+      if (state.debug) setStatus(ok ? "vad ready" : `vad ${v.status}: ${v.error}`);
+    } finally { warming = false; }
+  }
 
   /* ---- the check ----
      Twelve seconds of the real thing, with every event the browser emits written down.
@@ -582,6 +631,9 @@
     say("");
     say(`NOW SAY A SENTENCE AND STOP — rehearsing the end of a clip (12s, closes after ${
       SILENCE_MS}ms of quiet)`);
+    // Rehearsing on the fallback when the real thing would have used the model tests the
+    // wrong endpointer, which is how the check ends up disagreeing with the shop.
+    await warmVad();
     await openMic();
     if (!stream) { say("no microphone for the rehearsal"); return finish(); }
     listenToRoom();
@@ -598,7 +650,12 @@
     capturing = false;
     clearInterval(vadTimer);
     releaseMic();
-    say(`trace dB/peak/floor (S = counted as him speaking):`);
+    const v = window.BoloVAD;
+    say(v ? `vad ${v.status}${v.error ? " — " + v.error : ""}${
+      v.medianMs && v.medianMs() ? `, median ${v.medianMs()}ms/frame` : ""}${
+      v.dropped ? `, ${v.dropped} frame(s) dropped` : ""}`
+          : "vad not present");
+    say(`trace dB/peak/floor${v && v.running ? "/p=speech probability" : ""} (S = counted as him speaking):`);
     say(window.handsFreeTrace());
     say(ended ? `clip would have closed after ${took}ms`
               : "clip did NOT close in 12s — the room is holding it open");
