@@ -16,11 +16,11 @@ val keystoreProps = Properties().apply {
 val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
 
 android {
-    namespace = "com.bolobill.app"
+    namespace = "com.synthia.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.bolobill.app"
+        applicationId = "com.synthia.app"
         minSdk = 29                 // Android 10, the floor in CLAUDE.md
         targetSdk = 35
         versionCode = 1

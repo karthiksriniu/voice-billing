@@ -502,7 +502,7 @@ talk.addEventListener("pointercancel", release);
 talk.addEventListener("lostpointercapture", release);
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
 
-/* The same press-to-talk, on the payment screen. "Vishwa Bill, cash paid" and "Vishwa Bill, send
+/* The same press-to-talk, on the payment screen. "Synthia, cash paid" and "Synthia, send
    receipt" were always commands for THIS screen; until now the only way to reach them was
    hands-free, which left anyone without the wake word tapping their way through. */
 const payTalk = $("payTalk");
@@ -641,6 +641,15 @@ function apply(data, roundTripMs) {
   }
   if (data.command === "clear_all") { state.items = []; render(); toast(t("cleared")); return; }
   if (data.command === "total" && state.items.length) { finalize(); return; }
+  /* "Synthia, edit bill" — back to the list to add or take something off, from wherever
+     he is. The bill is untouched: this is navigation, not a state change, which is what
+     makes it safe to say by accident. */
+  if (data.command === "edit_bill") {
+    show("main");
+    render();
+    speak(state.items.length ? t("editingBill") : t("newBillReady"));
+    return;
+  }
   if (data.command === "place_order") { placeOrder(); return; }
 
   let added = 0, asked = 0;
@@ -1586,11 +1595,50 @@ $("thanksTap").onclick = () => { clearTimeout(thanksTimer); newBill(); };
    WhatsApp opens first, in the same tick as the tap, because that is the only moment the
    browser will allow it; the sale is then closed behind it. If WhatsApp cannot be opened
    the number is still recorded, so the sale is never lost to a failed hand-off. */
+/* The customer types their own number and asks for the receipt themselves.
+ *
+ * Three changes from the version that opened WhatsApp:
+ *
+ *   The app no longer switches. Handing the phone to WhatsApp mid-sale put the shopkeeper
+ *   in another application while a customer waited, and he had to find his way back. The
+ *   number is recorded and the send happens server-side, so nothing leaves this screen.
+ *
+ *   It no longer closes the sale. Asking for a receipt and paying are separate events and
+ *   were only fused because the tap had to do something. The bill still closes on "cash
+ *   received" or on the bank's SMS.
+ *
+ *   The number and the button lock for the rest of this bill. A second tap used to mean a
+ *   second receipt request against the same bill, and a customer who mistyped and
+ *   corrected it left two numbers on the record with no way to tell which was meant.
+ *
+ * What is NOT yet true: delivery. /api/receipt stores the number with status `requested`
+ * because no messaging provider is wired, and the UI says so rather than claiming a
+ * receipt was sent. See the WhatsApp note in README. */
+function lockReceiptRequest() {
+  state.receiptRequested = true;
+  $("sendReceipt").disabled = true;
+  $("custMobile").readOnly = true;
+  $("custMobile").blur();
+}
+
 $("sendReceipt").onclick = () => {
+  if (state.receiptRequested) return;
   const mobile = digits($("custMobile").value);
   if (mobile.length < 10) { toast(t("noNumber"), 3200); $("custMobile").focus(); return; }
-  openWhatsApp(mobile);
-  withBusy($("sendReceipt"), () => closeSale(mobile));
+  if (!state.bill) { toast(t("noBillYet"), 3000, true); return; }
+  lockReceiptRequest();
+  withBusy($("sendReceipt"), async () => {
+    try {
+      await api("/api/receipt", {
+        method: "POST",
+        body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, mobile },
+      });
+      toast(t("receiptQueued"), 3200);
+    } catch (err) {
+      // The number is the thing that matters and it is on screen; do not pretend it sent.
+      toast(t("receiptSavedNotSent"), 4000, true);
+    }
+  });
 };
 
 $("nextSale").onclick = () => withBusy($("nextSale"), () => closeSale(""));
@@ -1607,7 +1655,7 @@ function stamp(iso) {
 
 /* ---------- stock ---------- */
 
-/* "Vishwa Bill, received twenty kilo sugar" and "Vishwa Bill, count sugar eight kilo". The same
+/* "Synthia, received twenty kilo sugar" and "Synthia, count sugar eight kilo". The same
    grammar that reads a bill reads these — an item and a quantity is an item and a
    quantity, and only the verb differs. */
 async function moveStock(data, reason) {
@@ -2547,7 +2595,7 @@ function openWhatsApp(mobile, spoken) {
   return true;
 }
 
-/* "Vishwa Bill, send receipt" — and if the customer was never named, "Vishwa Bill, phone number
+/* "Synthia, send receipt" — and if the customer was never named, "Synthia, phone number
    98400 12345, send receipt" in one breath. The number is taken from whichever of those
    the shopkeeper actually gave: the one just spoken, the one that opened the bill, or the
    one the customer typed on the payment screen.
@@ -2565,8 +2613,9 @@ async function sendReceiptByVoice(spokenMobile) {
       method: "POST",
       body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, mobile },
     });
-  } catch (err) { /* the hand-off still goes ahead; the record can catch up */ }
-  openWhatsApp(mobile, true);
+  } catch (err) { /* the record can catch up; the number is what matters */ }
+  lockReceiptRequest();
+  toast(t("receiptQueued"), 3200);
 }
 $("waShare").onclick = () => openWhatsApp($("custMobile").value);
 $("docWa").onclick = () => openWhatsApp($("custMobile").value);
@@ -2576,9 +2625,44 @@ $("docBt").onclick = () => withBusy($("docBt"), async () => {
   await window.btPrint(state.doc.text);
 });
 
-/* "Vishwa Bill, cash received" — the shopkeeper stating a fact they witnessed. It is the only
+/* "Synthia, cash received" — the shopkeeper stating a fact they witnessed. It is the only
    payment we will ever record from the handset: a UPI settlement has to be confirmed
    server-side by the provider, never inferred from this phone. */
+/* The bank said the money arrived, the amount matched the open total, and a human agreed.
+ *
+ * Recorded as `upi_sms`, not `upi`, and the distinction is deliberate all the way to the
+ * database: this is the handset claiming a payment off a credit SMS, which is good
+ * evidence and is not a settlement confirmed by a payment provider. When a dispute comes,
+ * "the phone saw a matching SMS" and "the PSP confirmed the transfer" have to be tellable
+ * apart. See /api/settle. */
+async function upiReceived(amount) {
+  if (!state.bill) { speak(t("noBillYet")); return; }
+  try {
+    await api("/api/settle", {
+      method: "POST",
+      body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, method: "upi_sms" },
+    });
+  } catch (err) { speak(t("notSaved")); return; }
+  speak(`${t("upiClosed")} ${rupees(amount || state.bill.total)}`);
+  await autoPrint();
+  closeSale(digits($("custMobile").value).length >= 10 ? digits($("custMobile").value) : "");
+}
+
+/* Print without being asked, and without being able to fail loudly.
+ *
+ * The roll is the shop's own record and the only attribution surface we have (D7), so it
+ * should not depend on somebody remembering to tap Print while a customer waits. But no
+ * printer is the normal case today — most pilot phones will never have one paired — so
+ * every failure here is swallowed. A sale must never be held up by a peripheral. */
+async function autoPrint() {
+  if (!state.bill || !window.btAvailable || !window.btAvailable()) return;
+  try {
+    const j = await api(`/api/receipt/${encodeURIComponent(state.bill.bill_id)}`);
+    state.doc = j;
+    if (j && j.text) await window.btPrint(j.text);
+  } catch (err) { /* no printer, not paired, out of paper — the sale still closes */ }
+}
+
 async function cashReceived() {
   if (!state.bill) { speak(t("noBillYet")); return; }
   try {
@@ -2591,10 +2675,11 @@ async function cashReceived() {
     speak(t("notSaved"));
     return;
   }
+  await autoPrint();
   closeSale(digits($("custMobile").value).length >= 10 ? digits($("custMobile").value) : "");
 }
 
-/* "Vishwa Bill, add item lemonade 50 rupees". Prices are the owner's to set — a worker who
+/* "Synthia, add item lemonade 50 rupees". Prices are the owner's to set — a worker who
    bills all day must not be able to reprice the shop by speaking. */
 async function addItemByVoice(data) {
   if (state.role !== "owner") { speak(t("ownerOnly")); return; }
@@ -2618,6 +2703,9 @@ async function addItemByVoice(data) {
 function newBill() {
   state.items = [];
   state.bill = null;
+  state.receiptRequested = false;
+  $("sendReceipt").disabled = false;
+  $("custMobile").readOnly = false;
   $("custMobile").value = "";
   clearCustomer();
   state.askingPrice = null;

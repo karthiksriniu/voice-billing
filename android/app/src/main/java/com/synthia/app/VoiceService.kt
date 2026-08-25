@@ -1,4 +1,4 @@
-package com.bolobill.app
+package com.synthia.app
 
 import android.app.Notification
 import android.app.PendingIntent
@@ -47,6 +47,9 @@ class VoiceService : Service() {
 
     @Volatile private var alive = true
     @Volatile private var handsFree = false
+    /* Hands-free is on, but the app is not in front of the shopkeeper. The switch stays
+     * remembered; the microphone does not stay open. See MainActivity.onPause. */
+    @Volatile private var suspended = false
     @Volatile private var ptt = false
     @Volatile private var state = State.IDLE
 
@@ -79,8 +82,10 @@ class VoiceService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "action=${intent?.action}")
         when (intent?.action) {
-            ACTION_START -> { handsFree = true; remember(true); ensureWorker() }
+            ACTION_START -> { handsFree = true; suspended = false; remember(true); ensureWorker() }
             ACTION_STOP -> { handsFree = false; ptt = false; remember(false) }
+            ACTION_SUSPEND -> suspended = true
+            ACTION_RESUME -> { suspended = false; if (handsFree) ensureWorker() }
             ACTION_PTT_DOWN -> { ptt = true; ensureWorker() }
             ACTION_PTT_UP -> ptt = false
             ACTION_SHUTDOWN -> { stopSelf(); return START_NOT_STICKY }
@@ -126,7 +131,7 @@ class VoiceService : Service() {
         while (alive) {
             // Nothing holds the microphone while nobody has asked us to listen. The whole
             // consent story rests on this being literally true.
-            if (!handsFree && !ptt) {
+            if ((!handsFree || suspended) && !ptt) {
                 closeMic()
                 if (state != State.IDLE) { state = State.IDLE; note(R.string.notif_listening) }
                 Thread.sleep(60)
@@ -404,6 +409,8 @@ class VoiceService : Service() {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HANDS_FREE, false)
 
         const val ACTION_START = "start"
+        const val ACTION_SUSPEND = "suspend"
+        const val ACTION_RESUME = "resume"
         const val ACTION_STOP = "stop"
         const val ACTION_PTT_DOWN = "ptt_down"
         const val ACTION_PTT_UP = "ptt_up"

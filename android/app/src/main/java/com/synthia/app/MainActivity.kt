@@ -1,4 +1,4 @@
-package com.bolobill.app
+package com.synthia.app
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -19,7 +19,7 @@ import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import com.bolobill.app.databinding.ActivityMainBinding
+import com.synthia.app.databinding.ActivityMainBinding
 import org.json.JSONObject
 
 /* The bill, still a web page; the microphone, no longer.
@@ -69,14 +69,13 @@ class MainActivity : AppCompatActivity() {
          * between a page-side failure and anybody who can fix it. */
         ui.web.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                Log.i("BoloWeb", "${m.message()}  [${m.sourceId()}:${m.lineNumber()}]")
+                Log.i("SynthiaWeb", "${m.message()}  [${m.sourceId()}:${m.lineNumber()}]")
                 return true
             }
         }
         ui.web.addJavascriptInterface(WebBridge(this), "Bolo")
         ui.web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                matchBackgroundToPage(view)
                 // native.js reads this to know it is not in a browser. Injecting it here
                 // rather than shipping it in the page means an older deployed build still
                 // works with a newer APK.
@@ -104,31 +103,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /* The frame, not the WebView, carries the padding: the WebView keeps its full height
-     * so the page's own background still paints edge to edge underneath, and only the
-     * content is inset. The keyboard is folded into the bottom inset because the page has
-     * a phone-number field on its first screen, and adjustResize alone does not survive
-     * decorFitsSystemWindows = false. */
+    /* The page already knows how to do this, and doing it twice is what put a band above
+     * the header.
+     *
+     * index.html sets viewport-fit=cover and style.css pads `.bar` by
+     * env(safe-area-inset-top) using the header's OWN background — a real bleed, where the
+     * status bar sits on the header rather than above it. Padding the frame natively on top
+     * of that inset the content twice and left the page background showing through in
+     * between. So the frame is not padded at all any more, and the WebView runs edge to
+     * edge as the CSS assumes.
+     *
+     * The keyboard is the one inset the page cannot see. decorFitsSystemWindows(false)
+     * stops adjustResize from firing, so the IME — and nothing else — is applied here.
+     * Without it the customer's own number field sits under the keyboard they are typing on.
+     */
     private fun applyInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(ui.root) { view, insets ->
-            val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, 0, 0, (ime.bottom - bars.bottom).coerceAtLeast(0))
             insets
-        }
-    }
-
-    /* Keeps the padded strips the same colour as the page. The value in colors.xml only has
-     * to be right for the first frame; after that the page is the authority, so changing
-     * the web theme does not leave a mismatched band under the clock. */
-    private fun matchBackgroundToPage(view: WebView?) {
-        view?.evaluateJavascript(
-            "(document.querySelector('meta[name=theme-color]')||{}).content || ''") { raw ->
-            val hex = raw.trim('"', ' ')
-            if (hex.startsWith("#")) {
-                runCatching { ui.root.setBackgroundColor(hex.toColorInt()) }
-            }
         }
     }
 
@@ -139,6 +133,10 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED) need += Manifest.permission.POST_NOTIFICATIONS
+        // Payment confirmation. Declined is survivable — the shopkeeper then confirms by
+        // hand, exactly as he does today with a sticker QR.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
+            != PackageManager.PERMISSION_GRANTED) need += Manifest.permission.RECEIVE_SMS
         if (need.isNotEmpty()) askAudio.launch(need.toTypedArray())
     }
 
@@ -163,6 +161,40 @@ class MainActivity : AppCompatActivity() {
             VoiceService.send(this, VoiceService.ACTION_PTT_UP); return true
         }
         return super.onKeyUp(keyCode, event)
+    }
+
+    /* The microphone follows the window.
+     *
+     * The permission the shopkeeper grants says "while using the app", and the honest
+     * reading of that is the literal one: nothing listens once he has switched away. A
+     * foreground service is still what holds the mic — it has to be, or Android silences
+     * the stream the moment the Activity stops being visible — but the service is told to
+     * stand down here rather than being left running behind whatever he opened next.
+     *
+     * The cost is real and accepted: a bill cannot be dictated while he is in his UPI app
+     * checking a payment. The alternative is a shop phone that listens to a room full of
+     * strangers with the screen off, which is not a thing to ship on a permission grant
+     * this vague.
+     */
+    override fun onResume() {
+        super.onResume()
+        // The persisted switch, not the in-memory mirror. Bus.handsFreeWanted is set when
+        // the page toggles it or when this Activity is first created, and drifts the moment
+        // anything else turns hands-free on — which left the microphone off for good after
+        // the first time the shopkeeper switched away and came back.
+        Bus.handsFreeWanted = VoiceService.handsFreeEnabled(this)
+        if (Bus.handsFreeWanted &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED) {
+            VoiceService.send(this, VoiceService.ACTION_RESUME)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Not ACTION_STOP: that would forget the switch. This suspends listening while
+        // leaving hands-free on, so it comes straight back when he returns.
+        VoiceService.send(this, VoiceService.ACTION_SUSPEND)
     }
 
     override fun onDestroy() {

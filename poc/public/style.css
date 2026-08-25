@@ -47,6 +47,12 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}
 .screen.active{display:flex}
 .pad{padding:var(--space-6) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom));
      overflow-y:auto;flex:1}
+/* Screens with a header let `.bar` bleed into the status bar using its own background
+   (see .bar below). Screens WITHOUT one — auth, payment, receipt — had no top inset at
+   all, so on a bezel-less phone the first line of content sat under the clock. This is
+   that missing case, and it is why the Android shell does not pad the WebView itself:
+   doing both put a band of page background above every header. */
+.screen > .pad:first-child{padding-top:calc(var(--space-6) + env(safe-area-inset-top))}
 .center{display:flex;flex-direction:column;align-items:center;justify-content:center;
         text-align:center;gap:var(--space-4)}
 

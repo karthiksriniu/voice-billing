@@ -1,4 +1,4 @@
-# Bolo Bill — native Android shell
+# Synthia — native Android shell
 
 The billing UI is still the web app in `poc/`, served. What the APK adds is everything a
 browser cannot do:
@@ -9,7 +9,7 @@ browser cannot do:
 | Microphone | Dies with the screen / on app switch | Foreground service, survives both |
 | Endpointing | Silero via onnxruntime-web | Silero natively, same frames |
 | Push-to-talk | On-screen only | Also volume-down, phone face-down on the counter |
-| Payment confirm | Shopkeeper taps "Received" | Reads the UPI app's own notification (D5) |
+| Payment confirm | Shopkeeper taps "Received" | Reads the bank's credit SMS (D5) |
 
 `poc/public/native.js` is the other half. With no bridge present it does nothing and
 `wake.js` runs exactly as before, so **the browser build is unaffected**.
@@ -52,18 +52,20 @@ simply never wake.
 
 The single most important thing in this directory, and the least obvious.
 
-The KWS model is trained on gigaspeech — English, no Indian names. Asked for a name it has
-never heard, it does not fail politely: it decodes the sound into whatever English subwords
-fit. Keywords are matched as **exact BPE token sequences**, so a keyword written from the
-spelling will never fire.
+Keywords match as exact **BPE token sequences**, and the model is gigaspeech — English, and
+it has never heard an Indian name. Asked for one it does not fail politely: it decodes the
+sound into whatever English subwords fit. So a keyword written from the spelling fires only
+by luck.
 
-This killed the first wake word. Across 14 synthesized voices the model heard "Vishwa Bill"
-as `FISH WERE BILL` (7), `VISHUA BILL` (2), `ISSUE A BILL` (2), `WISH MY BILL`,
-`VISHUA BARRELL`. Thirty-two hand-written spellings of "Vishwa" were tried at every
-threshold; none fired. "Hey Akhila" was chosen instead and clusters far better, because
-"hey" is a word the model knows cold.
+Three names, measured the same way, are the evidence:
 
-**The method — re-run this whenever the phrase, the model, or the speaker population
+| Name | Result |
+|---|---|
+| "Vishwa Bill" | **Unspottable.** Heard as FISH WERE BILL (7 of 14 voices), VISHUA BILL, ISSUE A BILL, WISH MY BILL. Thirty-two hand-written spellings tried at every threshold; none ever fired. |
+| "Hey Akhila" | Workable but scattered — 11 distinct sequences over 24 clips, the commonest covering only 6. |
+| **"Synthia"** | The model knows the word. 17 of 24 clips land on the identical sequence and transcribe as SYNTHIA outright. |
+
+**The method — re-run it whenever the phrase, the model, or the speaker population
 changes:**
 
 1. Record the phrase. Many speakers, several speeds.
@@ -71,15 +73,47 @@ changes:**
    The KWS model is a tiny ASR and will happily transcribe.
 3. Take the emitted token sequences **verbatim**. Those are your keywords. Register every
    distinct one; they all trigger the same action.
-4. Sweep `keywordsScore` / `keywordsThreshold` against the clips you collected.
+4. Sweep `keywordsScore` / `keywordsThreshold` against positives *and* negatives.
 
-The current list is in `Kws.kt` and came from 24 synthesized clips (8 voices x 3 speeds,
-including the Indian-English ones). It fires 24/24 at score 2.0 / threshold 0.15.
+Current numbers, over 24 synthesized positives (8 voices x 3 speeds, Indian-English
+included) and 36 negatives of shop speech: **24/24 wake, 0/36 false accepts** at score 2.0 /
+threshold 0.15 — and still 23/24 with zero false accepts at the much looser (1.0, 0.35).
+The permissive end was chosen deliberately: real audio is harder than synthesized audio, and
+measured false accepts are the budget we have to spend.
 
-**It has never heard a human being.** Through a laptop speaker across the room it woke on
-4 of 8 — the shortfall is the acoustic path, not the model. Nothing here is tuned until it
-has been re-harvested from real recordings and the false-accept rate measured against hours
-of real shop noise.
+### A name is not a name-shaped string
+
+A single short word risks colliding with people's names, so that was measured too. The
+keyword model was run against 36 clips of **Sandhya, Shanthi, Santhi, Sindhu, Senthil,
+Sangeetha, Sunitha, Sathya, Swetha, Santhosh, Sandhiya and Suganya** in three voices. It
+fired on **none** of them.
+
+The fuzzy *string* matcher in `wake.js` — a different mechanism, used by the browser build
+and to strip a spoken name off a push-to-talk transcript — does not do as well: "synthia"
+scores 0.71 against "santhi", just over the 0.70 bar. So a customer called Santhi can wake
+the browser build and **cannot** wake the app. That is recorded in `poc/tests/test_wake.js`
+as a known collision rather than papered over, and it is why two further spellings
+("santhia", "sindhiya") were dropped from the wake list instead of excused.
+
+**It has still never heard a human being.** Through a laptop speaker across the room it
+wakes on roughly half the voices — that shortfall is the acoustic path, not the model.
+Nothing here is tuned until it has been re-harvested from real recordings and the
+false-accept rate measured against hours of real shop noise.
+
+## The microphone follows the window
+
+Hands-free listening starts on `onResume` and stops on `onPause`. The permission the
+shopkeeper grants says "while using the app", and this is the literal reading of it: nothing
+listens once he has switched away.
+
+A foreground service still holds the mic — it has to, or Android silences the stream as soon
+as the Activity stops being visible — but it is told to stand down rather than left running
+behind whatever he opened next. The switch itself is remembered in SharedPreferences, not in
+the page's localStorage, so it survives a reboot and is correct before the WebView has
+loaded.
+
+The cost is real and accepted: a bill cannot be dictated while he is in his UPI app checking
+a payment.
 
 ## Signing
 
@@ -130,18 +164,38 @@ shops for a week is fine. By week three it will not be.
 | `FOREGROUND_SERVICE_MICROPHONE` | Mandatory from API 34 to hold a mic outside the UI. |
 | `POST_NOTIFICATIONS` | The ongoing notification is how the shopkeeper sees the mic is on. |
 | `REQUEST_INSTALL_PACKAGES` | Reserved for the updater that does not exist yet. |
-| `BIND_NOTIFICATION_LISTENER_SERVICE` | Payment confirmation. Granted by hand in Settings. |
+| `RECEIVE_SMS` / `READ_SMS` | Payment confirmation, from the bank's own credit SMS. |
 
-The notification listener is **legal for us only because we are not on the Play Store** —
-this is D5's own reverse clause firing. `PaymentListener.kt` reports an amount and nothing
-else: it never confirms a bill, never stores anything, never forwards the payer's name, and
-ignores every package that is not a known UPI app. A notification is text written by
-another application; a bill that settles itself on one is exactly the silent error the
-product says it will not make.
+Reading SMS is **legal for us only because we are not on the Play Store** — this is D5's
+own reverse clause firing, and both permissions are Play policy violations for our use case.
+
+The bank's credit SMS is a better source than any one UPI app's notifications, for a reason
+that is not about convenience: whichever app the customer paid from, it ends in the same
+message from the shopkeeper's own bank. A notification listener would have to know every
+payer app in India and be wrong about the ones it did not.
+
+`SmsPayments.kt` reports an amount and nothing else. Nothing is stored — not the message,
+not the sender, not a payment log. A message must name a rupee amount **and** say it was
+credited **and** not say it was debited, which drops OTPs (they very often quote an amount),
+promotions, refunds, payment requests and the shopkeeper's own outgoing payments. It never
+settles a bill: the page matches the amount against the open total and a human still says
+yes. An SMS is text written by somebody else, and a bill that closes itself on one is
+exactly the silent error the product says it will not make.
+
+Settlements claimed this way are recorded as `upi_sms`, deliberately not as `upi`. When a
+dispute comes, "the phone saw a matching SMS" and "the PSP confirmed the transfer" have to
+be tellable apart.
 
 ## Known gaps
 
 - Wake word tuned only against synthesized speech (above).
+- The SMS receiver's classification rules are checked against 12 representative bank
+  messages, but the receiver itself has never fired on a real SMS — adb cannot inject one
+  on a physical device.
+- **WhatsApp receipts are not wired.** The customer's number is captured and stored with
+  status `requested`; nothing is sent, and the UI says so rather than claiming otherwise.
+  Delivery needs a WhatsApp Business account, an approved template and a provider — none of
+  which exist yet.
 - No in-app updater.
 - Battery cost of all-day KWS unmeasured. The Pixel 8 Pro used for development is a
   flagship and will flatter both battery and accuracy versus a ₹8k target phone.

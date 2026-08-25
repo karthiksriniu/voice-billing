@@ -9,7 +9,7 @@ export JAVA_HOME="${JAVA_HOME:-$HOME/Library/Java/temurin-17/Contents/Home}"
 "$HOME/Library/Gradle/gradle-8.9/bin/gradle" --no-daemon -q :app:assembleRelease
 
 mkdir -p dist
-cp app/build/outputs/apk/release/app-arm64-v8a-release.apk dist/bolo-bill.apk
+cp app/build/outputs/apk/release/app-arm64-v8a-release.apk dist/synthia.apk
 
 if [ ! -f keystore.properties ]; then
   echo
@@ -20,4 +20,4 @@ if [ ! -f keystore.properties ]; then
 fi
 
 echo
-ls -lh dist/bolo-bill.apk | awk '{print $5, $9}'
+ls -lh dist/synthia.apk | awk '{print $5, $9}'

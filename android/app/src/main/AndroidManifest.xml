@@ -11,6 +11,12 @@
     <!-- Sideloaded builds have no Play update channel, so the app installs its own. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- The bank's credit SMS is how a payment is confirmed. Both of these are Play Store
+         policy violations for our use case and are available only because we sideload;
+         see SmsPayments.kt for what is and is not done with the stream. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
     <application
@@ -21,7 +27,7 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:theme="@style/Theme.BoloBill">
+        android:theme="@style/Theme.Synthia">
 
         <activity
             android:name=".MainActivity"
@@ -42,16 +48,14 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Legal for us only because we are not distributing through Play. See D5. -->
-        <service
-            android:name=".PaymentListener"
+        <receiver
+            android:name=".SmsPayments"
             android:exported="true"
-            android:label="@string/payment_listener_label"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
-        </service>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -11,11 +11,13 @@
  * shop noise, and beeped on and off all day. The shopkeeper's report was "it keeps
  * activating and deactivating and I have to switch it off and on".
  *
- * The wake phrase is now "Vishwa Bill", and the reason it is two words is measured, not
- * stylistic: a bare "Vishwa" is a name stem, so Vishal, Vishnu, Vishwas, Vishwanath and
- * Bishwa all land inside the bar, and a carrier does not rescue it because the whole
- * window is compared — "hey vishal" scores 0.80 against "hey vishwa". Those names are
- * negatives below and must stay there.
+ * The wake phrase is now "Synthia". A single word was affordable this time for a reason
+ * that is measured rather than stylistic: the keyword model on the phone transcribes the
+ * name outright, so the on-device spotter needs no carrier word to disambiguate it. What
+ * a single word does cost is exactly what killed the last bare stem — proximity to
+ * people's names. Sandhya, Shanthi, Sindhu and Senthil are all shouted across a counter,
+ * and two spellings had to be dropped from the wake list because they landed inside the
+ * bar of one of them. Those names are negatives below and must stay there.
  *
  * So the guard is on the DATA, not the algorithm: no entry in any pack may sit within the
  * matching threshold of something a person says at a counter. `ratio` is copied from
@@ -80,10 +82,17 @@ const NOT_A_SUMMONS = [
   "hey", "hey boss", "hey give me two tea", "ok hey", "yes hey", "hello hey",
   "ready", "are you ready", "heavy", "head", "heady bill", "hd", "h d", "hd ready",
   "city", "city bus", "kitty", "heat", "hit", "had", "hold", "hand",
-  // Customers, called across a counter. This is what rules out a bare personal name.
+  // Customers, called across a counter. This is what rules out a bare personal name,
+  // and it is the reason the wake list may not drift toward common Tamil given names.
   "vishal", "vishwas", "vishnu", "vishwanath", "viswanathan", "bishwa", "vishesh",
   "hey vishal", "hey vishwas", "hey vishnu", "hey vishwanath", "hey bishwa",
   "வishal", "விஷால்", "விஷ்ணு", "விஸ்வநாதன்",
+  // Names that sound near "Synthia". "santhia" and "sindhiya" were in the wake list
+  // until this block failed: "santhia" scores 0.71 against "sandhya", so every Sandhya
+  // called across the shop rang the doorbell. They were removed, not excused.
+  "sandhya", "shanthi", "sindhu", "sunitha", "swetha", "santhosh",
+  "sangeetha", "sumathi", "shanthini", "suganya", "sathya",
+  "சிந்து",
   // "bill" is said constantly; only the pair may wake it.
   "bill", "bill kodu", "bill please", "bill podu", "final bill", "bill amount",
   "the bill", "my bill", "give me the bill", "bill ready", "பில்", "பில் கொடு",
@@ -93,19 +102,34 @@ const NOT_A_SUMMONS = [
   "நன்றி", "சரி", "என்ன வேணும்", "ஒரு டீ",
 ];
 
-/* Collisions that are inherent to the NAME, not to a bad entry — they come from spellings
-   the recogniser genuinely produces for "Chitti", so removing them would cost real wakes.
-   Reported rather than failed, because the fix is a different wake word, not a different
-   list: "Chitti" is two syllables and sits one edit from several ordinary words. This
-   block is the standing evidence for changing it. */
-const KNOWN_COLLISIONS = ["world bill", "vishwa billa", "wish bill"];
+/* Collisions inherent to the NAME rather than to a bad entry, and — this is the new part —
+   collisions that only exist in the FUZZY STRING matcher, not in the phone's ears.
+ *
+ * "synthia" scores 0.71 against "santhi" and 0.75 against "sandhiya", a hair over the 0.70
+ * bar. Those are names shouted across a counter, so on the face of it this is the same
+ * mistake as the old "hedy"/"hey" collision.
+ *
+ * It is not, and the difference was measured rather than assumed. The Android build does
+ * not use this list to wake: an on-device keyword model does, and it was run against 36
+ * clips of Sandhya, Shanthi, Santhi, Sindhu, Senthil, Sangeetha, Sunitha, Sathya, Swetha,
+ * Santhosh, Sandhiya and Suganya in three voices. It fired on none of them. The acoustic
+ * model can tell the name from those names; Levenshtein over a transcript cannot.
+ *
+ * So what is left below is the browser build's doorbell and the stripping of a spoken name
+ * off the front of a push-to-talk transcript. A customer called Santhi can wake the
+ * browser build, and cannot wake the app. Reported here so it stays visible, and so nobody
+ * "fixes" the wake list by adding spellings that make it worse. */
+const KNOWN_COLLISIONS = ["santhi", "senthil", "sandhiya", "சந்தியா"];
 
-/* Must still wake, in every spelling the recogniser is known to produce. */
+/* Must still wake, in every spelling the recogniser is known to produce.
+ *
+ * These matter less than they used to. In the Android build the wake word is spotted by an
+ * on-device keyword model and never reaches this list at all — what remains is the browser
+ * build, and stripping a spoken name off the front of a push-to-talk transcript. */
 const IS_A_SUMMONS = [
-  "vishwa bill", "viswa bill", "vishva bill", "vishwabill", "vishwa bil",
-  "wishwa bill", "vishwa build", "vishwa pill",
+  "synthia", "sinthia", "synthiya", "sinthiya", "cynthia",
   // Said naturally, and said mid-sentence — both have to work.
-  "vishwa bill podu", "vishwa, bill", "um vishwa bill", "vishwa bill two kilo sugar",
+  "synthia two kilo sugar", "synthia, close bill", "um synthia", "hey synthia",
 ];
 
 const packs = fs.readdirSync(LANG_DIR).filter((f) => f.endsWith(".json")).sort();

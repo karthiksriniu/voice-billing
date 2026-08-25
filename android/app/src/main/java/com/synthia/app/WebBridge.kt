@@ -1,9 +1,9 @@
-package com.bolobill.app
+package com.synthia.app
 
 import android.content.Context
-import android.content.Intent
-import android.provider.Settings
+import android.content.pm.PackageManager
 import android.webkit.JavascriptInterface
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 
 /* What the page may ask the phone to do.
@@ -38,16 +38,11 @@ class WebBridge(private val ctx: Context) {
     @JavascriptInterface
     fun pttUp() = VoiceService.send(ctx, VoiceService.ACTION_PTT_UP)
 
-    /** True once the shopkeeper has granted notification access (D5 auto-confirmation). */
+    /** True once the shopkeeper has granted SMS access, which is what confirms payment. */
     @JavascriptInterface
-    fun paymentListenerEnabled(): Boolean = PaymentListener.isEnabled(ctx)
-
-    /** Opens the system screen where it is granted. There is no way to grant it in-app. */
-    @JavascriptInterface
-    fun openPaymentListenerSettings() {
-        ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
+    fun smsPaymentsEnabled(): Boolean =
+        ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECEIVE_SMS) ==
+            PackageManager.PERMISSION_GRANTED
 
     @JavascriptInterface
     fun version(): String = BuildConfig.VERSION_NAME

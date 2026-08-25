@@ -69,33 +69,37 @@
       });
     },
 
-    /* A UPI app on this phone posted a notification that money arrived.
+    /* The shopkeeper's own bank sent him a credit SMS.
      *
      * It is a REPORT, not a confirmation, and the difference is the whole design. The
-     * notification was written by another application; a refund alert, a request, or a
-     * payment to somebody else can all carry a rupee amount, and a bill that settles
-     * itself on one of those is exactly the silent error the product says it will not
-     * make. So the amount is matched against the open total and a human still says yes.
+     * message was written by his bank, not by us: a refund, a salary credit, a transfer
+     * from his brother and a customer's payment all look similar and all carry a rupee
+     * amount. So the amount is matched against the open total, and a human still says yes.
      *
-     * When shops have used this long enough to trust it, the auto-accept belongs here —
+     * Matching on the total is doing real work here. It is what separates "the money for
+     * THIS bill arrived" from "some money arrived", and it is why an unmatched amount is
+     * shown rather than hidden — the shopkeeper needs to see a ₹500 credit land while a
+     * ₹120 bill is open, because that is exactly when he should not close it.
+     *
+     * When shops have used this long enough to trust it, the auto-accept belongs here,
      * behind a setting, and still never for an amount that does not match. */
     payment(p) {
       const bill = (typeof state !== "undefined") && state.bill;
       if (!bill || !bill.total) return;
-      const matches = Math.abs(Number(p.amount) - Number(bill.total)) < 1;
-      if (!matches) {
-        safe(() => toast(`₹${p.amount} — ≠ ₹${bill.total}`, 5000, true));
+      const amount = Number(p.amount);
+      if (Math.abs(amount - Number(bill.total)) >= 1) {
+        // Deliberately loud and deliberately not actionable: money arrived that is not
+        // this bill, and the only safe thing the app can do is say so.
+        safe(() => toast(`${t("creditNotMatched")}: ₹${amount} ≠ ₹${bill.total}`, 5000, true));
         return;
       }
-      safe(() => {
-        showPrompt({
-          kind: "confirm",
-          main: `₹${p.amount}`,
-          note: t("confirmReceived") || "Payment received — confirm?",
-          onOk: () => cashReceived(),
-          onCancel: () => {},
-        });
-      });
+      safe(() => showPrompt({
+        kind: "confirm",
+        main: `₹${amount}`,
+        note: t("confirmReceived") || "Payment received — confirm?",
+        onOk: () => upiReceived(amount),
+        onCancel: () => {},
+      }));
     },
   };
 
@@ -161,5 +165,18 @@
     paint();
   }
 
-  console.info("Bolo Bill native shell active, apk", safe(() => bridge.version()));
+  /* The safe-area values the page actually resolved, reported once.
+   *
+   * These are the whole inset story: the shell deliberately does NOT pad the WebView, so
+   * if env(safe-area-inset-top) comes back 0px on some handset, every header is under the
+   * status bar and the cause is invisible from a screenshot. One line, once, at startup. */
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;top:0;left:0;height:0;width:0;" +
+    "padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const insets = `top=${cs.paddingTop} bottom=${cs.paddingBottom}`;
+  probe.remove();
+
+  console.info("Synthia native shell active, apk", safe(() => bridge.version()), "· insets", insets);
 })();

@@ -1,4 +1,4 @@
-package com.bolobill.app
+package com.synthia.app
 
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType

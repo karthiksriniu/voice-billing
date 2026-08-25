@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Deep indigo, not the billing app's teal. Synthia is the voice, and on a shopkeeper's
+     home screen it has to be findable at a glance among two dozen colourful icons —
+     a single dark field with one bright mark reads faster than anything busier. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#0E7C5A" />
+    <solid android:color="#161B4D" />
 </shape>

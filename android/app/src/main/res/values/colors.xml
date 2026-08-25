@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Mirrors <meta name="theme-color"> in poc/public/index.html. Kept in sync at runtime
-         by reading that tag, so this value only has to be right for the first frame. -->
+    <!-- Mirrors <meta name="theme-color"> in poc/public/index.html. Only has to be right
+         for the first frame before the page paints; the WebView owns everything after. -->
     <color name="page_background">#0d1117</color>
+    <color name="brand">#161B4D</color>
 </resources>

@@ -1,4 +1,4 @@
-package com.bolobill.app
+package com.synthia.app
 
 import android.content.res.AssetManager
 import android.util.Log
@@ -17,36 +17,31 @@ import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
  * physically cannot transcribe the room.
  *
  * ---------------------------------------------------------------------------------------
- * The keywords below are NOT spellings of "Akhila". They are what this model actually
- * emits when it hears the phrase, and the difference is the whole reason the first wake
- * word had to be abandoned.
+ * The keywords below are what the model EMITS for the name, not how the name is spelled.
+ * Keywords match as exact BPE token sequences, so a keyword written from the spelling
+ * fires only by luck. Two earlier names are the evidence:
  *
- * The model was trained on gigaspeech: English, and no Indian names in it. Asked to spot a
- * name it has never heard, it does not fail politely — it decodes the sound into whatever
- * English subwords fit, and the constrained decoder then looks for token sequences that are
- * never produced. The previous name, "Vishwa Bill", was unspottable for exactly this
- * reason: across fourteen synthesized voices the model heard FISH WERE BILL (seven times),
- * VISHUA BILL, ISSUE A BILL, WISH MY BILL. Thirty-two hand-written spellings of "Vishwa"
- * were tried against it and not one fired, at any threshold.
+ *   "Vishwa Bill"  — unspottable. Across fourteen voices the model heard FISH WERE BILL
+ *                    (7x), VISHUA BILL, ISSUE A BILL, WISH MY BILL. Thirty-two hand-written
+ *                    spellings were tried at every threshold; none ever fired.
+ *   "Hey Akhila"   — workable but scattered: eleven distinct sequences over 24 clips, the
+ *                    most common covering only six of them.
+ *   "Synthia"      — the model simply knows the word. Seventeen of 24 clips land on the
+ *                    identical sequence and transcribe as SYNTHIA outright.
  *
- * So the list is harvested, not written. The method — and it is the part worth keeping,
- * because it has to be re-run against real voices:
+ * That last point is why this name is worth more than the branding change that motivated
+ * it. A wake word the acoustic model already has in its vocabulary needs no luck: the
+ * variants below are the accents that drift off it, not a search for something that works.
  *
- *   1. Record the phrase (many speakers, several speeds).
- *   2. Load THESE SAME model files as an OnlineRecognizer instead of a KeywordSpotter —
- *      the KWS model is a tiny ASR, so it will happily transcribe.
- *   3. Take the emitted token sequences verbatim. Those are the keywords.
+ * The method, for when the phrase or the speaker population changes — load THESE SAME
+ * model files as an OnlineRecognizer instead of a KeywordSpotter (the KWS model is a tiny
+ * ASR and will happily transcribe), say the phrase many ways, and keep the emitted token
+ * sequences verbatim.
  *
- * What is here came from step 3 over 24 synthesized clips (8 voices x 3 speeds, including
- * the Indian-English voices), and fires on 24/24 at the score and threshold below.
- *
- * The honest caveat: synthesized speech is not a shopkeeper. This list is what makes the
- * wake word work today, not what makes it correct. It must be re-harvested from real
- * recordings of real people saying "Hey Akhila" in a real shop, and the false-accept rate
- * measured against hours of real shop noise, before any of these numbers are trusted.
- * Several variants below ("HEY ACTUALLY", "HERE KILLER") are plainly things a person could
- * say by accident — in an English-speaking room they would be a problem, and in a Tamil
- * one they are unlikely enough to accept for a pilot.
+ * Measured over 24 synthesized clips (8 voices x 3 speeds, Indian-English included) and 36
+ * negatives of shop speech — "two kilo sugar", "close the bill", "cash received", "sixty
+ * five rupees": 24/24 wake, 0/36 false accepts, at the score and threshold below. It still
+ * has never heard a human being in a loud room, and that is the number that decides it.
  * ---------------------------------------------------------------------------------------
  */
 class Kws(assets: AssetManager) {
@@ -111,27 +106,23 @@ class Kws(assets: AssetManager) {
         private const val DIR = "kws"
         const val SAMPLE_RATE = 16000
 
-        /* Chosen by sweeping both against the 24-clip set: (1.5, 0.25) missed two of the
-         * Indian-English renditions, (2.0, 0.15) missed none. Score boosts the keyword path
-         * in the decoder; threshold is the acceptance bar. Loosening either trades misses
-         * for false accepts, and which way to move is a question only shop-noise recordings
-         * can answer. */
+        /* Swept against the 24 positives and 36 negatives. This name has headroom the
+         * previous two did not: it is 24/24 with zero false accepts here, and still 23/24
+         * with zero at the much looser (1.0, 0.35). The permissive end is chosen on
+         * purpose — real audio is harder than synthesized audio, and the measured false
+         * accepts are the thing we have room to spend. */
         const val KEYWORD_SCORE = 2.0f
         const val KEYWORD_THRESHOLD = 0.15f
 
-/** What the model emits for "Hey Akhila". Harvested, not spelled — see above. */
+/** What the model emits for "Synthia". Harvested, not spelled — see above. */
         val KEYWORDS = listOf(
-            "▁THEY ▁A C C U LA",        // x6 of 24
-            "▁HE Y ▁ACTUALLY",          // x3
-            "▁HE Y ▁ ACT ▁HI LL AR",    // x3
-            "▁HE Y ▁A C C UL AR",       // x3
-            "▁YEAH ▁A ▁K IL LA",        // x2
-            "▁HERE ▁K I LL ER",         // x2
-            "▁YEAH ▁K I LL AR",         // x1
-            "▁HE ▁ N U CK Y LA",        // x1
-            "▁HE ▁A R CH IL LA",        // x1
-            "▁HE ▁K N O CK IL LA",      // x1
-            "▁YEAH ▁K I LL ER",         // x1
+            "▁S Y N TH IA",       // x17 of 24 — the model transcribes the name outright
+            "▁C IN TI ER",        // x2
+            "▁S IN VI A",         // x1
+            "▁S IN TE ▁A IR",     // x1
+            "▁S IN K I ER",       // x1
+            "▁S Y N TE ER",       // x1
+            "▁S IN CE RE",        // x1
         ).joinToString("\n")
     }
 }

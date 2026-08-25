@@ -1,4 +1,4 @@
-package com.bolobill.app
+package com.synthia.app
 
 import android.app.Application
 import android.app.NotificationChannel

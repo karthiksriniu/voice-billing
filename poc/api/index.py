@@ -1807,19 +1807,27 @@ class SettleRequest(BaseModel):
 async def settle(req: SettleRequest, request: Request):
     """Close a bill as paid.
 
-    Only 'cash' can be claimed from the counter, and only by someone signed in to the
-    shop: it is the shopkeeper stating a fact they witnessed. A UPI settlement has to
-    come from the payment provider server-side — we never infer it from the handset, so
-    the endpoint refuses to record one on the client's say-so.
+    Two methods, and the difference between them is deliberately kept in the record.
+
+    'cash' is the shopkeeper stating a fact they witnessed, from a phone signed in to the
+    shop. 'upi_sms' is weaker and is stored under its own name for that reason: the handset
+    read a credit SMS from the shop's own bank, matched the amount to the open total, and a
+    human accepted it. That is good evidence and it is not a settlement confirmed by a
+    payment provider, which is the thing this endpoint used to refuse outright.
+
+    Storing them as distinct methods rather than collapsing both to "upi" is the whole
+    point. When a dispute comes, "the phone saw a matching SMS" and "the PSP confirmed the
+    transfer" have to be tellable apart, and a column that says only 'upi' cannot do it.
+    A real PSP webhook, when there is one, lands as a third method and outranks both.
     """
     c = claims_of(request)
     if not c:
         return deny("Sign in required")
-    if req.method != "cash":
-        return deny("Only a cash payment can be closed here", 400)
+    if req.method not in ("cash", "upi_sms"):
+        return deny("Only a cash or SMS-claimed payment can be closed here", 400)
     error = await db.update_bill(c["shop"], req.bill_id, {
         "payment_state": "confirmed",
-        "payment_method": "cash",
+        "payment_method": req.method,
         "paid_at": datetime.now(timezone.utc).isoformat(),
     })
     return JSONResponse({"ok": not error, "error": error},

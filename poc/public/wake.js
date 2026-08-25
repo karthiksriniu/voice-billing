@@ -1,4 +1,4 @@
-/* Hands-free: "Vishwa Bill, two kilo sugar."
+/* Hands-free: "Synthia, two kilo sugar."
  *
  * The shopkeeper is weighing with one hand and passing goods with the other. Push-to-talk
  * already beats paper, but only if a hand is free — so the phone gets a name, and answers
@@ -94,9 +94,13 @@
   let chain = 0;                // clips since the wake word, so a runaway is bounded
   let rehearsing = false;       // the check drives capture by hand; it must not continue
   let lastAudioAt = 0, heartbeat = null;
-  // Two tokens on purpose — see the pack's _comment_wake. A bare "Vishwa" is a name
-  // stem and wakes on Vishal, Vishnu, Vishwas and Vishwanath; paired with "bill" it
-  // is clean. The pack overrides this at startup; this is only the offline fallback.
+  // One token now, which the pack's _comment_wake warns against — so here is why it is
+  // allowed. "Synthia" is not a name stem: the on-device keyword model in the Android
+  // build transcribes it outright and fired on none of 36 clips of Sandhya, Shanthi,
+  // Santhi, Sindhu, Senthil and friends. This fuzzy list is a different matcher with a
+  // different answer: at the 0.70 bar "synthia" scores 0.71 against "santhi", so a
+  // customer of that name CAN wake the browser build and cannot wake the app. Recorded
+  // in tests/test_wake.js as a known collision rather than papered over.
   let words = ["vishwa bill", "viswa bill", "vishva bill", "vishwabill"];
 
   const srLang = () => ({ en: "en-IN", ta: "ta-IN", hi: "hi-IN", ml: "ml-IN",
@@ -139,7 +143,7 @@
     return 1 - prev[b.length] / Math.max(a.length, b.length);
   }
 
-  /* Chrome treats a short utterance as a whole sentence. Say "Vishwa Bill" and it can
+  /* Chrome treats a short utterance as a whole sentence. Say "Synthia" and it can
      finalise on "vishwa", end the session, and hand "bill" to the NEXT one — or lose it in
      the gap between them. A two-word wake phrase depends on this being handled.
 

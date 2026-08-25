@@ -14,7 +14,7 @@ const LANGS = {
 
 const STRINGS = {
   en: {
-    newBillReady: "New bill, go ahead", noBillYet: "No bill to close yet", cashClosed: "Closed, cash", ownerOnly: "Owner only", listening: "Listening", sayWake: "Say “Vishwa Bill”", handsFree: "Hands-free (Hey Chitti)", handsFreeNo: "Hands-free needs Chrome on Android",
+    confirmReceived: "Payment received — confirm?", creditNotMatched: "Credit does not match this bill", editingBill: "Editing the bill", upiClosed: "Closed, UPI", receiptQueued: "Receipt queued — it will be sent shortly", newBillReady: "New bill, go ahead", noBillYet: "No bill to close yet", cashClosed: "Closed, cash", ownerOnly: "Owner only", listening: "Listening", sayWake: "Say “Synthia”", handsFree: "Hands-free (Synthia)", handsFreeNo: "Hands-free needs Chrome on Android",
     notInList: "Not in your list", whichItem: "which item is this?", saySoldName: "Say the name you sell it under, or pick below", pickFromList: "Pick from list", itIsNew: "It is new", removeAlias: "Remove this name",
     micDenied: "Microphone blocked — allow it in the browser", handsFreeNet: "Hands-free needs a connection", handsFreeChrome: "Hands-free works in Chrome on Android",
     hfCheck: "Hands-free check", hfRunBtn: "Run", hfCopy: "Copy result", copied: "Copied",
@@ -26,7 +26,7 @@ const STRINGS = {
     sessionOver: "Signed out — please enter your passcode again",
     rememberPhone: "Remember this phone",
     microphone: "Microphone", micHint: "A counter mic hears better than a phone on the shelf.", micDefault: "Phone microphone", micNow: "Now using", micGone: "That microphone is unplugged — using the phone", micCompare: "Recognition quality", noData: "Nothing measured yet — bill a few items first",
-    stockHead: "Stock & loss", stockHint: "Say “Vishwa Bill, received twenty kilo sugar” · “Vishwa Bill, count sugar eight kilo”", unaccountedFor: "unaccounted for", onShelf: "On shelf", soldWord: "sold", inWord: "in", noStock: "No items yet", stockedIn: "Stocked in", counted: "Counted", sayItemQty: "Say an item and a quantity",
+    stockHead: "Stock & loss", stockHint: "Say “Synthia, received twenty kilo sugar” · “Synthia, count sugar eight kilo”", unaccountedFor: "unaccounted for", onShelf: "On shelf", soldWord: "sold", inWord: "in", noStock: "No items yet", stockedIn: "Stocked in", counted: "Counted", sayItemQty: "Say an item and a quantity",
     importHead: "Import from paper", impPriceList: "Price list", impInvoice: "Supplier invoice",
     kpiToday: "Today", kpiWeek: "This week", kpiMonth: "This month", bills: "bills",
     aiCheck: "Photo & recipe AI", aiReady: "Working", ai_missing: "No key set — the shop owner must add one",
@@ -119,7 +119,7 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
-    newBillReady: "புது பில், சொல்லுங்க", noBillYet: "இன்னும் பில் இல்லை", cashClosed: "முடிஞ்சது, ரொக்கம்", ownerOnly: "முதலாளி மட்டும்", listening: "கேட்குது", sayWake: "“விஷ்வா பில்”னு சொல்லுங்க", handsFree: "கை இல்லாம (ஹே சிட்டி)", handsFreeNo: "இதுக்கு Android Chrome வேணும்",
+    confirmReceived: "பணம் வந்திருக்கு — சரியா?", creditNotMatched: "இந்த பில்லுக்கு சரிபடல", editingBill: "பில் திருத்துறோம்", upiClosed: "முடிஞ்சது, UPI", receiptQueued: "ரசீது வரிசையில — கொஞ்ச நேரத்துல அனுப்பப்படும்", newBillReady: "புது பில், சொல்லுங்க", noBillYet: "இன்னும் பில் இல்லை", cashClosed: "முடிஞ்சது, ரொக்கம்", ownerOnly: "முதலாளி மட்டும்", listening: "கேட்குது", sayWake: "“சிந்தியா”னு சொல்லுங்க", handsFree: "கை இல்லாம (சிந்தியா)", handsFreeNo: "இதுக்கு Android Chrome வேணும்",
     notInList: "லிஸ்ட்ல இல்லை", whichItem: "இது எந்த ஐட்டம்?", saySoldName: "நீங்க வைச்சிருக்கிற பேரை சொல்லுங்க, இல்லைன்னா கீழ தேர்ந்தெடுங்க", pickFromList: "லிஸ்ட்ல தேர்ந்தெடு", itIsNew: "இது புதுசு", removeAlias: "இந்த பேரை நீக்கு",
     micDenied: "மைக் தடுக்கப்பட்டுருக்கு — அனுமதி கொடுங்க", handsFreeNet: "இதுக்கு இண்டர்நெட் வேணும்", handsFreeChrome: "Android Chrome-ல வேலை செய்யும்",
     hfCheck: "கை இல்லாம சோதனை", hfRunBtn: "ஓட்டு", hfCopy: "நகலெடு", copied: "நகலெடுத்தாச்சு",
@@ -224,7 +224,7 @@ const STRINGS = {
     alreadyEmpty: "ஏற்கனவே காலி", updated: "மாற்றப்பட்டது",
   },
   hi: {
-    newBillReady: "नया बिल, बोलिए", noBillYet: "अभी कोई बिल नहीं", cashClosed: "बंद, नकद", ownerOnly: "सिर्फ़ मालिक", listening: "सुन रहा हूँ", sayWake: "“विश्वा बिल” बोलिए", handsFree: "बिना हाथ (हे चिट्टी)", handsFreeNo: "इसके लिए Android Chrome चाहिए",
+    confirmReceived: "पैसा आया — पक्का?", creditNotMatched: "यह रकम इस बिल से मेल नहीं खाती", editingBill: "बिल बदल रहे हैं", upiClosed: "बंद, UPI", receiptQueued: "रसीद कतार में — जल्द भेजी जाएगी", newBillReady: "नया बिल, बोलिए", noBillYet: "अभी कोई बिल नहीं", cashClosed: "बंद, नकद", ownerOnly: "सिर्फ़ मालिक", listening: "सुन रहा हूँ", sayWake: "“सिंथिया” बोलिए", handsFree: "बिना हाथ (सिंथिया)", handsFreeNo: "इसके लिए Android Chrome चाहिए",
     notInList: "आपकी सूची में नहीं", whichItem: "यह कौन सा आइटम है?", saySoldName: "जिस नाम से बेचते हैं वह बोलिए, या नीचे चुनिए", pickFromList: "सूची से चुनें", itIsNew: "यह नया है", removeAlias: "यह नाम हटाएँ",
     micDenied: "माइक ब्लॉक है — अनुमति दें", handsFreeNet: "इसके लिए इंटरनेट चाहिए", handsFreeChrome: "Android Chrome में चलता है",
     hfCheck: "बिना हाथ जाँच", hfRunBtn: "चलाएँ", hfCopy: "कॉपी करें", copied: "कॉपी हो गया",
@@ -329,7 +329,7 @@ const STRINGS = {
     alreadyEmpty: "पहले से खाली", updated: "बदल गया",
   },
   ml: {
-    newBillReady: "പുതിയ ബില്ല്, പറയൂ", noBillYet: "ബില്ല് ഇല്ല", cashClosed: "അടച്ചു, പണം", ownerOnly: "ഉടമ മാത്രം", listening: "കേൾക്കുന്നു", sayWake: "“വിശ്വ ബിൽ” എന്ന് പറയൂ", handsFree: "കൈ വേണ്ട (ഹേയ് ചിട്ടി)", handsFreeNo: "Android Chrome വേണം",
+    confirmReceived: "പണം വന്നു — ശരിയാണോ?", creditNotMatched: "ഈ ബില്ലുമായി ചേരുന്നില്ല", editingBill: "ബിൽ തിരുത്തുന്നു", upiClosed: "അടച്ചു, UPI", receiptQueued: "രസീത് ക്യൂവിൽ — ഉടൻ അയയ്ക്കും", newBillReady: "പുതിയ ബില്ല്, പറയൂ", noBillYet: "ബില്ല് ഇല്ല", cashClosed: "അടച്ചു, പണം", ownerOnly: "ഉടമ മാത്രം", listening: "കേൾക്കുന്നു", sayWake: "“സിന്തിയ” എന്ന് പറയൂ", handsFree: "കൈ വേണ്ട (സിന്തിയ)", handsFreeNo: "Android Chrome വേണം",
     notInList: "ലിസ്റ്റിൽ ഇല്ല", whichItem: "ഇത് ഏത് സാധനം?", saySoldName: "നിങ്ങൾ വിൽക്കുന്ന പേര് പറയൂ, അല്ലെങ്കിൽ താഴെ തിരഞ്ഞെടുക്കൂ", pickFromList: "ലിസ്റ്റിൽ നിന്ന് എടുക്കൂ", itIsNew: "ഇത് പുതിയത്", removeAlias: "ഈ പേര് നീക്കുക",
     micDenied: "മൈക്ക് ബ്ലോക്ക് ആണ് — അനുവദിക്കൂ", handsFreeNet: "ഇതിന് ഇന്റർനെറ്റ് വേണം", handsFreeChrome: "Android Chrome-ൽ പ്രവർത്തിക്കും",
     hfCheck: "കൈ വേണ്ട പരിശോധന", hfRunBtn: "ഓടിക്കൂ", hfCopy: "പകർത്തുക", copied: "പകർത്തി",
@@ -434,7 +434,7 @@ const STRINGS = {
     alreadyEmpty: "ഇതിനകം ഒഴിഞ്ഞു", updated: "മാറ്റി",
   },
   te: {
-    newBillReady: "కొత్త బిల్లు, చెప్పండి", noBillYet: "బిల్లు లేదు", cashClosed: "ముగిసింది, నగదు", ownerOnly: "యజమాని మాత్రమే", listening: "వింటున్నా", sayWake: "“విశ్వ బిల్” అనండి", handsFree: "చేతులు వద్దు (హే చిట్టి)", handsFreeNo: "Android Chrome కావాలి",
+    confirmReceived: "డబ్బు వచ్చింది — సరియేనా?", creditNotMatched: "ఈ బిల్లుతో సరిపోలడం లేదు", editingBill: "బిల్లు మారుస్తున్నాం", upiClosed: "ముగిసింది, UPI", receiptQueued: "రసీదు క్యూలో — త్వరలో పంపబడుతుంది", newBillReady: "కొత్త బిల్లు, చెప్పండి", noBillYet: "బిల్లు లేదు", cashClosed: "ముగిసింది, నగదు", ownerOnly: "యజమాని మాత్రమే", listening: "వింటున్నా", sayWake: "“సింథియా” అనండి", handsFree: "చేతులు వద్దు (సింథియా)", handsFreeNo: "Android Chrome కావాలి",
     notInList: "మీ జాబితాలో లేదు", whichItem: "ఇది ఏ వస్తువు?", saySoldName: "మీరు అమ్మే పేరు చెప్పండి, లేదా కింద ఎంచుకోండి", pickFromList: "జాబితా నుండి ఎంచుకో", itIsNew: "ఇది కొత్తది", removeAlias: "ఈ పేరు తీసివేయి",
     micDenied: "మైక్ బ్లాక్ అయింది — అనుమతించండి", handsFreeNet: "దీనికి ఇంటర్నెట్ కావాలి", handsFreeChrome: "Android Chrome లో పనిచేస్తుంది",
     hfCheck: "చేతులు వద్దు తనిఖీ", hfRunBtn: "నడపండి", hfCopy: "కాపీ చేయి", copied: "కాపీ అయింది",
@@ -539,7 +539,7 @@ const STRINGS = {
     alreadyEmpty: "ఇప్పటికే ఖాళీ", updated: "మార్చాం",
   },
   kn: {
-    newBillReady: "ಹೊಸ ಬಿಲ್, ಹೇಳಿ", noBillYet: "ಬಿಲ್ ಇಲ್ಲ", cashClosed: "ಮುಗಿಯಿತು, ನಗದು", ownerOnly: "ಮಾಲೀಕರಿಗೆ ಮಾತ್ರ", listening: "ಕೇಳುತ್ತಿದೆ", sayWake: "“ವಿಶ್ವ ಬಿಲ್” ಎನ್ನಿ", handsFree: "ಕೈ ಬೇಡ (ಹೇ ಚಿಟ್ಟಿ)", handsFreeNo: "Android Chrome ಬೇಕು",
+    confirmReceived: "ಹಣ ಬಂದಿದೆ — ಸರಿಯೇ?", creditNotMatched: "ಈ ಬಿಲ್‌ಗೆ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ", editingBill: "ಬಿಲ್ ಬದಲಾಯಿಸುತ್ತಿದ್ದೇವೆ", upiClosed: "ಮುಗಿಯಿತು, UPI", receiptQueued: "ರಸೀದಿ ಸರತಿಯಲ್ಲಿ — ಶೀಘ್ರದಲ್ಲಿ ಕಳುಹಿಸಲಾಗುವುದು", newBillReady: "ಹೊಸ ಬಿಲ್, ಹೇಳಿ", noBillYet: "ಬಿಲ್ ಇಲ್ಲ", cashClosed: "ಮುಗಿಯಿತು, ನಗದು", ownerOnly: "ಮಾಲೀಕರಿಗೆ ಮಾತ್ರ", listening: "ಕೇಳುತ್ತಿದೆ", sayWake: "“ಸಿಂಥಿಯಾ” ಎನ್ನಿ", handsFree: "ಕೈ ಬೇಡ (ಸಿಂಥಿಯಾ)", handsFreeNo: "Android Chrome ಬೇಕು",
     notInList: "ನಿಮ್ಮ ಪಟ್ಟಿಯಲ್ಲಿ ಇಲ್ಲ", whichItem: "ಇದು ಯಾವ ವಸ್ತು?", saySoldName: "ನೀವು ಮಾರುವ ಹೆಸರು ಹೇಳಿ, ಅಥವಾ ಕೆಳಗೆ ಆರಿಸಿ", pickFromList: "ಪಟ್ಟಿಯಿಂದ ಆರಿಸಿ", itIsNew: "ಇದು ಹೊಸದು", removeAlias: "ಈ ಹೆಸರು ತೆಗೆ",
     micDenied: "ಮೈಕ್ ಬ್ಲಾಕ್ ಆಗಿದೆ — ಅನುಮತಿಸಿ", handsFreeNet: "ಇದಕ್ಕೆ ಇಂಟರ್ನೆಟ್ ಬೇಕು", handsFreeChrome: "Android Chrome ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ",
     hfCheck: "ಕೈ ಬೇಡ ಪರೀಕ್ಷೆ", hfRunBtn: "ಓಡಿಸಿ", hfCopy: "ನಕಲಿಸಿ", copied: "ನಕಲಾಗಿದೆ",

@@ -1,8 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A voice, drawn as what the shop actually sees: sound going in, a bill coming out.
+     Concentric arcs opening to the right are the listening half; the upright bars they
+     open onto are a receipt's lines. It has to survive being 48dp on a cracked screen in
+     daylight, so it is three strokes and no detail.
+
+     Adaptive icons put the safe zone in the middle 66dp of 108dp; everything here sits
+     inside a 72dp box centred at 54,54 so no launcher mask can clip it. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-  <group android:scaleX="1.9" android:scaleY="1.9" android:translateX="31.5" android:translateY="31.5">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M12,14c1.66,0 3,-1.34 3,-3V5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6C9,12.66 10.34,14 12,14zM17,11c0,2.76 -2.24,5 -5,5s-5,-2.24 -5,-5H5c0,3.53 2.61,6.43 6,6.92V21h2v-3.08c3.39,-0.49 6,-3.39 6,-6.92H17z"/>
-  </group>
+
+    <!-- the listening arcs -->
+    <path
+        android:pathData="M38,40 A18,18 0 0 1 38,68"
+        android:strokeColor="#5CE1C6" android:strokeWidth="5.5"
+        android:strokeLineCap="round" android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M30,32 A28,28 0 0 1 30,76"
+        android:strokeColor="#5CE1C6" android:strokeWidth="5.5"
+        android:strokeLineCap="round" android:fillColor="@android:color/transparent"
+        android:strokeAlpha="0.55" />
+
+    <!-- the bill: three lines, shortening, the way a total sits under items -->
+    <path android:pathData="M52,42 L78,42"
+        android:strokeColor="#FFFFFF" android:strokeWidth="5.5" android:strokeLineCap="round" />
+    <path android:pathData="M52,54 L78,54"
+        android:strokeColor="#FFFFFF" android:strokeWidth="5.5" android:strokeLineCap="round" />
+    <path android:pathData="M52,66 L68,66"
+        android:strokeColor="#5CE1C6" android:strokeWidth="5.5" android:strokeLineCap="round" />
 </vector>
