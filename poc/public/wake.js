@@ -32,6 +32,12 @@
  */
 
 (function handsFree() {
+  // Inside the Android app the doorbell is a keyword model on the device, and this whole
+  // file is the thing it replaced. Leaving it running would put a second recogniser and a
+  // second recorder on one microphone — the exact failure documented above, with the two
+  // halves now in different languages. native.js takes over from here.
+  if (window.Bolo) return;
+
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   // The trace from a real handset stops counting his voice within 60ms of him stopping,
   // so the wait afterwards is pure latency. Three seconds at a counter is an age; the

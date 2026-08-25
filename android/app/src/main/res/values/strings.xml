@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Bolo Bill</string>
+    <string name="payment_listener_label">Bolo Bill payment confirmation</string>
+    <string name="channel_voice">Listening</string>
+    <string name="notif_listening">Say “Hey Akhila” to start a bill</string>
+    <string name="notif_recording">Listening to your order…</string>
+    <string name="stop">Stop</string>
+</resources>

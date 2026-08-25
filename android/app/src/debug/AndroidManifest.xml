@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug only. Exporting the voice service lets `adb start-foreground-service` drive the
+     keyword model without going through the page — which is how the wake word gets tuned,
+     and how it gets tested at all before the shop's UI is reachable. The release manifest
+     keeps the service private; this overlay is never part of a shipped APK. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <service
+            android:name=".VoiceService"
+            android:exported="true"
+            tools:replace="android:exported" />
+    </application>
+</manifest>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The frame is padded to the system bars at runtime (MainActivity), not here: on a
+     bezel-less phone the status bar and the gesture pill both sit on top of the page
+     otherwise. The background matches the page's own theme-color so the padded strips read
+     as part of the app rather than as letterboxing. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/frame"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/page_background">
+    <WebView
+        android:id="@+id/web"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>

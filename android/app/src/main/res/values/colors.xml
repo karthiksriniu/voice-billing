@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors <meta name="theme-color"> in poc/public/index.html. Kept in sync at runtime
+         by reading that tag, so this value only has to be right for the first frame. -->
+    <color name="page_background">#0d1117</color>
+</resources>

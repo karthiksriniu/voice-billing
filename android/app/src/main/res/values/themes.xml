@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.BoloBill" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/page_background</item>
+        <!-- Drawn behind by the app itself; the bars are transparent so the padded strips
+             show the page background rather than a system grey. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
