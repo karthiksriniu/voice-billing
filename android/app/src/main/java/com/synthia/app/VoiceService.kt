@@ -47,9 +47,6 @@ class VoiceService : Service() {
 
     @Volatile private var alive = true
     @Volatile private var handsFree = false
-    /* Hands-free is on, but the app is not in front of the shopkeeper. The switch stays
-     * remembered; the microphone does not stay open. See MainActivity.onPause. */
-    @Volatile private var suspended = false
     @Volatile private var ptt = false
     @Volatile private var state = State.IDLE
 
@@ -75,17 +72,26 @@ class VoiceService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         transcriber = Transcriber(BuildConfig.WEB_BASE)
-        startForeground(NOTIF_ID, notification(getString(R.string.notif_listening)))
+        /* Never fatal. The platform can refuse this for reasons that are about WHEN it was
+         * called rather than anything being wrong — a background start, a missing
+         * permission — and an app that dies on the way to the background takes the
+         * shopkeeper's open bill with it. Give up the service instead. */
+        try {
+            startForeground(NOTIF_ID, notification(getString(R.string.notif_listening)))
+        } catch (e: Exception) {
+            Log.w(TAG, "startForeground refused: ${e.javaClass.simpleName}: ${e.message}")
+            Bus.emit("voice_error", "reason" to "foreground_refused")
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "action=${intent?.action}")
         when (intent?.action) {
-            ACTION_START -> { handsFree = true; suspended = false; remember(true); ensureWorker() }
+            ACTION_START -> { handsFree = true; remember(true); ensureWorker() }
             ACTION_STOP -> { handsFree = false; ptt = false; remember(false) }
-            ACTION_SUSPEND -> suspended = true
-            ACTION_RESUME -> { suspended = false; if (handsFree) ensureWorker() }
             ACTION_PTT_DOWN -> { ptt = true; ensureWorker() }
             ACTION_PTT_UP -> ptt = false
             ACTION_SHUTDOWN -> { stopSelf(); return START_NOT_STICKY }
@@ -131,7 +137,7 @@ class VoiceService : Service() {
         while (alive) {
             // Nothing holds the microphone while nobody has asked us to listen. The whole
             // consent story rests on this being literally true.
-            if ((!handsFree || suspended) && !ptt) {
+            if ((!handsFree || !Bus.appInForeground) && !ptt) {
                 closeMic()
                 if (state != State.IDLE) { state = State.IDLE; note(R.string.notif_listening) }
                 Thread.sleep(60)
@@ -166,6 +172,42 @@ class VoiceService : Service() {
                 }
 
                 State.CAPTURING -> {
+                    /* Still listening for the name, but only until he says something.
+                     *
+                     * Before this the keyword model was fed in exactly one state, so every
+                     * wake made the phone deaf to its own name for three seconds — and if
+                     * he had spoken, for the four-second continuation window after that.
+                     * Saying "Synthia" again in that gap did nothing visible, which is
+                     * precisely when a person says it again.
+                     *
+                     * It stops the moment real speech arrives, so the order itself never
+                     * reaches the keyword decoder and cannot re-trigger from inside a
+                     * sentence. While the clip is still empty there is nothing to protect,
+                     * and hearing the name again means he is starting over. */
+                    /* The name is listened for throughout the clip, not just while it is
+                     * empty.
+                     *
+                     * The first attempt at this gated on !heardSpeech, reasoning that once
+                     * he had started talking the order should be protected from the
+                     * decoder. On a real counter that gate is closed almost immediately:
+                     * the VAD marks room noise as speech within a window or two, and the
+                     * phone went deaf again — which is the bug, back by another route.
+                     *
+                     * What he means by saying the name mid-clip is unambiguous: start
+                     * over. So nothing is thrown away — whatever he already said is
+                     * finished and sent, and a fresh capture opens. If a word inside an
+                     * order ever misfires as the name, the cost is an order split across
+                     * two clips, and both halves bill to the same bill anyway. */
+                    if (kws.accept(floats.copyOf(n)) != null) {
+                        if (heardSpeech && now - clipStartedAt >= MIN_CLIP_MS) {
+                            endCapture(final = true)
+                            beginCapture(fromWake = true)
+                        } else {
+                            restartCapture()
+                        }
+                        continue
+                    }
+
                     for (i in 0 until n) clip.add(window[i])
                     vad.acceptWaveform(floats.copyOf(n))
                     if (vad.isSpeechDetected()) { lastSpeechAt = now; heardSpeech = true }
@@ -181,6 +223,22 @@ class VoiceService : Service() {
                 }
 
                 State.HOLDING -> {
+                    /* The name outranks the continuation.
+                     *
+                     * This window exists to catch the second half of an order split by a
+                     * pause, and it decided that ANY speech in it was more of the order.
+                     * So a repeated "Synthia" was recorded as a bill line, sent to the
+                     * recogniser, and came back as an item — while the wake it was actually
+                     * meant to be did nothing. Three of those chained up per hold, which is
+                     * why a run of failed attempts arrived all at once afterwards.
+                     *
+                     * Checking the name first makes it unambiguous: hearing it means a new
+                     * utterance, not more of the last one. */
+                    if (kws.accept(floats.copyOf(n)) != null) {
+                        beginCapture(fromWake = true)
+                        continue
+                    }
+
                     vad.acceptWaveform(floats.copyOf(n))
                     if (vad.isSpeechDetected() && chain < MAX_CHAIN) {
                         resumeCapture()
@@ -203,6 +261,7 @@ class VoiceService : Service() {
     private var lastBeat = 0L
 
     private fun beginCapture(fromWake: Boolean) {
+        Log.i(TAG, "beginCapture fromWake=$fromWake prevState=$state")
         state = State.CAPTURING
         pttWasTheTrigger = !fromWake
         chain = 1
@@ -219,7 +278,22 @@ class VoiceService : Service() {
         Bus.emit("capture", "state" to "start", "wake" to fromWake)
     }
 
+    /* He said the name again before saying anything else. Start the clip over rather than
+     * treating the repeat as content — the old clip holds nothing but room noise. */
+    private fun restartCapture() {
+        Log.i(TAG, "restartCapture — name heard again before any speech")
+        clip.clear()
+        clipStartedAt = System.currentTimeMillis()
+        lastSpeechAt = clipStartedAt
+        heardSpeech = false
+        vad.reset()
+        kws.reset()
+        feedback(880, 90)
+        Bus.emit("capture", "state" to "start", "wake" to true)
+    }
+
     private fun resumeCapture() {
+        Log.i(TAG, "resumeCapture chain=${chain + 1}")
         state = State.CAPTURING
         chain++
         clip.clear()
@@ -296,6 +370,13 @@ class VoiceService : Service() {
             if (r.state != AudioRecord.STATE_INITIALIZED) { r.release(); return false }
             r.startRecording()
             record = r
+            /* The stream was closed and reopened across a gap of unknown length — the app
+             * was backgrounded, or hands-free was off. A streaming zipformer carries left
+             * context, and splicing two moments together leaves it decoding against audio
+             * that is minutes old. Cheap to drop, and it is the first detection after every
+             * resume that would otherwise pay for it. */
+            if (this::kws.isInitialized) kws.reset()
+            if (this::vad.isInitialized) vad.reset()
             if (state == State.IDLE) state = State.LISTENING
             true
         } catch (e: SecurityException) {
@@ -370,6 +451,7 @@ class VoiceService : Service() {
     )
 
     override fun onDestroy() {
+        running = false
         alive = false
         worker?.join(1000)
         closeMic()
@@ -402,6 +484,10 @@ class VoiceService : Service() {
          *  see into, and "nothing happened" has too many causes to guess between. */
         private val DEBUG_AUDIO = BuildConfig.DEBUG
 
+        /** Set while the service instance exists, so the Activity does not re-start it. */
+        @Volatile var running = false
+            private set
+
         private const val PREFS = "voice"
         private const val KEY_HANDS_FREE = "hands_free"
 
@@ -409,8 +495,6 @@ class VoiceService : Service() {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HANDS_FREE, false)
 
         const val ACTION_START = "start"
-        const val ACTION_SUSPEND = "suspend"
-        const val ACTION_RESUME = "resume"
         const val ACTION_STOP = "stop"
         const val ACTION_PTT_DOWN = "ptt_down"
         const val ACTION_PTT_UP = "ptt_up"

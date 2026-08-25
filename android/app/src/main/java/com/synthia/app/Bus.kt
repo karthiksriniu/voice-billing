@@ -23,6 +23,17 @@ object Bus {
     /** Whether the page has asked for hands-free. Survives a permission prompt. */
     @Volatile var handsFreeWanted: Boolean = false
 
+    /* Is the app actually in front of the shopkeeper?
+     *
+     * This is a plain field and not an Intent, and that is the entire point. It used to be
+     * ACTION_SUSPEND sent from Activity.onPause via startForegroundService — which is a
+     * foreground-service start issued at the exact moment the app stops being foreground.
+     * Android 12+ refuses that, startForeground() then threw
+     * ForegroundServiceStartNotAllowedException inside onCreate, and the app died every
+     * time the shopkeeper switched away. The service and the Activity share a process;
+     * they never needed the system to carry a boolean between them. */
+    @Volatile var appInForeground: Boolean = false
+
     private val main = Handler(Looper.getMainLooper())
 
     fun emit(event: String, payload: JSONObject = JSONObject()) {

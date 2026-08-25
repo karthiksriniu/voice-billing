@@ -183,18 +183,20 @@ class MainActivity : AppCompatActivity() {
         // anything else turns hands-free on — which left the microphone off for good after
         // the first time the shopkeeper switched away and came back.
         Bus.handsFreeWanted = VoiceService.handsFreeEnabled(this)
-        if (Bus.handsFreeWanted &&
+        Bus.appInForeground = true
+        // Starting a foreground service is only legal from the foreground, which is
+        // exactly where we are. Resuming needs no message at all — the loop reads the flag.
+        if (Bus.handsFreeWanted && !VoiceService.running &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED) {
-            VoiceService.send(this, VoiceService.ACTION_RESUME)
+            VoiceService.send(this, VoiceService.ACTION_START)
         }
     }
 
     override fun onPause() {
         super.onPause()
-        // Not ACTION_STOP: that would forget the switch. This suspends listening while
-        // leaving hands-free on, so it comes straight back when he returns.
-        VoiceService.send(this, VoiceService.ACTION_SUSPEND)
+        // A flag, not an Intent. See Bus.appInForeground for what the Intent cost us.
+        Bus.appInForeground = false
     }
 
     override fun onDestroy() {

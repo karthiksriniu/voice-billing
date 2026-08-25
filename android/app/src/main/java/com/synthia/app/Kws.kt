@@ -106,23 +106,56 @@ class Kws(assets: AssetManager) {
         private const val DIR = "kws"
         const val SAMPLE_RATE = 16000
 
-        /* Swept against the 24 positives and 36 negatives. This name has headroom the
-         * previous two did not: it is 24/24 with zero false accepts here, and still 23/24
-         * with zero at the much looser (1.0, 0.35). The permissive end is chosen on
-         * purpose — real audio is harder than synthesized audio, and the measured false
-         * accepts are the thing we have room to spend. */
+        /* Swept against positives at four noise levels and 72 negatives. Loosening these
+         * does NOT buy noise robustness — 5 dB went 3/24 to 4/24 across the whole usable
+         * range while false accepts started appearing, which is what sent the fix to the
+         * keyword list instead. Left at the permissive end of the clean-audio sweep. */
         const val KEYWORD_SCORE = 2.0f
         const val KEYWORD_THRESHOLD = 0.15f
 
-/** What the model emits for "Synthia". Harvested, not spelled — see above. */
+/** What the model emits for the name. Harvested, not spelled — see above.
+         *
+         * Three groups, and the second two exist because clean synthesized speech turned
+         * out to be a bad proxy for a shop:
+         *
+         *   CLEAN — what the model emits in quiet. Enough on its own at 20 dB SNR and
+         *   almost useless at 5 dB, where "Synthia" alone scored 3 of 24.
+         *
+         *   NOISY — harvested by running the same clips back through the recogniser with
+         *   pink noise mixed in. Only the name-like decodes are here: in noise the model
+         *   also emits THANK YOU (64 times), AND HERE, INDEED and INDIA, and registering
+         *   any of those would wake the phone every time a customer was thanked. Adding
+         *   just the three safe ones took 5 dB from 3/24 to 9/24.
+         *
+         *   CARRIER — what it emits for "Hey Synthia". A carrier word buys back nearly
+         *   everything short names lose in noise: 14 of 24 at 5 dB against 3. Registering
+         *   these costs nothing when he says the bare name, so BOTH work — and in a loud
+         *   shop the longer one is the one that answers.
+         *
+         * All 17 measured together against 72 negatives (shop speech and twelve Tamil
+         * given names): zero false accepts.
+         */
         val KEYWORDS = listOf(
-            "▁S Y N TH IA",       // x17 of 24 — the model transcribes the name outright
-            "▁C IN TI ER",        // x2
-            "▁S IN VI A",         // x1
-            "▁S IN TE ▁A IR",     // x1
-            "▁S IN K I ER",       // x1
-            "▁S Y N TE ER",       // x1
-            "▁S IN CE RE",        // x1
+            // clean
+            "▁S Y N TH IA",        // x17 of 24 — the model transcribes the name outright
+            "▁C IN TI ER",
+            "▁S IN VI A",
+            "▁S IN TE ▁A IR",
+            "▁S IN K I ER",
+            "▁S Y N TE ER",
+            "▁S IN CE RE",
+            // noisy
+            "▁S Y ND A",
+            "▁T EN TH IA",
+            "▁S IN P I ER",
+            // carrier — "Hey Synthia"
+            "▁HE Y ▁S Y N TH IA",
+            "▁A ▁S Y N TH IA",
+            "▁THEY ▁S Y N TH IA",
+            "▁HAS ▁S Y N TH IA",
+            "▁BA S IN TH IA",
+            "▁A ▁S Y N TH ▁HERE",
+            "▁CA SE ▁IN ▁T I ER",
         ).joinToString("\n")
     }
 }

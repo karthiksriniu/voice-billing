@@ -81,6 +81,36 @@ threshold 0.15 — and still 23/24 with zero false accepts at the much looser (1
 The permissive end was chosen deliberately: real audio is harder than synthesized audio, and
 measured false accepts are the budget we have to spend.
 
+### Clean audio was a bad proxy for a shop
+
+The clean-audio numbers above are true and were nearly the wrong thing to measure. Mixing
+pink noise into the same clips and re-running:
+
+| keyword set | clean | 20 dB | 10 dB | **5 dB** | false accepts |
+|---|---|---|---|---|---|
+| "Hey Akhila" (previous) | 24/24 | 23 | 20 | **15** | 0/72 |
+| "Synthia", clean variants only | 24/24 | 24 | 18 | **3** | 0/72 |
+| "Synthia" + noisy variants | 24/24 | 24 | 18 | **9** | 0/72 |
+| "Hey Synthia" (carrier said) | 24/24 | 24 | 21 | **14** | 0/72 |
+
+A short name wins in quiet and falls off a cliff in noise, which is the opposite of what
+this product needs: `CLAUDE.md` specifies 70–80 dB(A). Two things were done about it, and a
+third was rejected.
+
+**Tuning does not fix it.** Loosening score and threshold across the whole usable range
+moved 5 dB from 3/24 to 4/24 while false accepts started appearing. The fix had to be the
+keyword list.
+
+**Noisy harvesting.** Running the degraded clips back through the recogniser and keeping
+what it emits took 5 dB from 3/24 to 9/24 for free. Only the name-like decodes were taken:
+in noise the model also emits `THANK YOU` (64 times), `AND HERE`, `INDEED` and `INDIA`, and
+registering any of those would wake the phone every time a customer was thanked. That is
+the whole reason this is a curated harvest and not a script.
+
+**A carrier word.** "Hey Synthia" recovers almost everything the short name loses — 14/24 at
+5 dB against 3. Both are registered, so the bare name still works; in a loud shop the longer
+one is the one that answers. Nothing about the branding changes.
+
 ### A name is not a name-shaped string
 
 A single short word risks colliding with people's names, so that was measured too. The
@@ -188,7 +218,11 @@ be tellable apart.
 
 ## Known gaps
 
-- Wake word tuned only against synthesized speech (above).
+- Wake word tuned only against synthesized speech and synthetic noise (above). No real
+  shop recording has been through any of it.
+- The state machine's re-trigger behaviour (saying the name again mid-capture) is verified
+  by construction but not yet acoustically: the test rig could not get enough signal into
+  the phone to fire the keyword model at all. Needs a human voice at the handset.
 - The SMS receiver's classification rules are checked against 12 representative bank
   messages, but the receiver itself has never fired on a real SMS — adb cannot inject one
   on a physical device.
