@@ -406,7 +406,7 @@ function setTalk(mode) {
   } else if (mode === "busy") {
     l.innerHTML = t("working");
   } else if (window.handsFreeActive && window.handsFreeActive()) {
-    l.innerHTML = `${t("sayChitti")}<br><small>${t("holdToSpeak")}</small>`;
+    l.innerHTML = `${t("sayWake")}<br><small>${t("holdToSpeak")}</small>`;
   } else {
     l.innerHTML = t("holdToSpeak");
   }
@@ -502,7 +502,7 @@ talk.addEventListener("pointercancel", release);
 talk.addEventListener("lostpointercapture", release);
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
 
-/* The same press-to-talk, on the payment screen. "Chitti, cash paid" and "Chitti, send
+/* The same press-to-talk, on the payment screen. "Vishwa Bill, cash paid" and "Vishwa Bill, send
    receipt" were always commands for THIS screen; until now the only way to reach them was
    hands-free, which left anyone without the wake word tapping their way through. */
 const payTalk = $("payTalk");
@@ -1607,7 +1607,7 @@ function stamp(iso) {
 
 /* ---------- stock ---------- */
 
-/* "Chitti, received twenty kilo sugar" and "Chitti, count sugar eight kilo". The same
+/* "Vishwa Bill, received twenty kilo sugar" and "Vishwa Bill, count sugar eight kilo". The same
    grammar that reads a bill reads these — an item and a quantity is an item and a
    quantity, and only the verb differs. */
 async function moveStock(data, reason) {
@@ -2547,7 +2547,7 @@ function openWhatsApp(mobile, spoken) {
   return true;
 }
 
-/* "Chitti, send receipt" — and if the customer was never named, "Chitti, phone number
+/* "Vishwa Bill, send receipt" — and if the customer was never named, "Vishwa Bill, phone number
    98400 12345, send receipt" in one breath. The number is taken from whichever of those
    the shopkeeper actually gave: the one just spoken, the one that opened the bill, or the
    one the customer typed on the payment screen.
@@ -2576,7 +2576,7 @@ $("docBt").onclick = () => withBusy($("docBt"), async () => {
   await window.btPrint(state.doc.text);
 });
 
-/* "Chitti, cash received" — the shopkeeper stating a fact they witnessed. It is the only
+/* "Vishwa Bill, cash received" — the shopkeeper stating a fact they witnessed. It is the only
    payment we will ever record from the handset: a UPI settlement has to be confirmed
    server-side by the provider, never inferred from this phone. */
 async function cashReceived() {
@@ -2594,7 +2594,7 @@ async function cashReceived() {
   closeSale(digits($("custMobile").value).length >= 10 ? digits($("custMobile").value) : "");
 }
 
-/* "Chitti, add item lemonade 50 rupees". Prices are the owner's to set — a worker who
+/* "Vishwa Bill, add item lemonade 50 rupees". Prices are the owner's to set — a worker who
    bills all day must not be able to reprice the shop by speaking. */
 async function addItemByVoice(data) {
   if (state.role !== "owner") { speak(t("ownerOnly")); return; }

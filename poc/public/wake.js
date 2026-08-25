@@ -1,4 +1,4 @@
-/* Hands-free: "Chitti, two kilo sugar."
+/* Hands-free: "Vishwa Bill, two kilo sugar."
  *
  * The shopkeeper is weighing with one hand and passing goods with the other. Push-to-talk
  * already beats paper, but only if a hand is free — so the phone gets a name, and answers
@@ -88,7 +88,10 @@
   let chain = 0;                // clips since the wake word, so a runaway is bounded
   let rehearsing = false;       // the check drives capture by hand; it must not continue
   let lastAudioAt = 0, heartbeat = null;
-  let words = ["chitti", "chithi", "chitty", "chiti"];
+  // Two tokens on purpose — see the pack's _comment_wake. A bare "Vishwa" is a name
+  // stem and wakes on Vishal, Vishnu, Vishwas and Vishwanath; paired with "bill" it
+  // is clean. The pack overrides this at startup; this is only the offline fallback.
+  let words = ["vishwa bill", "viswa bill", "vishva bill", "vishwabill"];
 
   const srLang = () => ({ en: "en-IN", ta: "ta-IN", hi: "hi-IN", ml: "ml-IN",
                           te: "te-IN", kn: "kn-IN" })[state.shop && state.shop.lang] || "en-IN";
@@ -130,13 +133,12 @@
     return 1 - prev[b.length] / Math.max(a.length, b.length);
   }
 
-  /* Chrome treats a short utterance as a whole sentence. Say "Hey Chitti" and it can
-     finalise on "hey", end the session, and hand "chitti" to the NEXT one — or lose it in
-     the gap between them. So adding the carrier made things worse, not better, which is
-     exactly what was reported.
+  /* Chrome treats a short utterance as a whole sentence. Say "Vishwa Bill" and it can
+     finalise on "vishwa", end the session, and hand "bill" to the NEXT one — or lose it in
+     the gap between them. A two-word wake phrase depends on this being handled.
 
      The fix is to stop treating a session as a unit. Recent transcripts are kept for a
-     couple of seconds and matched as one running string, so "hey" and "chitti" arriving
+     couple of seconds and matched as one running string, so "vishwa" and "bill" arriving
      separately still add up to the name. */
   const MEMORY_MS = 2500;
   let recent = [];
@@ -159,8 +161,9 @@
     const clean = text.toLowerCase().replace(/[.,!?;:"'’]/g, " ").replace(/\s+/g, " ").trim();
     if (!clean) return false;
     const toks = clean.split(" ");
-    // "hey chitti" and a bare "chitti" are the same summons; the carrier only ever adds
-    // audio for the recogniser to work with, so it is matched with and without.
+    // Windows of one and two words. The wake phrase is two words, so it is the pairs that
+    // carry it — but single-word windows still matter, because the recogniser sometimes
+    // returns the whole thing run together as "vishwabill".
     const windows = [];
     for (let i = 0; i < toks.length; i++) {
       windows.push(toks[i]);
@@ -480,7 +483,7 @@
       rec.continuous = true;
       rec.interimResults = true;
       // Chrome's first guess at an unfamiliar name is often rubbish — it returned "HD"
-      // for "Hey Chitti" — but the runners-up are frequently closer. They cost nothing to
+      // for the wake phrase — but the runners-up are frequently closer. They cost nothing to
       // ask for and are checked alongside it.
       rec.maxAlternatives = 5;
       rec.lang = srLang();
@@ -589,7 +592,7 @@
 
   function armedLabel() {
     $("talkLabel").innerHTML = on
-      ? `${t("sayChitti")}<br><small>${t("holdToSpeak")}</small>`
+      ? `${t("sayWake")}<br><small>${t("holdToSpeak")}</small>`
       : t("holdToSpeak");
   }
 
@@ -710,7 +713,7 @@
         const alts = alternatives(e.results[e.results.length - 1]);
         const txt = alts.join(" | ");
         // Matched exactly as the live path does — piece alone, then the running memory,
-        // because Chrome splits "hey chitti" across sessions more often than not.
+        // because Chrome splits a two-word wake phrase across sessions more often than not.
         const hit = alts.some((a) => heardName(a) || heardName(remember(a)));
         if (hit) { heard++; forget(); }
         say(`session ${sessions}: heard "${txt}"${
@@ -721,7 +724,7 @@
       try { r.start(); } catch (err) { say(`session ${sessions}: start threw ${err.name}`); }
       window.__hfRec = r;
     };
-    say('SAY "HEY CHITTI" NOW — listening for 12 seconds');
+    say('SAY "VISHWA BILL" NOW — listening for 12 seconds');
     spin();
 
     await new Promise((res) => setTimeout(res, 12000));

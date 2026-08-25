@@ -862,20 +862,20 @@
     "फोन नंबर",
     "मोबाइल नंबर"
   ],
-  "_comment_wake": "What the phone answers to. Every entry is matched FUZZILY, so a short or ordinary English word here becomes a wake word for half the sentences in the shop — \"hd\" and \"hedy\" were added to catch one handset's mistranscription and fired on \"hey\", \"ready\" and \"head\" instead. Keep entries long, distinctive, and unlike anything a customer would say. tests/test_wake.js is the guard.",
+  "_comment_wake": "What the phone answers to. Every entry is matched FUZZILY against one- and two-word windows, which has two consequences. A short or ordinary word here becomes a wake word for half the sentences in the shop — \"hd\" and \"hedy\" were added to catch one handset's mistranscription and fired on \"hey\", \"ready\" and \"head\" instead. And an entry of three words or more can never match anything, because no window is that long. Keep entries to two tokens, long, and unlike anything a customer would say. tests/test_wake.js is the guard.",
   "wake": [
-    "chithi",
-    "chiti",
-    "chitti",
-    "chitty",
-    "hey chithi",
-    "hey chiti",
-    "hey chitti",
-    "hey chitty",
-    "चिट्टि",
-    "चिट्टी",
-    "हे चिट्टी",
-    "हेय चिट्टी"
+    "vishva bill",
+    "vishwa bell",
+    "vishwa bil",
+    "vishwa bill",
+    "vishwa build",
+    "vishwa pill",
+    "vishwabill",
+    "viswa bill",
+    "wishwa bill",
+    "विश्व बिल",
+    "विश्वा बिल",
+    "विश्वा बिल्"
   ],
   "_comment_chatter": "Greetings, acknowledgements and hesitation. A fragment made only of these was not addressed to the shop, so it is discarded instead of raising a card asking whether to add it to the price list. Not `fillers`: fillers are stripped out of a sentence that IS an order, these decide it never was one.",
   "chatter": [

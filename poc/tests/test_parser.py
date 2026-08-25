@@ -520,7 +520,7 @@ def run():
         pl = Parser(Lang(code), _C6(MATRIX_CAT))
         for cmd, aliases in sorted(pack["commands"].items()):
             for a in aliases:
-                for prefix in ("", "chitti ", "சிட்டி "):
+                for prefix in ("", "vishwa bill ", "விஷ்வா பில் "):
                     r = pl.parse(prefix + a)
                     check(f"{code} {prefix}{a}", r.command == cmd,
                           f"-> {r.command}/{r.mode_switch} (want {cmd})")

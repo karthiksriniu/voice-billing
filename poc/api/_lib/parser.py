@@ -398,7 +398,7 @@ class Parser:
         if not text:
             return res
 
-        # "Chitti, two kilo sugar" — the name is how the shopkeeper gets the phone's
+        # "Vishwa Bill, two kilo sugar" — the name is how the shopkeeper gets the phone's
         # attention with both hands full. It carries no meaning past that, and left in
         # place it would be matched against the catalog like any other word, so it comes
         # out first. Anywhere in the utterance, not just the front: the recorder often

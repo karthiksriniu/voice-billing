@@ -5,11 +5,17 @@
  * cost of that is invisible from inside the list: an entry only has to be *near* an
  * ordinary word for the shop to ring the doorbell all day.
  *
- * That is not hypothetical. "hd" and "hedy" were added because one handset transcribed
- * "Hey Chitti" as "HD". At the 0.7 bar "hedy" sits 0.75 from "hey", 0.80 from "ready",
+ * That is not hypothetical. "hd" and "hedy" were added because one handset transcribed the
+ * old wake word as "HD". At the 0.7 bar "hedy" sits 0.75 from "hey", 0.80 from "ready",
  * "heavy" and "head" — so the phone woke on half the sentences spoken near it, recorded
  * shop noise, and beeped on and off all day. The shopkeeper's report was "it keeps
  * activating and deactivating and I have to switch it off and on".
+ *
+ * The wake phrase is now "Vishwa Bill", and the reason it is two words is measured, not
+ * stylistic: a bare "Vishwa" is a name stem, so Vishal, Vishnu, Vishwas, Vishwanath and
+ * Bishwa all land inside the bar, and a carrier does not rescue it because the whole
+ * window is compared — "hey vishal" scores 0.80 against "hey vishwa". Those names are
+ * negatives below and must stay there.
  *
  * So the guard is on the DATA, not the algorithm: no entry in any pack may sit within the
  * matching threshold of something a person says at a counter. `ratio` is copied from
@@ -74,6 +80,14 @@ const NOT_A_SUMMONS = [
   "hey", "hey boss", "hey give me two tea", "ok hey", "yes hey", "hello hey",
   "ready", "are you ready", "heavy", "head", "heady bill", "hd", "h d", "hd ready",
   "city", "city bus", "kitty", "heat", "hit", "had", "hold", "hand",
+  // Customers, called across a counter. This is what rules out a bare personal name.
+  "vishal", "vishwas", "vishnu", "vishwanath", "viswanathan", "bishwa", "vishesh",
+  "hey vishal", "hey vishwas", "hey vishnu", "hey vishwanath", "hey bishwa",
+  "வishal", "விஷால்", "விஷ்ணு", "விஸ்வநாதன்",
+  // "bill" is said constantly; only the pair may wake it.
+  "bill", "bill kodu", "bill please", "bill podu", "final bill", "bill amount",
+  "the bill", "my bill", "give me the bill", "bill ready", "பில்", "பில் கொடு",
+  "wish", "fish", "dish", "world", "build", "still bill", "small bill",
   "two kilo sugar", "one filter coffee", "thank you", "okay sir", "how much is this",
   "give me change", "anna", "enna venum", "vanakkam", "sari sari", "ille ille",
   "நன்றி", "சரி", "என்ன வேணும்", "ஒரு டீ",
@@ -84,12 +98,14 @@ const NOT_A_SUMMONS = [
    Reported rather than failed, because the fix is a different wake word, not a different
    list: "Chitti" is two syllables and sits one edit from several ordinary words. This
    block is the standing evidence for changing it. */
-const KNOWN_COLLISIONS = ["chatty", "cheddi", "chitta"];
+const KNOWN_COLLISIONS = ["world bill", "vishwa billa", "wish bill"];
 
 /* Must still wake, in every spelling the recogniser is known to produce. */
 const IS_A_SUMMONS = [
-  "chitti", "hey chitti", "chithi", "chitty", "hey chitty", "chiti",
-  "hey chitti two kilo sugar", "um hey chitti",
+  "vishwa bill", "viswa bill", "vishva bill", "vishwabill", "vishwa bil",
+  "wishwa bill", "vishwa build", "vishwa pill",
+  // Said naturally, and said mid-sentence — both have to work.
+  "vishwa bill podu", "vishwa, bill", "um vishwa bill", "vishwa bill two kilo sugar",
 ];
 
 const packs = fs.readdirSync(LANG_DIR).filter((f) => f.endsWith(".json")).sort();
@@ -106,6 +122,11 @@ for (const file of packs) {
     check(`${code}: "${w}" is long enough to fuzzy-match safely`,
           w.replace(/\s/g, "").length >= MIN_ENTRY_LEN,
           `(${w.replace(/\s/g, "").length} chars, need ${MIN_ENTRY_LEN})`);
+    // And the other end of it. heardName() only ever builds one- and two-word windows, so
+    // a three-word entry is not a strict wake phrase — it is a dead one, matched by
+    // nothing, failing silently and for ever.
+    check(`${code}: "${w}" is at most two words`, w.trim().split(/\s+/).length <= 2,
+          `(${w.trim().split(/\s+/).length} words — no window is that long)`);
   }
 
   for (const phrase of NOT_A_SUMMONS) {
