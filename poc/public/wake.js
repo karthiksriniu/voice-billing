@@ -60,7 +60,14 @@
 
   // A runaway would otherwise be unbounded: a loud room means every hold hears speech and
   // starts another clip. The cap on the clip bounds one of them and this bounds the chain.
-  const MAX_CHAIN = 8;
+  //
+  // Eight was chosen for the shopkeeper's benefit — room to dictate a long order in pieces
+  // — and read the situation from only one end. A FALSE wake gets the same generosity, and
+  // there it means eight transcriptions of shop noise and the microphone held for the best
+  // part of a minute, off a doorbell nobody rang. Three still carries an order split by two
+  // pauses, which covers what a counter actually sounds like, and costs a quarter as much
+  // when the doorbell is wrong.
+  const MAX_CHAIN = 3;
 
   const MAX_CLIP_MS = 12000;    // the worst case when the room wins, kept short
   const GIVE_UP_AFTER = 4;      // consecutive failed starts before we stop and say so

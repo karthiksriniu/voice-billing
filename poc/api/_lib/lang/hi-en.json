@@ -862,16 +862,12 @@
     "फोन नंबर",
     "मोबाइल नंबर"
   ],
-  "_comment_wake": "Hands-free trigger. The shopkeeper's hands are full, so the phone is addressed by name. Stripped before parsing so it can never become an item.",
+  "_comment_wake": "What the phone answers to. Every entry is matched FUZZILY, so a short or ordinary English word here becomes a wake word for half the sentences in the shop — \"hd\" and \"hedy\" were added to catch one handset's mistranscription and fired on \"hey\", \"ready\" and \"head\" instead. Keep entries long, distinctive, and unlike anything a customer would say. tests/test_wake.js is the guard.",
   "wake": [
     "chithi",
     "chiti",
     "chitti",
     "chitty",
-    "h d",
-    "hd",
-    "heady",
-    "hedy",
     "hey chithi",
     "hey chiti",
     "hey chitti",

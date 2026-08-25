@@ -105,6 +105,7 @@ print(hits[-1] if hits else "")
     .venv/bin/python tests/test_reorder.py
     .venv/bin/python tests/test_orders.py
     node tests/test_units.js
+    node tests/test_wake.js
     ;;
   login)  exec gh auth login ;;
   *) echo "usage: ./bolo {dev|staging|deploy|env [VAR]|test|login}"; exit 1 ;;
