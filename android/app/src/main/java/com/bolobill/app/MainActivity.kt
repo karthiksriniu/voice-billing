@@ -5,7 +5,9 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
+import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -62,7 +64,15 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             // The page no longer asks for a microphone, so nothing here needs to grant one.
         }
-        ui.web.webChromeClient = WebChromeClient()
+        /* The page's console into logcat. On a sideloaded pilot there is no devtools and
+         * no way to ask a shopkeeper what the browser said, so this is the only channel
+         * between a page-side failure and anybody who can fix it. */
+        ui.web.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                Log.i("BoloWeb", "${m.message()}  [${m.sourceId()}:${m.lineNumber()}]")
+                return true
+            }
+        }
         ui.web.addJavascriptInterface(WebBridge(this), "Bolo")
         ui.web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {

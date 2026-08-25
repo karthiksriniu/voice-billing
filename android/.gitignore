@@ -9,3 +9,4 @@ app/libs/*.aar
 app/src/main/assets/kws/*.onnx
 app/src/main/assets/kws/tokens.txt
 .kotlin/
+dist/
