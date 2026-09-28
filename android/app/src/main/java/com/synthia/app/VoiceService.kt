@@ -297,7 +297,9 @@ class VoiceService : Service() {
              * is on — an acknowledgement playing into the microphone mid-harvest would be
              * collected as though somebody had said it. */
             if (harvesting) {
-                val h = harvester ?: Harvester(assets).also { harvester = it }
+                val h = harvester ?: Harvester(
+                    assets, java.io.File(getExternalFilesDir(null), "harvest.tsv")
+                ).also { harvester = it }
                 h.accept(floats.copyOf(m))
                 continue
             }
@@ -701,7 +703,20 @@ class VoiceService : Service() {
      * An empty sampleRates array means the device did not say, which is common and means
      * "anything reasonable" — so it is treated as obliging, not as broken. */
     private fun chooseRate(dev: AudioDeviceInfo?): Int {
-        val rates = try { dev?.sampleRates } catch (e: Exception) { null }
+        /* The handset's own microphone is opened at SAMPLE_RATE and always has been.
+         *
+         * It reports {48000} in its supported rates, because that is what the hardware runs
+         * at — but AudioRecord has never had any difficulty giving us 16 kHz from it, the
+         * platform resamples with the vendor's own tuning, and every measurement behind this
+         * app was taken through that path. Reading its rate list and "helpfully" switching it
+         * to our own resampler changed the one input that was not broken: the phone-mic
+         * harvest ran at factor=1 and the very next launch came up factor=3.
+         *
+         * The problem this negotiation exists for was never the built-in microphone. It was
+         * a USB device that reports 48 kHz / 24-bit, cannot do 16 kHz, and made the audio
+         * policy manager say so — so that is the only case that gets the native-rate path. */
+        if (dev == null || dev.type == AudioDeviceInfo.TYPE_BUILTIN_MIC) return SAMPLE_RATE
+        val rates = try { dev.sampleRates } catch (e: Exception) { null }
         if (rates == null || rates.isEmpty()) return SAMPLE_RATE
         if (rates.contains(SAMPLE_RATE)) return SAMPLE_RATE
         val usable = rates.filter { it > SAMPLE_RATE && it % SAMPLE_RATE == 0 && it <= MAX_RATE }

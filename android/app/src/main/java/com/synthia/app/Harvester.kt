@@ -37,7 +37,7 @@ import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
  *
  * Output is a logcat line per utterance, in exactly the format keywords.txt takes.
  */
-class Harvester(assets: AssetManager) {
+class Harvester(assets: AssetManager, private val out: java.io.File?) {
 
     private val recognizer: OnlineRecognizer
     private var stream: OnlineStream
@@ -100,6 +100,18 @@ class Harvester(assets: AssetManager) {
         seen[tokens] = n
         val lvl = (peak * 32768f).toInt()
         peak = 0f
+        /* The file is the authoritative copy, and it exists because logcat is not.
+         *
+         * Keywords are BPE token sequences and the word-start mark is U+2581, a three-byte
+         * character that adb logcat drops on the floor: the first Sahana harvest came back
+         * with zero of them in four thousand lines. The marks were recoverable that time —
+         * a dropped one leaves a double space, and the rule was checked against a keyword
+         * already in the list — but recovering a keyword by inference is exactly what this
+         * whole file exists to stop people doing. Written as UTF-8 and pulled with adb, the
+         * bytes are the bytes. */
+        try {
+            out?.appendBytes("$lvl\t$tokens\t$text\n".toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) { Log.w(TAG, "could not write harvest file: ${e.message}") }
         // The token line is the deliverable: paste it straight into keywords.txt. The text is
         // only there to make it obvious which attempts were the phrase and which were the
         // room, and the level is what settles it when the text alone cannot.

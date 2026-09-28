@@ -115,37 +115,41 @@ class Kws(assets: AssetManager) {
 
 /** What the model emits for the name. Harvested, not spelled — see above.
          *
-         * TRIMMED to sequences that contain the name. Seventeen were registered after the
-         * pink-noise harvest; twelve of them did not contain S Y N TH IA at all. Those
-         * twelve were what the model emits for the name *in noise*, and read as ordinary
-         * English: ▁S IN CE RE ("sincere"), ▁CA SE ▁IN ▁T I ER ("case in tier"),
-         * ▁T EN TH IA, ▁S IN K I ER. The 0/72 false-accept figure behind them was measured
-         * against shop speech and twelve Tamil given names. It never saw a room of
-         * continuous English conversation — which is precisely what a coffee shop is, and
-         * in that room those twelve are false wakes waiting to happen. A false wake is not
-         * a nuisance here: it opens a clip, the clip records the room, and the room arrives
-         * on the bill as line items.
+         * The name is SAHANA, and it replaced SYNTHIA on measurement rather than taste.
          *
-         * The rule is now mechanical and should stay that way — a keyword must contain the
-         * run S Y N TH IA. The leading variants below are only what the model hears for
-         * the carrier word "Hey"; the name itself is still required after it.
+         * Every keyword before this came from synthesized voices with pink noise mixed in,
+         * and the README has said since the day it was written that nothing is tuned until
+         * it has been re-harvested from a human being. Harvested from one, on the pilot
+         * phone, through the microphone that will actually be used:
          *
-         * KNOWN COST, and it is not small: the noisy variants were worth 3/24 -> 9/24 at
-         * 5 dB SNR for the bare name, and trimming hands that back. "Hey Synthia" is the
-         * mitigation, and it was always the stronger phrase — 14/24 at 5 dB against 3. In a
-         * loud shop that is the form that answers, and so it is the form to teach.
+         *   "Synthia"  0 of 3 attempts produced ▁S Y N TH IA. It came back as HAZYNTHEO,
+         *              SY, PAY SYMPIER. Through the wireless mic earlier the same evening,
+         *              1 of 16 — the rest were HAS INDIA, HASN'T DEAR, PASSING GEM,
+         *              CASINDOW. The premise that "the model simply knows the word" was
+         *              true of synthetic speech and not of this speaker.
+         *   "Sahana"   3 of 8, and all three identical: ▁SA HA N A, transcribed as SAHANA
+         *              outright. The five misses are degraded rather than scattered — SA HA,
+         *              SA M H, HA N N A — which is a level problem, not a decoding one.
          *
-         * "Hi Synthia" is NOT here and will not fire. Every carrier variant was harvested
-         * from "Hey"; ▁HI is a different token. Adding it means re-running the harvest,
-         * which is the only honest way to add any line to this list.
+         * ("Alexa" was 5 of 5, including at a peak of 1286 where everything else fell apart.
+         * It is what a word the model has heard a million times looks like, and it is the bar
+         * neither of ours reaches. Obviously unusable: it is Amazon's, and it would set off
+         * every Echo within earshot.)
+         *
+         * REGISTERED: only sequences that contain SA HA and could not be something a customer
+         * says. The fragments harvested at very low level — ▁HA N N A ("Hanna", a person's
+         * name), ▁SO ▁HA N N A, ▁SA HA on its own — are deliberately left out. Registering
+         * them would buy back the quiet attempts at the price of waking on somebody's name,
+         * which is the trade that put twelve bad keywords in this list the first time.
+         *
+         * NOT YET HARVESTED: a carrier. "Hey Synthia" was worth 14 of 24 against 3 at 5 dB
+         * SNR where the bare name collapsed, so "Hey Sahana" is very likely the largest win
+         * still available and it needs its own harvest — ▁HI and ▁HE Y are different tokens
+         * and neither can be guessed from the spelling.
          */
         val KEYWORDS = listOf(
-            "▁S Y N TH IA",        // x17 of 24 — the model transcribes the name outright
-            // carrier — what the model hears for "Hey" in front of the name
-            "▁HE Y ▁S Y N TH IA",
-            "▁A ▁S Y N TH IA",
-            "▁THEY ▁S Y N TH IA",
-            "▁HAS ▁S Y N TH IA",
+            "▁SA HA N A",        // x3 of 8 — transcribed as SAHANA outright, at every level
+            "▁SA HA ▁NO",        // a quiet attempt; still carries SA HA, still not English
         ).joinToString("\n")
     }
 }

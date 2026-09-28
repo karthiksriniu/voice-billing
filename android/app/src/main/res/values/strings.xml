@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Synthia</string>
     <string name="channel_voice">Listening</string>
-    <string name="notif_listening">Say “Synthia” to start a bill</string>
+    <string name="notif_listening">Say “Sahana” to start a bill</string>
     <string name="notif_recording">Listening to your order…</string>
     <string name="stop">Stop</string>
 
