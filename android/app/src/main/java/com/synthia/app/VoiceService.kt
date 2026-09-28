@@ -60,6 +60,13 @@ class VoiceService : Service() {
     private lateinit var transcriber: Transcriber
     private lateinit var speaker: Speaker
 
+    /* Harvest mode. Off in normal use, and nothing about billing changes while it is on
+     * except that the doorbell stops answering — the keyword model and the recogniser are the
+     * same three files and cannot both own the stream. Toggled over adb rather than from the
+     * UI: it is a tuning instrument, not a feature, and the shopkeeper must never find it. */
+    @Volatile private var harvesting = false
+    private var harvester: Harvester? = null
+
     /* Set from TextToSpeech's binder thread, consumed by the audio loop.
      *
      * A flag rather than a direct call: the callback arrives on somebody else's thread, and
@@ -97,9 +104,31 @@ class VoiceService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /* How the harvest is switched on, and why it is a receiver rather than the service's own
+     * action: the service is not exported, so `am startservice` is refused, and exporting it
+     * to reach a tuning instrument would be a poor trade. A receiver registered at runtime
+     * takes the broadcast without widening anything in the manifest.
+     *
+     * It IS reachable by other apps on the phone, and that is a real if small surface: the
+     * worst it can do is stop the doorbell answering until the app is restarted. It reads
+     * nothing and writes nothing. Worth it while the wake word is being tuned on a phone in
+     * somebody's hand; take it out before this goes anywhere wider than the pilot. */
+    private val harvestSwitch = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            harvesting = !harvesting
+            Log.i(TAG, "harvest mode = $harvesting")
+            if (!harvesting) {
+                harvester?.let { Log.i(TAG, "HARVEST SUMMARY\n${it.summary()}"); it.release() }
+                harvester = null
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         running = true
+        ContextCompat.registerReceiver(this, harvestSwitch,
+            android.content.IntentFilter(ACTION_HARVEST), ContextCompat.RECEIVER_EXPORTED)
         micPref = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_MIC, "auto") ?: "auto"
         transcriber = Transcriber(BuildConfig.WEB_BASE)
         /* Never fatal. The platform can refuse this for reasons that are about WHEN it was
@@ -258,6 +287,18 @@ class VoiceService : Service() {
                     if (captureAfterSpeech) { captureAfterSpeech = false; beginCapture(fromWake = true) }
                     else standDown()
                 }
+                continue
+            }
+
+            /* Harvesting: transcribe instead of spotting, and do nothing else.
+             *
+             * Deliberately ahead of every other branch. The point is to see what the model
+             * emits for the phrase, so nothing may wake, capture, endpoint or answer while it
+             * is on — an acknowledgement playing into the microphone mid-harvest would be
+             * collected as though somebody had said it. */
+            if (harvesting) {
+                val h = harvester ?: Harvester(assets).also { harvester = it }
+                h.accept(floats.copyOf(m))
                 continue
             }
 
@@ -797,6 +838,8 @@ class VoiceService : Service() {
         uploads.shutdown()
         tones?.release()
         speakerRef = null
+        try { unregisterReceiver(harvestSwitch) } catch (_: Exception) {}
+        harvester?.release()
         if (this::speaker.isInitialized) speaker.release()
         if (this::kws.isInitialized) kws.release()
         if (this::vad.isInitialized) vad.release()
@@ -866,6 +909,8 @@ class VoiceService : Service() {
         const val ACTION_PTT_DOWN = "ptt_down"
         const val ACTION_PTT_UP = "ptt_up"
         const val ACTION_SHUTDOWN = "shutdown"
+        /** adb shell am broadcast -a com.synthia.app.HARVEST */
+        const val ACTION_HARVEST = "com.synthia.app.HARVEST"
         const val ACTION_SET_MIC = "set_mic"
         const val EXTRA_MIC = "mic"
 
