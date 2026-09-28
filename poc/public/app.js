@@ -71,6 +71,104 @@ function speak(msg) {
   } catch (err) { /* speaking is a courtesy, never the mechanism */ }
 }
 
+/* Address him by name when there is one.
+ *
+ * The phone sits behind him with the screen facing the customer, so a message that names him
+ * is the difference between "something was said" and "something was said to me" — in a room
+ * with a radio on and other people talking, that is not decoration. */
+function named(msg) {
+  const n = ((state.shop && state.shop.owner_name) || "").trim();
+  return n ? `${msg} ${n}` : msg;
+}
+
+/* ---------- confirming a doubtful line, out loud ----------
+
+   The confidence gate marks a line `pending` when the parser is not sure it heard the item
+   right, and until now the only way to resolve one was to look at the screen and tap Yes.
+   That is exactly the thing this shopkeeper cannot do: principle 2 says a wrong bill destroys
+   trust permanently, so the gate has to stay — but a gate he cannot see is a bill that never
+   finalises and a sale that stalls.
+
+   One question at a time, and the next only after the last is answered. Reading three doubtful
+   items out and hoping for three answers in order is how two coffees get billed as one.
+
+   Browser only ever had the button, and keeps it: askThenListen is undefined there. */
+const YES_WORDS = ["yes", "yeah", "yep", "yup", "correct", "right", "ok", "okay",
+                   "sari", "aama", "aamam", "ஆமாம்", "சரி", "ஹाँ", "haan", "ha"];
+const NO_WORDS = ["no", "nope", "wrong", "not", "illa", "illai", "இல்லை", "வேண்டாம்",
+                  "vendaam", "nahi", "nahin"];
+
+let awaitingConfirm = null;
+let confirmTries = 0;
+
+/* Matched on whole words against the raw transcript, never as a substring: "no" inside
+   "nothing" and "ok" inside "okra" are both things a shop says, and either one silently
+   answering a question about somebody's bill is the failure this is supposed to prevent. */
+function yesNo(text) {
+  const words = String(text || "").toLowerCase().replace(/[.,!?]/g, " ").split(/\s+/);
+  if (words.some((w) => YES_WORDS.includes(w))) return "yes";
+  if (words.some((w) => NO_WORDS.includes(w))) return "no";
+  return null;
+}
+
+function askNextConfirmation() {
+  if (!window.askThenListen) return false;          // browser: the Yes button stands
+  if (awaitingConfirm) return true;
+  const next = state.items.find((i) => i.pending);
+  if (!next) return false;
+  awaitingConfirm = next;
+  confirmTries = 0;
+  window.askThenListen(`${t("didYouSay")} ${next.name}?`);
+  return true;
+}
+
+/* Returns true when the utterance was an answer and has been dealt with, so the caller knows
+   not to also parse it as an order. */
+function handleConfirmation(data) {
+  if (!awaitingConfirm) return false;
+  const item = awaitingConfirm;
+  // It may have been resolved by a tap while the question was being asked.
+  if (!state.items.includes(item) || !item.pending) {
+    awaitingConfirm = null;
+    return askNextConfirmation();
+  }
+  const answer = yesNo(data.transcript || "");
+  if (answer === "yes") {
+    item.pending = false;
+    awaitingConfirm = null;
+    render();
+    if (!askNextConfirmation()) speakItemCount();
+    return true;
+  }
+  if (answer === "no") {
+    const i = state.items.indexOf(item);
+    if (i >= 0) state.items.splice(i, 1);
+    awaitingConfirm = null;
+    render();
+    speak(`${t("removedItem")} ${item.name}`);
+    setTimeout(() => { if (!askNextConfirmation()) speakItemCount(); }, 1200);
+    return true;
+  }
+  /* Neither. Ask once more and then stop asking.
+   *
+   * A loop here would be worse than the silence it replaced: a phone that keeps asking the
+   * same question is unusable, and the line is still on the screen with a Yes button on it
+   * for whenever he next looks down. */
+  confirmTries++;
+  if (confirmTries >= 2) {
+    awaitingConfirm = null;
+    speak(t("notSure"));
+    return true;
+  }
+  window.askThenListen(`${t("notSure")}. ${t("didYouSay")} ${item.name}?`);
+  return true;
+}
+
+function speakItemCount() {
+  const n = state.items.filter((i) => !i.pending).length;
+  if (n) speak(`${n} ${n === 1 ? t("itemWord") : t("itemsWord")}`);
+}
+
 /* Run an action with the button visibly doing it.
    Guards against the second tap as well as announcing the first: the button is inert for
    the whole of the work, so a double tap cannot submit twice however fast it lands. The
@@ -631,6 +729,13 @@ function apply(data, roundTripMs) {
     ? `${roundTripMs} ms (asr ${data.asr_ms}, parse ${data.parse_ms})` : `${roundTripMs} ms`;
   setStatus(`“${data.transcript}” · ${timing}`);
 
+  /* We asked something and this is the reply.
+   *
+   * Ahead of everything else, because the words are ordinary and would otherwise be parsed
+   * as a bill: "no" is already a cancel command in two of the language packs, and "correct"
+   * against a catalog of Tamil item names is a fuzzy match waiting to happen. */
+  if (handleConfirmation(data)) return;
+
   // An outstanding price question is answered with a bare number. Anything else means the
   // shopkeeper has moved on, so abandon the question rather than leaving it stuck — that
   // is what used to hide the Finalise button for the rest of the bill.
@@ -670,8 +775,10 @@ function apply(data, roundTripMs) {
      These arrive by voice with the phone untouched, so each one says out loud what it
      did. A command that acts silently is unusable when nobody is looking at the screen. */
   if (data.command === "new_bill") {
+    // newBill() does the announcing now, on every path that clears the counter rather than
+    // only this one. Saying it again here is an utterance that cancels its own predecessor.
     newBill();
-    if (!data.items.length) { speak(t("newBillReady")); render(); return; }
+    if (!data.items.length) { render(); return; }
     // fall through: "bill me one filter coffee" starts the bill AND fills it
   }
   if (data.command === "cash_paid") { cashReceived(); return; }
@@ -692,7 +799,7 @@ function apply(data, roundTripMs) {
   if (data.command === "edit_bill") {
     show("main");
     render();
-    speak(state.items.length ? t("editingBill") : t("newBillReady"));
+    speak(state.items.length ? t("editingBill") : named(t("newBillReady")));
     return;
   }
   if (data.command === "place_order") { placeOrder(); return; }
@@ -716,10 +823,14 @@ function apply(data, roundTripMs) {
    * and counting it would tell him three when two are real — the one number he is trusting
    * because he cannot check it. Said before the price and name prompts below, so that the
    * question needing an answer is the last thing he hears rather than the first. */
-  if (added) {
-    const n = state.items.filter((i) => !i.pending).length;
-    speak(`${n} ${n === 1 ? t("itemWord") : t("itemsWord")}`);
-  }
+  /* A question outranks the count, and the count waits until the questions are done.
+   *
+   * Both go out through the same voice, and it speaks with QUEUE_FLUSH — the newest line
+   * cancels the one before it, deliberately, so that a fast counter never hears a bill from
+   * thirty seconds ago. Announcing "three items" and then immediately asking about one of
+   * them would cut the count off mid-word; asking first and counting at the end is the same
+   * information in the order he can act on it. */
+  if (!askNextConfirmation() && added) speakItemCount();
 
   // Understood, but not in this shop's catalog. Ask the price once, create the SKU and put
   // it on the bill — the shopkeeper never has to stop and go set the catalog up first.
@@ -1603,6 +1714,13 @@ function showPayment(d) {
 async function finalize() {
   if (!state.items.length || state.items.some((i) => i.pending)) return;
   $("finalize").disabled = true;
+  /* Said before the wait, not after it.
+   *
+   * Finalising is the longest pause in the whole flow — it writes the bill, numbers it and
+   * builds the QR — and it is the one moment a customer is standing there watching. With the
+   * screen turned away from him, silence here reads as the app having missed the command,
+   * and the thing a shopkeeper does then is say it again. */
+  speak(t("generatingBill"));
   showPaymentPending();
   try {
     const d = await api("/api/finalize", {
@@ -1616,6 +1734,12 @@ async function finalize() {
     // happen in the same tick as the tap, and anything awaited first ends the gesture —
     // which is exactly why the button appeared to do nothing.
     showPayment(d);
+    /* The number he has to say out loud to the customer.
+     *
+     * This is the one figure that matters and the only one he cannot get from anywhere else
+     * with the screen facing away — the running count during dictation is deliberately just a
+     * count, on the understanding that the money gets announced here. */
+    speak(`${t("billTotal")} ${rupees(d.total)}`);
   } catch (err) {
     // Back to the bill rather than stranded on a payment screen with no QR.
     $("qr").classList.remove("loading");
@@ -2738,7 +2862,7 @@ async function cashReceived() {
       method: "POST",
       body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, method: "cash" },
     });
-    speak(`${t("cashClosed")} ${rupees(state.bill.total)}`);
+    speak(named(`${t("cashClosed")} ${rupees(state.bill.total)}`));
   } catch (err) {
     speak(t("notSaved"));
     return;
@@ -2769,6 +2893,12 @@ async function addItemByVoice(data) {
 }
 
 function newBill() {
+  /* A question about the last bill cannot outlive the bill.
+   *
+   * The confirmation is held in a closure over one item object, and that object is about to
+   * stop existing. Left set, the next thing said into the phone would be read as an answer
+   * about a line from a sale that has already been paid for. */
+  awaitingConfirm = null;
   state.items = [];
   state.bill = null;
   state.receiptRequested = false;
@@ -2781,5 +2911,10 @@ function newBill() {
   hidePrompt();
   setMode("billing");
   show("main");
+  /* Said here rather than only on the spoken "new bill" command, because this is the path a
+   * finished sale actually takes — the customer taps away, or the thanks screen times out,
+   * and the counter is clear again without anybody having said anything. With the screen
+   * turned away, this is how he knows the last sale closed and the phone is his again. */
+  speak(named(t("readyNext")));
 }
 

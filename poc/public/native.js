@@ -46,6 +46,14 @@
    *
    * The toast is kept: a shop at 70-80 dB(A) swallows a phone speaker, and the screen is
    * still there for the customer even when the shopkeeper cannot see it. */
+  /* Ask, then listen — the only path that opens a microphone without the wake word.
+   *
+   * Exposed as a global rather than called through the bridge directly, so app.js does not
+   * have to know whether it is running in a browser. In a browser this stays undefined and
+   * the confirmation falls back to the Yes button on screen, which has always worked. */
+  window.askThenListen = (text) =>
+    safe(() => bridge.askThenListen && bridge.askThenListen(String(text)));
+
   const pageSpeak = window.speak;
   window.speak = function speakNative(msg) {
     safe(() => typeof toast === "function" && toast(msg, 3600, true));

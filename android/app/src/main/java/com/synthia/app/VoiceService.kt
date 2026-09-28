@@ -67,6 +67,11 @@ class VoiceService : Service() {
     @Volatile private var harvesting = false
     private var harvester: Harvester? = null
 
+    /* Asked for on the main thread, acted on by the worker — the loop owns every transition
+     * into SPEAKING, and letting onStartCommand make one would race a thread mid-read. */
+    @Volatile private var askPending = false
+    @Volatile private var askLine = ""
+
     /* Set from TextToSpeech's binder thread, consumed by the audio loop.
      *
      * A flag rather than a direct call: the callback arrives on somebody else's thread, and
@@ -160,6 +165,18 @@ class VoiceService : Service() {
                  * crash looking for a moment to happen. Ask, and let the loop do it. */
                 Log.i(TAG, "mic preference -> $micPref")
                 reopenMic = true
+            }
+            /* The phone asked a question and now has to hear the answer.
+             *
+             * A confirmation is the one exchange the shopkeeper does not start. He is not
+             * going to say the wake word to answer a question he did not ask for, so the
+             * capture has to open on its own — after the question has finished being spoken,
+             * for the same reason the acknowledgement gates the microphone: "did you say
+             * cappuccino" landing in the clip is a bill line, and a yes arriving before the
+             * question ends is lost. */
+            ACTION_ASK -> {
+                val line = intent.getStringExtra(EXTRA_TEXT).orEmpty()
+                if (line.isNotBlank() && worker != null) { askLine = line; askPending = true }
             }
             ACTION_SHUTDOWN -> { stopSelf(); return START_NOT_STICKY }
         }
@@ -287,6 +304,23 @@ class VoiceService : Service() {
                     if (captureAfterSpeech) { captureAfterSpeech = false; beginCapture(fromWake = true) }
                     else standDown()
                 }
+                continue
+            }
+
+            /* A question from the page outranks whatever the doorbell was doing.
+             *
+             * It can only be asked because something was already understood, so there is no
+             * order in flight worth protecting — and the alternative, waiting for the state
+             * machine to find its own way back to LISTENING, is seconds of a shopkeeper
+             * wondering whether the phone heard him. */
+            if (askPending) {
+                askPending = false
+                clip.clear()
+                kws.reset()
+                vad.reset()
+                Log.i(TAG, "asking: $askLine")
+                Bus.emit("capture", "state" to "ask")
+                speakAnd(askLine, thenCapture = true)
                 continue
             }
 
@@ -926,6 +960,8 @@ class VoiceService : Service() {
         const val ACTION_SHUTDOWN = "shutdown"
         /** adb shell am broadcast -a com.synthia.app.HARVEST */
         const val ACTION_HARVEST = "com.synthia.app.HARVEST"
+        const val ACTION_ASK = "ask"
+        const val EXTRA_TEXT = "text"
         const val ACTION_SET_MIC = "set_mic"
         const val EXTRA_MIC = "mic"
 
@@ -934,6 +970,12 @@ class VoiceService : Service() {
 
         fun send(ctx: Context, action: String) {
             val i = Intent(ctx, VoiceService::class.java).setAction(action)
+            ContextCompat.startForegroundService(ctx, i)
+        }
+
+        fun ask(ctx: Context, text: String) {
+            val i = Intent(ctx, VoiceService::class.java)
+                .setAction(ACTION_ASK).putExtra(EXTRA_TEXT, text)
             ContextCompat.startForegroundService(ctx, i)
         }
 

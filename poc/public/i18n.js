@@ -14,8 +14,11 @@ const LANGS = {
 
 const STRINGS = {
   en: {
-    confirmReceived: "Payment received — confirm?", creditNotMatched: "Credit does not match this bill", editingBill: "Editing the bill", upiClosed: "Closed, UPI", receiptQueued: "Receipt queued — it will be sent shortly", newBillReady: "New bill, go ahead", noBillYet: "No bill to close yet", cashClosed: "Closed, cash", ownerOnly: "Owner only", listening: "Listening", sayWake: "Say “Sahana”", handsFree: "Hands-free (Sahana)", handsFreeNo: "Hands-free needs Chrome on Android",
+    confirmReceived: "Payment received — confirm?", creditNotMatched: "Credit does not match this bill", editingBill: "Editing the bill", upiClosed: "Closed, UPI", receiptQueued: "Receipt queued — it will be sent shortly", newBillReady: "Ready for next bill", noBillYet: "No bill to close yet", cashClosed: "Marking it as cash", ownerOnly: "Owner only", listening: "Listening", sayWake: "Say “Sahana”", handsFree: "Hands-free (Sahana)", handsFreeNo: "Hands-free needs Chrome on Android",
     itemWord: "item", itemsWord: "items",
+    generatingBill: "Generating bill, please wait", billTotal: "Total",
+    didYouSay: "Did you say", removedItem: "Removed", readyNext: "Ready for next bill",
+    notSure: "I did not catch that — say yes or no",
     ownerName: "Your name", ownerNameHint: "Synthia says this back when it wakes — “Yes Suresh”.",
     notInList: "Not in your list", whichItem: "which item is this?", saySoldName: "Say the name you sell it under, or pick below", pickFromList: "Pick from list", itIsNew: "It is new", removeAlias: "Remove this name",
     micDenied: "Microphone blocked — allow it in the browser", handsFreeNet: "Hands-free needs a connection", handsFreeChrome: "Hands-free works in Chrome on Android",

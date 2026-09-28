@@ -81,6 +81,16 @@ class WebBridge(private val ctx: Context) {
         VoiceService.speakerRef?.say(text)
     }
 
+    /* Say something and then listen, without the wake word.
+     *
+     * Only for questions the phone itself asked. Everything else goes through say(), which
+     * does not open a microphone — an announcement that started recording would turn every
+     * "three items" into an open clip waiting to bill the room. */
+    @JavascriptInterface
+    fun askThenListen(text: String) {
+        if (text.isNotBlank()) VoiceService.ask(ctx, text)
+    }
+
     @JavascriptInterface
     fun version(): String = BuildConfig.VERSION_NAME
 }
