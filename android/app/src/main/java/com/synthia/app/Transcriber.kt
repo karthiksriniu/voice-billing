@@ -31,7 +31,9 @@ class Transcriber(private val base: String) {
             .addFormDataPart("shop_id", Bus.shopId)
             .addFormDataPart("mode", Bus.mode)
             .addFormDataPart("lang", Bus.lang)
-            .addFormDataPart("mic", "native")
+            // The actual input device, not the literal "native" this used to send — with
+            // every clip tagged the same, the log could not compare two microphones.
+            .addFormDataPart("mic", Bus.micLabel)
             .addFormDataPart("clip_ms", clipMs.toString())
             .build()
         val req = Request.Builder().url("$base/api/transcribe").post(body).build()

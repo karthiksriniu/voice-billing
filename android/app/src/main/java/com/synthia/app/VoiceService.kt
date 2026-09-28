@@ -6,6 +6,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -49,6 +50,10 @@ class VoiceService : Service() {
     @Volatile private var handsFree = false
     @Volatile private var ptt = false
     @Volatile private var state = State.IDLE
+    /** "auto" or one of the kinds in deviceKind(). Which physical microphone to record from. */
+    @Volatile private var micPref = "auto"
+    /** Set from the main thread, acted on by the worker — see ACTION_SET_MIC. */
+    @Volatile private var reopenMic = false
 
     private lateinit var kws: Kws
     private lateinit var vad: Vad
@@ -67,12 +72,17 @@ class VoiceService : Service() {
     private var heardSpeech = false
     private var holdStartedAt = 0L
     private var chain = 0
+    /** Did this clip ever go quiet? A dictated order has pauses in it; a room does not. */
+    private var sawGap = false
+    /** When the wake that owns the current chain fired. Bounds the whole chain, not a clip. */
+    private var wakeStartedAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         running = true
+        micPref = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_MIC, "auto") ?: "auto"
         transcriber = Transcriber(BuildConfig.WEB_BASE)
         /* Never fatal. The platform can refuse this for reasons that are about WHEN it was
          * called rather than anything being wrong — a background start, a missing
@@ -94,6 +104,16 @@ class VoiceService : Service() {
             ACTION_STOP -> { handsFree = false; ptt = false; remember(false) }
             ACTION_PTT_DOWN -> { ptt = true; ensureWorker() }
             ACTION_PTT_UP -> ptt = false
+            ACTION_SET_MIC -> {
+                micPref = intent.getStringExtra(EXTRA_MIC) ?: "auto"
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_MIC, micPref).apply()
+                /* Routing is chosen when the stream is opened, so the running one has to
+                 * go — but not from here. onStartCommand runs on the main thread and the
+                 * worker owns the AudioRecord; releasing it out from under a read() is a
+                 * crash looking for a moment to happen. Ask, and let the loop do it. */
+                Log.i(TAG, "mic preference -> $micPref")
+                reopenMic = true
+            }
             ACTION_SHUTDOWN -> { stopSelf(); return START_NOT_STICKY }
         }
         return START_STICKY
@@ -143,10 +163,22 @@ class VoiceService : Service() {
                 Thread.sleep(60)
                 continue
             }
+            if (reopenMic) { reopenMic = false; closeMic() }
             if (!openMic()) { Thread.sleep(250); continue }
 
             val n = record?.read(window, 0, WINDOW) ?: 0
-            if (n <= 0) { Thread.sleep(5); continue }
+            /* Negative is an error code, not a short read. ERROR_DEAD_OBJECT (-6) is the
+             * one that matters: the record session is gone and every subsequent read
+             * returns it too. Lumped in with "no data yet" it span this loop at 5ms with
+             * no microphone and no way back — the second half of the same deafness, and
+             * a flat battery with it. */
+            if (n < 0) {
+                Log.w(TAG, "read error $n — reopening mic")
+                closeMic()
+                Thread.sleep(50)
+                continue
+            }
+            if (n == 0) { Thread.sleep(5); continue }
             for (i in 0 until n) floats[i] = window[i] / 32768f
 
             val now = System.currentTimeMillis()
@@ -165,6 +197,22 @@ class VoiceService : Service() {
             // Push-to-talk overrides whatever the doorbell was doing.
             if (ptt && state != State.CAPTURING) beginCapture(fromWake = false)
             if (!ptt && state == State.CAPTURING && pttWasTheTrigger) { endCapture(final = true); continue }
+
+            /* One wake may not own the microphone indefinitely.
+             *
+             * With the room talking, a clip that never endpoints ran to the 12s cap, went
+             * to HOLDING, was resumed instantly by the same room, and repeated to MAX_CHAIN
+             * — half a minute during which the shopkeeper's own order went into a clip he
+             * did not open. The gap test below is what actually stops that; this is the
+             * backstop for whatever it does not catch. A genuine chained order endpoints on
+             * silence long before this, so it should never fire on real use. */
+            if ((state == State.CAPTURING || state == State.HOLDING) &&
+                now - wakeStartedAt > WAKE_BUDGET_MS) {
+                Log.w(TAG, "wake budget spent (${now - wakeStartedAt}ms) state=$state — standing down")
+                if (state == State.CAPTURING && sawGap) endCapture(final = true)
+                else { clip.clear(); standDown() }
+                continue
+            }
 
             when (state) {
                 State.IDLE, State.LISTENING -> {
@@ -211,13 +259,34 @@ class VoiceService : Service() {
                     for (i in 0 until n) clip.add(window[i])
                     vad.acceptWaveform(floats.copyOf(n))
                     if (vad.isSpeechDetected()) { lastSpeechAt = now; heardSpeech = true }
+                    else if (heardSpeech && now - lastSpeechAt > GAP_MS) sawGap = true
 
                     val clipMs = now - clipStartedAt
                     when {
                         // He said the name and then nothing. Don't send the room.
                         !heardSpeech && clipMs > NO_SPEECH_MS -> abandonCapture()
                         heardSpeech && now - lastSpeechAt > SILENCE_MS -> endCapture(final = false)
-                        clipMs > MAX_CLIP_MS -> endCapture(final = false)
+
+                        /* Twelve seconds of unbroken speech is not an order, it is the room.
+                         *
+                         * A dictated order breathes: the counter recording put the pause
+                         * inside one order at 1090ms, which is why SILENCE_MS is 800 — a
+                         * real order ends itself on the branch above and almost never
+                         * reaches this cap. What reaches it is a VAD held permanently open
+                         * by customers, a TV or a fan, and that clip used to be dispatched
+                         * (heardSpeech was true, the room having "spoken") and then extended
+                         * through HOLDING into the next one. Somebody else's conversation
+                         * arrived as line items on a bill.
+                         *
+                         * So the cap is not an endpoint any more, it is a verdict. With a
+                         * pause somewhere in it, treat it as a long order and carry on.
+                         * Without one, throw it away and go back to listening for the name. */
+                        clipMs > MAX_CLIP_MS ->
+                            if (sawGap) endCapture(final = false)
+                            else {
+                                Log.i(TAG, "clip hit the cap with no pause in it — the room, not an order")
+                                abandonCapture()
+                            }
                         else -> {}
                     }
                 }
@@ -269,6 +338,8 @@ class VoiceService : Service() {
         clipStartedAt = System.currentTimeMillis()
         lastSpeechAt = clipStartedAt
         heardSpeech = false
+        sawGap = false
+        wakeStartedAt = clipStartedAt
         vad.reset()
         // The doorbell stops ringing before the order is read, so the name can never end
         // up inside the clip and be billed as an item.
@@ -286,6 +357,8 @@ class VoiceService : Service() {
         clipStartedAt = System.currentTimeMillis()
         lastSpeechAt = clipStartedAt
         heardSpeech = false
+        sawGap = false
+        wakeStartedAt = clipStartedAt
         vad.reset()
         kws.reset()
         feedback(880, 90)
@@ -299,7 +372,15 @@ class VoiceService : Service() {
         clip.clear()
         clipStartedAt = System.currentTimeMillis()
         lastSpeechAt = clipStartedAt
-        heardSpeech = true
+        sawGap = false
+        /* Not `true`, which is what this said.
+         *
+         * The continuation is opened by one window of VAD speech, and asserting heardSpeech
+         * from that alone meant the clip was dispatch-eligible before anything had actually
+         * been said into it — so a hold resumed by a passing voice sent the room to the
+         * recogniser. The VAD re-confirms within a window or two when it really is more of
+         * the order, and when it does not, NO_SPEECH_MS throws the clip away. */
+        heardSpeech = false
         Bus.emit("capture", "state" to "resume", "chain" to chain)
     }
 
@@ -346,7 +427,8 @@ class VoiceService : Service() {
             val res = transcriber.send(wav, ms)
             Log.i(TAG, "transcribe done ms=${res.ms} err=${res.error}")
             if (res.json != null) {
-                Bus.emit("result", res.json.put("native_ms", res.ms).put("clip_ms", ms))
+                Bus.emit("result", res.json.put("native_ms", res.ms).put("clip_ms", ms)
+                                           .put("mic", Bus.micLabel))
             } else {
                 Bus.emit("voice_error", "reason" to (res.error ?: "unknown"))
             }
@@ -356,7 +438,21 @@ class VoiceService : Service() {
     /* ---- mic ---- */
 
     private fun openMic(): Boolean {
-        record?.let { return it.recordingState == AudioRecord.RECORDSTATE_RECORDING }
+        record?.let {
+            if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) return true
+            /* The stream stopped without us asking. Another app took the input — on a real
+             * counter that is usually the phone's own assistant hotword firing on customer
+             * speech — or the audio server restarted under us.
+             *
+             * recordingState is latched, so the old code's `return false` was permanent:
+             * the loop span at 250ms forever holding a dead AudioRecord that nothing would
+             * ever release, because closeMic() only runs when hands-free goes off. That is
+             * the whole reason the fix was "switch hands-free off and on from the menu" —
+             * the toggle was not resetting the keyword model, it was the only path in the
+             * program that freed this object. Drop it here and open a fresh one. */
+            Log.w(TAG, "mic stopped underneath us (state=${it.recordingState}) — reopening")
+            closeMic()
+        }
         return try {
             val min = AudioRecord.getMinBufferSize(SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -368,8 +464,17 @@ class VoiceService : Service() {
                 SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
                 maxOf(min, WINDOW * 8))
             if (r.state != AudioRecord.STATE_INITIALIZED) { r.release(); return false }
+            /* Ask for a specific input before starting. Plugging a USB receiver in usually
+             * makes Android route to it on its own, but "usually" is not a thing a
+             * measurement can rest on: an A/B between three microphones has to be able to
+             * say which one was actually recording, and to pin it deliberately rather than
+             * hope the platform picked the same one twice. */
+            preferredDevice()?.let { r.preferredDevice = it }
             r.startRecording()
             record = r
+            // What the platform actually gave us, which is not always what was asked for.
+            Bus.micLabel = routedLabel(r)
+            Log.i(TAG, "mic open pref=$micPref routed=${Bus.micLabel}")
             /* The stream was closed and reopened across a gap of unknown length — the app
              * was backgrounded, or hands-free was off. A streaming zipformer carries left
              * context, and splicing two moments together leaves it decoding against audio
@@ -382,6 +487,39 @@ class VoiceService : Service() {
         } catch (e: SecurityException) {
             Bus.emit("voice_error", "reason" to "no_permission"); false
         }
+    }
+
+    /** Coarse on purpose: a category is what an A/B compares, and it is all the page is told. */
+    private fun deviceKind(type: Int): String = when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_MIC -> "builtin"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired"
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_ACCESSORY -> "usb"
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bt"
+        else -> "other"
+    }
+
+    private fun preferredDevice(): AudioDeviceInfo? {
+        if (micPref == "auto") return null
+        return try {
+            getSystemService(AudioManager::class.java)
+                .getDevices(AudioManager.GET_DEVICES_INPUTS)
+                .firstOrNull { deviceKind(it.type) == micPref }
+        } catch (e: Exception) { null }
+    }
+
+    /* The kind, plus the hardware's own name when it has one worth keeping.
+     *
+     * The built-in mic reports the handset model, which is the phone and not a microphone,
+     * so it collapses to the bare kind. A USB receiver reports itself — which is the whole
+     * point when the question is whether the wireless mic beat the phone. */
+    private fun routedLabel(r: AudioRecord): String {
+        val d = try { r.routedDevice } catch (e: Exception) { null } ?: return micPref
+        val kind = deviceKind(d.type)
+        val name = d.productName?.toString()?.trim().orEmpty()
+        return if (name.isEmpty() || name.equals(Build.MODEL, ignoreCase = true)) kind
+               else "$kind:$name"
     }
 
     private fun closeMic() {
@@ -480,6 +618,14 @@ class VoiceService : Service() {
         private const val MIN_CLIP_MS = 400L
         private const val NO_SPEECH_MS = 3000L
 
+        /** A lull inside a clip long enough to call it a pause. Well under SILENCE_MS, so
+         *  noticing one never competes with the endpointer — it only records that this clip
+         *  has the shape of speech rather than the shape of a room. */
+        private const val GAP_MS = 300L
+
+        /** Ceiling on everything one wake may hold: clip, hold and every continuation. */
+        private const val WAKE_BUDGET_MS = 30000L
+
         /** Heartbeat into logcat. The wake word cannot be tuned from a device you cannot
          *  see into, and "nothing happened" has too many causes to guess between. */
         private val DEBUG_AUDIO = BuildConfig.DEBUG
@@ -490,6 +636,7 @@ class VoiceService : Service() {
 
         private const val PREFS = "voice"
         private const val KEY_HANDS_FREE = "hands_free"
+        private const val KEY_MIC = "mic_pref"
 
         fun handsFreeEnabled(ctx: Context): Boolean =
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HANDS_FREE, false)
@@ -499,9 +646,20 @@ class VoiceService : Service() {
         const val ACTION_PTT_DOWN = "ptt_down"
         const val ACTION_PTT_UP = "ptt_up"
         const val ACTION_SHUTDOWN = "shutdown"
+        const val ACTION_SET_MIC = "set_mic"
+        const val EXTRA_MIC = "mic"
+
+        fun micPreference(ctx: Context): String =
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_MIC, "auto") ?: "auto"
 
         fun send(ctx: Context, action: String) {
             val i = Intent(ctx, VoiceService::class.java).setAction(action)
+            ContextCompat.startForegroundService(ctx, i)
+        }
+
+        fun setMic(ctx: Context, pref: String) {
+            val i = Intent(ctx, VoiceService::class.java)
+                .setAction(ACTION_SET_MIC).putExtra(EXTRA_MIC, pref)
             ContextCompat.startForegroundService(ctx, i)
         }
     }

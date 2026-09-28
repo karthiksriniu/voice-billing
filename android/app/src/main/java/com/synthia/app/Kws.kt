@@ -115,47 +115,37 @@ class Kws(assets: AssetManager) {
 
 /** What the model emits for the name. Harvested, not spelled — see above.
          *
-         * Three groups, and the second two exist because clean synthesized speech turned
-         * out to be a bad proxy for a shop:
+         * TRIMMED to sequences that contain the name. Seventeen were registered after the
+         * pink-noise harvest; twelve of them did not contain S Y N TH IA at all. Those
+         * twelve were what the model emits for the name *in noise*, and read as ordinary
+         * English: ▁S IN CE RE ("sincere"), ▁CA SE ▁IN ▁T I ER ("case in tier"),
+         * ▁T EN TH IA, ▁S IN K I ER. The 0/72 false-accept figure behind them was measured
+         * against shop speech and twelve Tamil given names. It never saw a room of
+         * continuous English conversation — which is precisely what a coffee shop is, and
+         * in that room those twelve are false wakes waiting to happen. A false wake is not
+         * a nuisance here: it opens a clip, the clip records the room, and the room arrives
+         * on the bill as line items.
          *
-         *   CLEAN — what the model emits in quiet. Enough on its own at 20 dB SNR and
-         *   almost useless at 5 dB, where "Synthia" alone scored 3 of 24.
+         * The rule is now mechanical and should stay that way — a keyword must contain the
+         * run S Y N TH IA. The leading variants below are only what the model hears for
+         * the carrier word "Hey"; the name itself is still required after it.
          *
-         *   NOISY — harvested by running the same clips back through the recogniser with
-         *   pink noise mixed in. Only the name-like decodes are here: in noise the model
-         *   also emits THANK YOU (64 times), AND HERE, INDEED and INDIA, and registering
-         *   any of those would wake the phone every time a customer was thanked. Adding
-         *   just the three safe ones took 5 dB from 3/24 to 9/24.
+         * KNOWN COST, and it is not small: the noisy variants were worth 3/24 -> 9/24 at
+         * 5 dB SNR for the bare name, and trimming hands that back. "Hey Synthia" is the
+         * mitigation, and it was always the stronger phrase — 14/24 at 5 dB against 3. In a
+         * loud shop that is the form that answers, and so it is the form to teach.
          *
-         *   CARRIER — what it emits for "Hey Synthia". A carrier word buys back nearly
-         *   everything short names lose in noise: 14 of 24 at 5 dB against 3. Registering
-         *   these costs nothing when he says the bare name, so BOTH work — and in a loud
-         *   shop the longer one is the one that answers.
-         *
-         * All 17 measured together against 72 negatives (shop speech and twelve Tamil
-         * given names): zero false accepts.
+         * "Hi Synthia" is NOT here and will not fire. Every carrier variant was harvested
+         * from "Hey"; ▁HI is a different token. Adding it means re-running the harvest,
+         * which is the only honest way to add any line to this list.
          */
         val KEYWORDS = listOf(
-            // clean
             "▁S Y N TH IA",        // x17 of 24 — the model transcribes the name outright
-            "▁C IN TI ER",
-            "▁S IN VI A",
-            "▁S IN TE ▁A IR",
-            "▁S IN K I ER",
-            "▁S Y N TE ER",
-            "▁S IN CE RE",
-            // noisy
-            "▁S Y ND A",
-            "▁T EN TH IA",
-            "▁S IN P I ER",
-            // carrier — "Hey Synthia"
+            // carrier — what the model hears for "Hey" in front of the name
             "▁HE Y ▁S Y N TH IA",
             "▁A ▁S Y N TH IA",
             "▁THEY ▁S Y N TH IA",
             "▁HAS ▁S Y N TH IA",
-            "▁BA S IN TH IA",
-            "▁A ▁S Y N TH ▁HERE",
-            "▁CA SE ▁IN ▁T I ER",
         ).joinToString("\n")
     }
 }

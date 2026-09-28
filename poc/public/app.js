@@ -451,7 +451,10 @@ async function handleClip() {
     fd.append("audio", blob, "clip.webm");
     fd.append("shop_id", state.shop.id);
     fd.append("mode", state.mode);
-    fd.append("lang", state.shop.lang || "ta");
+    // "en", not "ta". Everywhere else in this file the fallback is English; this one line
+    // disagreed, so a shop whose language had never been set was transcribed as ta-IN and
+    // came back in Tamil script against a Latin catalog, matching nothing.
+    fd.append("lang", state.shop.lang || "en");
     fd.append("mic", micLabel || "");
     fd.append("clip_ms", String(ms));
     const res = await fetch("/api/transcribe", { method: "POST", body: fd });
@@ -516,10 +519,12 @@ payTalk.addEventListener("contextmenu", (e) => e.preventDefault());
    Kept on the device and never sent anywhere on its own. Its whole purpose is to answer
    questions we have been guessing at: how long a bill really takes, how often a line has
    to be corrected, and whether a counter microphone is actually better than the phone. */
-function logAttempt(data, clipMs, roundTripMs) {
+function logAttempt(data, clipMs, roundTripMs, micOverride) {
   try {
     const rec = {
-      at: Date.now(), mic: micLabel || "default", clip_ms: clipMs, ms: roundTripMs,
+      // The APK records outside this page and knows which device it used, so it passes its
+      // own label in. In the browser there is only the one stream and micLabel is it.
+      at: Date.now(), mic: micOverride || micLabel || "default", clip_ms: clipMs, ms: roundTripMs,
       asr_ms: data.asr_ms || 0,
       items: (data.items || []).length,
       // A confirm is the parser saying "I am not sure" — the single best proxy for

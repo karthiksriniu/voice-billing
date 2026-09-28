@@ -18,7 +18,17 @@ object Bus {
     /** What the page last told us about itself. The service needs it to post a clip. */
     @Volatile var shopId: String = ""
     @Volatile var mode: String = "sell"
-    @Volatile var lang: String = "ta"
+    /* English until the page says otherwise.
+     *
+     * This defaulted to Tamil, which meant a clip recorded before the page had finished
+     * loading — or by a shop whose language was never set — was transcribed as ta-IN and
+     * came back in Tamil script against a Latin catalog, matching nothing. English is both
+     * the safer default and the only one the wake word has ever been measured in. */
+    @Volatile var lang: String = "en"
+
+    /** Which physical microphone the service is actually recording from. Rides with every
+     *  clip so the measurement log can tell three microphones apart. */
+    @Volatile var micLabel: String = "builtin"
 
     /** Whether the page has asked for hands-free. Survives a permission prompt. */
     @Volatile var handsFreeWanted: Boolean = false

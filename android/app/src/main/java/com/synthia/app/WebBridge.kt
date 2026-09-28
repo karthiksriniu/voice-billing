@@ -44,6 +44,21 @@ class WebBridge(private val ctx: Context) {
         ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECEIVE_SMS) ==
             PackageManager.PERMISSION_GRANTED
 
+    /* Which microphone to record from: "auto", "builtin", "wired", "usb" or "bt".
+     *
+     * A category, never a device list. Enumerating the hardware would tell any script in
+     * the WebView what is plugged into this phone, and the trial does not need that to
+     * compare three microphones — it needs to be able to pick one and to know afterwards
+     * which one actually answered, which rides back on the clip instead. */
+    @JavascriptInterface
+    fun setMic(pref: String) {
+        val clean = when (pref) { "builtin", "wired", "usb", "bt" -> pref; else -> "auto" }
+        VoiceService.setMic(ctx, clean)
+    }
+
+    @JavascriptInterface
+    fun micPref(): String = VoiceService.micPreference(ctx)
+
     @JavascriptInterface
     fun version(): String = BuildConfig.VERSION_NAME
 }

@@ -153,7 +153,9 @@ class SignupRequest(BaseModel):
     passcode: str
     name: str = "Shop"
     vpa: str = ""
-    lang: str = "ta"
+    # English unless the picker says otherwise. ASR_FOR maps ta -> ta-IN, which returns
+    # Tamil script against a Latin catalog; en -> en-IN keeps both in one script.
+    lang: str = "en"
     remember: bool = True
 
 

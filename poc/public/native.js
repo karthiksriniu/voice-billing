@@ -37,6 +37,34 @@
 
   const safe = (fn) => { try { return fn(); } catch (e) { console.warn("native:", e); } };
 
+  /* ---- choosing the microphone ----
+   *
+   * The page's own picker lists getUserMedia devices, and in the APK the page never opens a
+   * stream — the service does — so it listed nothing useful and changing it changed nothing.
+   * Replace it with the categories the bridge understands. Deliberately not a device list:
+   * the phone reports back which one actually answered, on every clip, which is the number
+   * the trial needs and does not require handing the WebView an inventory of the hardware. */
+  const MIC_KINDS = [
+    ["auto", "Automatic"],
+    ["builtin", "Phone microphone"],
+    ["wired", "Wired headset"],
+    ["usb", "USB / wireless receiver"],
+    ["bt", "Bluetooth"],
+  ];
+
+  window.renderMicPicker = function renderMicPickerNative() {
+    const sel = document.getElementById("setMic");
+    if (!sel) return;
+    const cur = safe(() => bridge.micPref && bridge.micPref()) || "auto";
+    sel.innerHTML = MIC_KINDS.map(([v, label]) =>
+      `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`).join("");
+    sel.onchange = () => {
+      safe(() => bridge.setMic && bridge.setMic(sel.value));
+      safe(() => typeof toast === "function" &&
+        toast(`Microphone: ${(MIC_KINDS.find((k) => k[0] === sel.value) || [])[1]}`, 3000, true));
+    };
+  };
+
   /* ---- what the phone tells the page ---- */
 
   const handlers = {
@@ -57,7 +85,20 @@
     /* The native side has already done the round trip, so this is the same object the
        page's own fetch used to produce and it goes to the same place. */
     result(data) {
-      safe(() => { apply(data, data.native_ms || 0); setTalk("idle"); });
+      safe(() => {
+        apply(data, data.native_ms || 0);
+        /* The measurement log is the point of the microphone trial, and native clips were
+         * missing from it entirely: app.js only calls logAttempt on the round trip it makes
+         * itself, and in the APK the round trip happens in Kotlin. So every utterance the
+         * shopkeeper actually spoke into the app went unrecorded, and micReport() described
+         * the browser build alone. The phone tags each clip with the device it recorded
+         * from; pass that through rather than the page's own idea of the microphone, which
+         * in native mode is nothing at all. */
+        if (typeof logAttempt === "function") {
+          logAttempt(data, data.clip_ms || 0, data.native_ms || 0, data.mic || "native");
+        }
+        setTalk("idle");
+      });
     },
 
     voice_error(p) {
