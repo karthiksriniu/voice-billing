@@ -225,6 +225,36 @@ $("signupBtn").onclick = () => withBusy($("signupBtn"), async () => {
   await enter(r);
 });
 
+/* Put the shopkeeper's name where both halves of the app will find it.
+ *
+ * Three copies have to agree: `state.shop`, which native.js watches and pushes over the
+ * bridge; the stored session, so a reload does not lose it; and the service, which renders
+ * "Yes <name>" to a file and only re-renders when the name it was given changes. Writing one
+ * and not the others is the whole of this bug. */
+function rememberOwnerName(name) {
+  if (!state.shop) return;
+  state.shop.owner_name = name || "";
+  try {
+    const saved = JSON.parse(localStorage.getItem("vaakku") || "null");
+    if (saved) {
+      saved.owner_name = state.shop.owner_name;
+      localStorage.setItem("vaakku", JSON.stringify(saved));
+    }
+  } catch (e) { /* private mode — the name simply reloads from the server next time */ }
+}
+
+/* A session stored before the name existed has no name in it, and a reload must not cost
+ * him the acknowledgement. Owners only: /api/settings is 403 for staff, and for them the
+ * name arrives on the login response instead. */
+async function refreshOwnerName(session) {
+  if (state.role !== "owner") return;
+  if (typeof session.owner_name === "string") return;      // already known
+  try {
+    const j = await api("/api/settings");
+    if (j && j.ok) rememberOwnerName(j.owner_name || "");
+  } catch (e) { /* the phone answers "Yes" until the next time Settings is opened */ }
+}
+
 async function enter(session) {
   await healthReady;
   state.token = session.token;
@@ -240,6 +270,9 @@ async function enter(session) {
   // Storage key deliberately unchanged by the rename — changing it would sign out every
   // existing tester the moment they reload.
   try { localStorage.setItem("vaakku", JSON.stringify(session)); } catch (e) { /* private mode */ }
+  // Not awaited: billing must not wait on it, and the service re-reads the name every two
+  // seconds anyway, so it takes effect the moment it arrives.
+  refreshOwnerName(session);
   $("shopLabel").textContent = state.shop.name;
   // Staff bill and nothing else, so neither the switch nor the account items are there
   // for them. Signing out stays — it is theirs, not the shop's.
@@ -1252,6 +1285,10 @@ async function loadSettings() {
   if (!j.ok) { toast(j.error || t("signInRequired"), 3500); return; }
   $("setName").value = j.name || "";
   $("setOwner").value = j.owner_name || "";
+  // Into state as well as into the box. The box is what he reads; state is what native.js
+  // pushes to the service, and filling only the first is why the phone kept saying "Yes"
+  // to a shopkeeper whose name was sitting there on the screen in front of him.
+  rememberOwnerName(j.owner_name || "");
   $("setVpa").value = j.vpa || "";
   $("setWa").value = j.wa_number || "";
   $("setGstin").value = j.gstin || "";
@@ -1363,9 +1400,7 @@ $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   // Apply immediately: language drives the interface, the parser pack and the ASR locale,
   // so it must take effect on the very next utterance rather than at the next sign-in.
   state.shop.name = j.name;
-  // Straight onto the shop object: native.js watches it and pushes the name to the service,
-  // so the next wake answers correctly without a reload.
-  state.shop.owner_name = j.owner_name || "";
+  rememberOwnerName(j.owner_name || "");
   state.shop.lang = j.lang;
   state.shop.vpa = j.vpa;
   state.shop.wa_number = j.wa_number;
