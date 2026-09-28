@@ -3,8 +3,31 @@
     main      -> https://bolo-bill.vercel.app          the shops use this
     staging   -> https://bolo-bill-staging.vercel.app  everything else
 
-Both are the same Vercel project, so there is one set of settings and one place to look
-when something is wrong.
+Both are the same Vercel project — **`crewstone/bolo-bill`**, renamed from `vaakku-poc` —
+so there is one set of settings and one place to look when something is wrong. The old name
+survives in two places on purpose, and neither is a leftover to tidy up: the session key in
+`localStorage` (renaming it signs out every phone that has ever used the app) and the UPI
+reference string `VAAKKU20260730A041` in `experiments/upi-qr/`, whose exact length is part
+of a recorded measurement — `upi-qr-test.md` documents that this string alone pushes the QR
+from v4 to v6.
+
+## Staging is behind a login, and production is not
+
+`bolo-bill-staging.vercel.app` aliases a **preview** deployment, and Vercel protects
+previews by default. A browser that is not signed in to the Vercel team gets bounced to
+`vercel.com/login` — so staging cannot be opened on a shopkeeper's phone, or on your own
+phone, or by `curl`, until that is changed:
+
+    Vercel dashboard -> bolo-bill -> Settings -> Deployment Protection
+    -> Vercel Authentication -> Only Production
+
+There is no `vercel` CLI command for this setting. Note what turning it off means: the
+staging URL becomes readable by anyone who has it, against the same Supabase project as
+production.
+
+**The APK cannot reach staging at all**, whatever that setting says. `WEB_BASE` is baked in
+at build time — debug points at `localhost:8077`, release at production, and there is no
+staging build type. Testing an APK against staging means adding one.
 
 ## Working
 

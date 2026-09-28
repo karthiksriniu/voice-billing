@@ -1,4 +1,4 @@
-"""Vaakku PoC API.
+"""Bolo Bill PoC API.
 
 One FastAPI app behind /api/*. Runs locally with uvicorn and on Vercel's Python runtime
 unchanged. Everything here is disposable except the parser and the language pack.
@@ -40,7 +40,7 @@ import reorder                                         # noqa: E402
 import recipes                                         # noqa: E402
 import vision                                          # noqa: E402
 
-app = FastAPI(title="Vaakku PoC")
+app = FastAPI(title="Bolo Bill PoC")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )

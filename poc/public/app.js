@@ -1,4 +1,4 @@
-/* Vaakku PoC — voice billing.
+/* Bolo Bill PoC — voice billing.
    Rules that drive most of this file:
    1. The button's colour must never lie about whether the mic is live.
    2. A low-confidence line is shown and asked about, never silently added (Principle 2).
