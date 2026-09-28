@@ -475,6 +475,10 @@ class VoiceService : Service() {
             // What the platform actually gave us, which is not always what was asked for.
             Bus.micLabel = routedLabel(r)
             Log.i(TAG, "mic open pref=$micPref routed=${Bus.micLabel}")
+            // Tell the page, so a mic that quietly went missing is visible on the screen
+            // he is already looking at rather than only in a log nobody reads in a shop.
+            Bus.emit("mic", "pref" to micPref, "routed" to Bus.micLabel,
+                     "honoured" to (micPref == "auto" || Bus.micLabel.startsWith(micPref)))
             /* The stream was closed and reopened across a gap of unknown length — the app
              * was backgrounded, or hands-free was off. A streaming zipformer carries left
              * context, and splicing two moments together leaves it decoding against audio
@@ -502,11 +506,26 @@ class VoiceService : Service() {
 
     private fun preferredDevice(): AudioDeviceInfo? {
         if (micPref == "auto") return null
-        return try {
+        val found = try {
             getSystemService(AudioManager::class.java)
                 .getDevices(AudioManager.GET_DEVICES_INPUTS)
                 .firstOrNull { deviceKind(it.type) == micPref }
         } catch (e: Exception) { null }
+        /* Asked for a microphone that is not there.
+         *
+         * Android's answer to a null preferredDevice is to pick the default, which is the
+         * handset's own mic — so the app carried on recording, from the wrong device, and
+         * said nothing. A wireless mic that has gone to sleep looks exactly like this: it
+         * drops off the device list, the next open silently lands on the phone, and the
+         * shopkeeper is talking into a receiver that is no longer in the path. It works,
+         * then it does not, and nothing on screen explains why.
+         *
+         * It still opens — a billing app that refuses to listen because an accessory dozed
+         * off is worse than one that listens on the wrong mic — but it is now said out
+         * loud, and every clip carries the device that actually recorded it, so the
+         * comparison cannot be quietly polluted by the phone's own microphone. */
+        if (found == null) Log.w(TAG, "mic pref=$micPref not present — falling back to default")
+        return found
     }
 
     /* The kind, plus the hardware's own name when it has one worth keeping.

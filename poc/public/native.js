@@ -82,6 +82,23 @@
 
     working() { safe(() => setTalk("busy")); },
 
+    /* The phone opened a microphone, and it may not be the one that was asked for.
+     *
+     * Worth a toast rather than a log line: a wireless mic that has gone to sleep drops off
+     * the device list, and the next open silently lands on the handset. From the counter
+     * that looks like the app breaking for no reason — it still hears him, just much worse,
+     * and there is nothing to see. Saying so is the difference between "press the button on
+     * the mic" and twenty minutes of guessing. */
+    mic(p) {
+      safe(() => {
+        if (p.honoured) return;
+        if (typeof toast === "function") {
+          toast(`Recording from ${p.routed || "the phone"} — ${p.pref} not found. ` +
+                `Wake the microphone and try again.`, 5000, true);
+        }
+      });
+    },
+
     /* The native side has already done the round trip, so this is the same object the
        page's own fetch used to produce and it goes to the same place. */
     result(data) {

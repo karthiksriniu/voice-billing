@@ -17,7 +17,8 @@ from pathlib import Path
 
 from urllib.parse import parse_qs, urlencode
 
-from fastapi import APIRouter, FastAPI, File, Form, Request, UploadFile
+from fastapi import (APIRouter, BackgroundTasks, FastAPI, File, Form, Request,
+                     UploadFile)
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -605,7 +606,8 @@ async def parse_text(req: ParseRequest):
 
 
 @router.post("/transcribe")
-async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_SHOP),
+async def transcribe(background: BackgroundTasks,
+                     audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_SHOP),
                      mode: str = Form("billing"), lang: str = Form("")):
     """Audio in, line items out. Reports asr_ms separately from parse_ms because the
     latency budget in PLAN.md is about the parse stage, and the network hop here is an
@@ -638,7 +640,22 @@ async def transcribe(audio: UploadFile = File(...), shop_id: str = Form(DEFAULT_
     payload = result_payload(res, int((time.perf_counter() - t1) * 1000), mode, p)
     payload |= {"asr_ms": asr_ms, "parse_ms": payload["took_ms"], "bytes": len(raw),
                 "lang": norm_lang(lang)}
-    await db.log_utterance(shop_id, tr.text, payload)
+    # Telemetry does not get to stand between him and the screen.
+    #
+    # Measured on production against a 3s clip: the whole call took ~3000ms, of which ASR
+    # was ~1450ms and parsing ~25ms. Most of the rest was this line — a fresh
+    # httpx.AsyncClient, so a full TLS handshake to Supabase, an insert, and only then the
+    # response. Every spoken command paid for it, including ones with no items in them at
+    # all, which is why "cash received" felt as slow as an order.
+    #
+    # PLAN.md puts p95 speech-end to line-on-screen at 1150ms and calls 1500ms
+    # build-breaking. A second of it was being spent writing the Phase 1 corpus down.
+    #
+    # The corpus still matters (D9, and corrected utterances are the highest-value data we
+    # collect), so this is deferred rather than dropped. The trade is explicit: if the
+    # container is frozen the instant the response is flushed, that one utterance is not
+    # recorded. Losing a row of telemetry is cheaper than making him wait for it.
+    background.add_task(db.log_utterance, shop_id, tr.text, payload)
     return payload
 
 
