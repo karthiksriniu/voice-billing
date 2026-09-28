@@ -410,6 +410,19 @@
         <button id="micReportBtn" class="mini" data-t="hfRunBtn">Run</button></div>
       <pre id="micReportOut" class="hflog" hidden></pre>
     </div>
+    <!-- What the phone SAYS, which is deliberately not the same setting as the language the
+         screen is in: the screen is the shopkeeper's, the voice is heard by whoever is at
+         the counter. The voice list comes off the handset because what is installed varies
+         by phone, and the names are opaque engine codes — hence Test rather than labels. -->
+    <label class="field"><span data-t="voiceLang">Voice language</span>
+      <select id="setVoiceLang"></select></label>
+    <label class="field"><span data-t="voicePick">Voice</span>
+      <select id="setVoice"></select>
+      <small id="voiceHint" class="fineprint dim"></small></label>
+    <div class="checkbox">
+      <div class="sectionhead"><span data-t="voicePick">Voice</span>
+        <button id="voiceTestBtn" class="mini" data-t="voiceTest">Test</button></div>
+    </div>
     <!-- Reading paper and drafting recipes are the two things that reach outside the shop.
          A key that was rotated or set on the wrong environment reads as configured and
          then fails at the counter, so this asks the question properly. -->

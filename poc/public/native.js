@@ -207,17 +207,28 @@
   // hooking every place the page mutates state: one comparison every two seconds is
   // cheaper than being wrong the one time somebody adds a new write site.
   let last = "";
-  setInterval(() => {
+  /* The two sentences the SERVICE says are composed here and handed over finished.
+   *
+   * Everything else spoken goes through the page, where i18n.js already has six languages.
+   * These two cannot: one is said from the audio loop before the microphone opens, the other
+   * when a clip came back empty. Rather than keep a second translation table in Android
+   * resources for exactly two strings — and have Tamil live in two places that drift apart —
+   * the page sends the finished line and the service plays it. */
+  window.pushNativeContext = () => {
     if (typeof state === "undefined" || !state.shop) return;
+    const owner = (state.shop.owner_name || "").trim();
     const ctx = JSON.stringify({
       shop_id: state.shop.id || "",
       mode: state.mode || "billing",
       lang: state.shop.lang || "en",
       // The phone answers to his name, and the name lives on the shop record.
-      owner_name: state.shop.owner_name || "",
+      owner_name: owner,
+      ack_line: owner ? `${tv("ackWake")} ${owner}` : tv("ackWake"),
+      not_heard_line: tv("nothingHeard"),
     });
     if (ctx !== last) { last = ctx; bridge.setContext(ctx); }
-  }, 2000);
+  };
+  setInterval(window.pushNativeContext, 2000);
 
   /* ---- the two ways to talk ---- */
 

@@ -21,6 +21,8 @@ class WebBridge(private val ctx: Context) {
         Bus.mode = o.optString("mode", Bus.mode)
         Bus.lang = o.optString("lang", Bus.lang)
         Bus.ownerName = o.optString("owner_name", Bus.ownerName)
+        Bus.ackLine = o.optString("ack_line", Bus.ackLine)
+        Bus.notHeardLine = o.optString("not_heard_line", Bus.notHeardLine)
     }
 
     @JavascriptInterface
@@ -89,6 +91,39 @@ class WebBridge(private val ctx: Context) {
     @JavascriptInterface
     fun askThenListen(text: String) {
         if (text.isNotBlank()) VoiceService.ask(ctx, text)
+    }
+
+    /* Which voices this phone actually has for a language.
+     *
+     * Enumerated rather than listed by us, because what is installed varies by handset,
+     * engine and whatever the owner has downloaded — a hard-coded list would offer voices
+     * that are not there and hide the ones that are. Names are opaque engine identifiers
+     * ("ta-in-x-tac-local"), so the page numbers them and gives him a Test button: Android
+     * does not tell us which are female, and guessing from a code is how you end up labelling
+     * a voice wrongly in the one place he will notice.
+     *
+     * Returns a JSON array, empty when the language is not installed at all. */
+    @JavascriptInterface
+    fun voices(lang: String): String {
+        val list = VoiceService.speakerRef?.voicesFor(lang).orEmpty()
+        return org.json.JSONArray(list).toString()
+    }
+
+    /** Non-empty when the last voice change asked for a language the engine does not have. */
+    @JavascriptInterface
+    fun voiceMissing(): String = VoiceService.speakerRef?.languageMissing.orEmpty()
+
+    @JavascriptInterface
+    fun setVoice(lang: String, name: String) {
+        val l = if (lang == "ta") "ta" else "en"
+        VoiceService.rememberVoice(ctx, l, name)
+        VoiceService.speakerRef?.applyVoice(l, name)
+    }
+
+    @JavascriptInterface
+    fun voicePref(): String {
+        val (l, n) = VoiceService.voicePrefs(ctx)
+        return org.json.JSONObject().put("lang", l).put("name", n).toString()
     }
 
     @JavascriptInterface

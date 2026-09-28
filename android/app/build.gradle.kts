@@ -42,7 +42,13 @@ android {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
+                /* Pressing Enter at keytool's key-password prompt reuses the store
+                 * password, which is what almost everybody does and what the README's own
+                 * command leads you to. Requiring the value to then be written out a second
+                 * time buys nothing and fails with an unhelpful error when it is missing, so
+                 * an absent keyPassword means "the same one". */
                 keyPassword = keystoreProps.getProperty("keyPassword")
+                    ?: keystoreProps.getProperty("storePassword")
             }
         }
     }

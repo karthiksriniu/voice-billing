@@ -16,10 +16,14 @@ const STRINGS = {
   en: {
     confirmReceived: "Payment received — confirm?", creditNotMatched: "Credit does not match this bill", editingBill: "Editing the bill", upiClosed: "Closed, UPI", receiptQueued: "Receipt queued — it will be sent shortly", newBillReady: "Ready for next bill", noBillYet: "No bill to close yet", cashClosed: "Marking it as cash", ownerOnly: "Owner only", listening: "Listening", sayWake: "Say “Sahana”", handsFree: "Hands-free (Sahana)", handsFreeNo: "Hands-free needs Chrome on Android",
     itemWord: "item", itemsWord: "items",
+    ackWake: "Yes", nothingHeard: "Sorry, I didn\u2019t catch that",
+    voiceLang: "Voice language", voicePick: "Voice", voiceTest: "Test",
+    voiceTestLine: "Two coffee and one biscuit. Total sixty rupees.",
+    voiceNumbered: "Voice", voiceNotInstalled: "That language has no voice installed on this phone",
     generatingBill: "Generating bill, please wait", billTotal: "Total",
     didYouSay: "Did you say", removedItem: "Removed", readyNext: "Ready for next bill",
     notSure: "I did not catch that — say yes or no",
-    ownerName: "Your name", ownerNameHint: "Synthia says this back when it wakes — “Yes Suresh”.",
+    ownerName: "Your name", ownerNameHint: "Said back to you on every wake — “Yes Suresh”.",
     notInList: "Not in your list", whichItem: "which item is this?", saySoldName: "Say the name you sell it under, or pick below", pickFromList: "Pick from list", itIsNew: "It is new", removeAlias: "Remove this name",
     micDenied: "Microphone blocked — allow it in the browser", handsFreeNet: "Hands-free needs a connection", handsFreeChrome: "Hands-free works in Chrome on Android",
     hfCheck: "Hands-free check", hfRunBtn: "Run", hfCopy: "Copy result", copied: "Copied",
@@ -124,6 +128,17 @@ const STRINGS = {
     alreadyEmpty: "Already empty", updated: "updated",
   },
   ta: {
+    itemWord: "ஐட்டம்", itemsWord: "ஐட்டம்",
+    ackWake: "சொல்லுங்க", nothingHeard: "மன்னிக்கணும், காதுல விழலை",
+    generatingBill: "பில் தயாராகுது, கொஞ்சம் இருங்க", billTotal: "மொத்தம்",
+    didYouSay: "நீங்க சொன்னது", removedItem: "எடுத்துட்டேன்",
+    readyNext: "அடுத்த பில்லுக்கு தயார்",
+    notSure: "புரியலை — ஆமாம் இல்லன்னா இல்லைனு சொல்லுங்க",
+    ownerName: "உங்க பேரு",
+    ownerNameHint: "கூப்பிடும்போது இப்படி சொல்லும் — “சொல்லுங்க சுரேஷ்”.",
+    voiceLang: "குரல் மொழி", voicePick: "குரல்", voiceTest: "சோதிக்க",
+    voiceTestLine: "ரெண்டு காபி, ஒரு பிஸ்கட். மொத்தம் அறுபது ரூபாய்.",
+    voiceNumbered: "குரல்", voiceNotInstalled: "இந்த மொழிக்கு இந்த ஃபோன்ல குரல் இல்லை",
     confirmReceived: "பணம் வந்திருக்கு — சரியா?", creditNotMatched: "இந்த பில்லுக்கு சரிபடல", editingBill: "பில் திருத்துறோம்", upiClosed: "முடிஞ்சது, UPI", receiptQueued: "ரசீது வரிசையில — கொஞ்ச நேரத்துல அனுப்பப்படும்", newBillReady: "புது பில், சொல்லுங்க", noBillYet: "இன்னும் பில் இல்லை", cashClosed: "முடிஞ்சது, ரொக்கம்", ownerOnly: "முதலாளி மட்டும்", listening: "கேட்குது", sayWake: "“சிந்தியா”னு சொல்லுங்க", handsFree: "கை இல்லாம (சிந்தியா)", handsFreeNo: "இதுக்கு Android Chrome வேணும்",
     notInList: "லிஸ்ட்ல இல்லை", whichItem: "இது எந்த ஐட்டம்?", saySoldName: "நீங்க வைச்சிருக்கிற பேரை சொல்லுங்க, இல்லைன்னா கீழ தேர்ந்தெடுங்க", pickFromList: "லிஸ்ட்ல தேர்ந்தெடு", itIsNew: "இது புதுசு", removeAlias: "இந்த பேரை நீக்கு",
     micDenied: "மைக் தடுக்கப்பட்டுருக்கு — அனுமதி கொடுங்க", handsFreeNet: "இதுக்கு இண்டர்நெட் வேணும்", handsFreeChrome: "Android Chrome-ல வேலை செய்யும்",
@@ -653,3 +668,19 @@ const STRINGS = {
 let LANG = "en";
 const setLang = (code) => { LANG = STRINGS[code] ? code : "en"; };
 const t = (key) => (STRINGS[LANG] && STRINGS[LANG][key]) || STRINGS.en[key] || key;
+
+/* What the phone SAYS, which is not always the language the screen is in.
+ *
+ * They are separate settings on purpose. The interface language is the shopkeeper's, chosen
+ * once at signup and rarely revisited; the voice is heard by whoever is standing at the
+ * counter, and a Chennai shop may well want a Tamil voice over an English screen or the
+ * reverse. Tying them together means changing one to get the other.
+ *
+ * Empty means follow the screen, which is the right default and the one nobody has to think
+ * about. */
+let VOICE_LANG = "";
+const setVoiceLang = (code) => { VOICE_LANG = STRINGS[code] ? code : ""; };
+const tv = (key) => {
+  const l = VOICE_LANG || LANG;
+  return (STRINGS[l] && STRINGS[l][key]) || STRINGS.en[key] || key;
+};

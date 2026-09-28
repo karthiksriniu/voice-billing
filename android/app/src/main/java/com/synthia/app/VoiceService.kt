@@ -54,6 +54,8 @@ class VoiceService : Service() {
     @Volatile private var micPref = "auto"
     /** Set from the main thread, acted on by the worker — see ACTION_SET_MIC. */
     @Volatile private var reopenMic = false
+    private var pendingVoiceLang = "en"
+    private var pendingVoiceName = ""
 
     private lateinit var kws: Kws
     private lateinit var vad: Vad
@@ -84,8 +86,8 @@ class VoiceService : Service() {
     /** Whether the line now being spoken should be followed by a capture, or by standing down. */
     private var captureAfterSpeech = false
     private var speakingSince = 0L
-    /** The name the cached acknowledgement was rendered for. */
-    private var lastAckName: String? = null
+    /** The exact line the cached acknowledgement was rendered from. */
+    private var lastAckLine: String? = null
 
     private var record: AudioRecord? = null
     private var worker: Thread? = null
@@ -149,7 +151,10 @@ class VoiceService : Service() {
             ContextCompat.registerReceiver(this, harvestSwitch,
                 android.content.IntentFilter(ACTION_HARVEST), ContextCompat.RECEIVER_EXPORTED)
         }
-        micPref = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_MIC, "auto") ?: "auto"
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        micPref = prefs.getString(KEY_MIC, "auto") ?: "auto"
+        pendingVoiceLang = prefs.getString(KEY_VOICE_LANG, "en") ?: "en"
+        pendingVoiceName = prefs.getString(KEY_VOICE_NAME, "") ?: ""
         transcriber = Transcriber(BuildConfig.WEB_BASE)
         /* Never fatal. The platform can refuse this for reasons that are about WHEN it was
          * called rather than anything being wrong — a background start, a missing
@@ -226,6 +231,8 @@ class VoiceService : Service() {
             // The application context, not this service: TextToSpeech holds what it is given
             // for its lifetime, and the service is the shorter-lived of the two.
             speaker = Speaker(applicationContext)
+            // Before the engine finishes starting, so the first thing it renders is right.
+            speaker.applyVoice(pendingVoiceLang, pendingVoiceName)
             speakerRef = speaker
             // Render whatever name we already have before the first wake can arrive.
             refreshAck()
@@ -528,9 +535,7 @@ class VoiceService : Service() {
      * every order to a sentence the phone was saying itself. The beep still lands
      * immediately — that is the fast, reliable signal — and the words follow it. */
     private fun acknowledge() {
-        val name = Bus.ownerName.trim()
-        val line = if (name.isEmpty()) getString(R.string.ack)
-                   else getString(R.string.ack_named, name)
+        val line = ackLine()
         Log.i(TAG, "wake acknowledged: $line")
         kws.reset()
         vad.reset()
@@ -558,13 +563,20 @@ class VoiceService : Service() {
      * the whole point is that nothing is synthesised while somebody is standing there waiting
      * to talk. */
     private fun refreshAck() {
-        val name = Bus.ownerName.trim()
-        if (name == lastAckName) return
-        lastAckName = name
-        val line = if (name.isEmpty()) getString(R.string.ack)
-                   else getString(R.string.ack_named, name)
+        val line = ackLine()
+        if (line == lastAckLine) return
+        lastAckLine = line
         Log.i(TAG, "pre-rendering acknowledgement: $line")
         speaker.prepareAck(line)
+    }
+
+    /** The page's wording when it has loaded, the built-in English until then. */
+    private fun ackLine(): String {
+        val fromPage = Bus.ackLine.trim()
+        if (fromPage.isNotEmpty()) return fromPage
+        val name = Bus.ownerName.trim()
+        return if (name.isEmpty()) getString(R.string.ack)
+               else getString(R.string.ack_named, name)
     }
 
     /** Say something, hold the microphone shut until it is finished, then capture or stop. */
@@ -639,7 +651,8 @@ class VoiceService : Service() {
     private fun abandonCapture() {
         clip.clear()
         Bus.emit("capture", "state" to "empty")
-        speakAnd(getString(R.string.didnt_catch), thenCapture = false)
+        speakAnd(Bus.notHeardLine.trim().ifEmpty { getString(R.string.didnt_catch) },
+                 thenCapture = false)
     }
 
     private fun standDown() {
@@ -964,6 +977,19 @@ class VoiceService : Service() {
         private const val PREFS = "voice"
         private const val KEY_HANDS_FREE = "hands_free"
         private const val KEY_MIC = "mic_pref"
+        private const val KEY_VOICE_LANG = "voice_lang"
+        private const val KEY_VOICE_NAME = "voice_name"
+
+        fun voicePrefs(ctx: Context): Pair<String, String> {
+            val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            return (p.getString(KEY_VOICE_LANG, "en") ?: "en") to
+                   (p.getString(KEY_VOICE_NAME, "") ?: "")
+        }
+
+        fun rememberVoice(ctx: Context, lang: String, name: String) {
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_VOICE_LANG, lang).putString(KEY_VOICE_NAME, name).apply()
+        }
 
         fun handsFreeEnabled(ctx: Context): Boolean =
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HANDS_FREE, false)

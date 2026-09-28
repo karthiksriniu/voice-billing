@@ -3,6 +3,7 @@ package com.synthia.app
 import android.content.Context
 import android.media.MediaPlayer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import java.util.Locale
@@ -106,12 +107,22 @@ class Speaker(ctx: Context) {
     private var ackText: String = ""
     @Volatile private var ackReady = false
 
+    /** Which language the phone answers in, and which of that language's voices. */
+    @Volatile private var voiceLang = "en"
+    @Volatile private var voiceName = ""
+
     init {
         val engine = TextToSpeech(ctx) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("en", "IN")
                 ready = true
-                Log.i(TAG, "tts ready")
+                applyVoice(voiceLang, voiceName)
+                /* What this handset can actually say, once, at startup.
+                 *
+                 * Which voices exist is a property of the phone and its engine, not of the
+                 * app — so when a pilot reports the wrong accent or a missing language, this
+                 * line is the difference between diagnosing it and asking them to read a
+                 * settings screen aloud over the phone. */
+                Log.i(TAG, "tts ready — en=${voicesFor("en")} ta=${voicesFor("ta")}")
                 while (true) (pending.poll() ?: break).let { say(it.text, it.done) }
                 // Whatever the name was when the engine was still starting, render it now.
                 if (ackText.isNotBlank()) prepareAck(ackText)
@@ -143,6 +154,76 @@ class Speaker(ctx: Context) {
         setSpeaking(false)
         val cb = synchronized(callbacks) { callbacks.remove(id) }
         cb?.invoke()
+    }
+
+    /* ---- which voice ---- */
+
+    private fun localeFor(lang: String): Locale =
+        if (lang == "ta") Locale("ta", "IN") else Locale("en", "IN")
+
+    /**
+     * Point the engine at a language and, if named, one specific voice within it.
+     *
+     * Called before the engine is ready too — the fields are remembered and applied on init,
+     * so the page can set a voice during startup without having to wait for anything.
+     */
+    fun applyVoice(lang: String, name: String) {
+        voiceLang = lang
+        voiceName = name
+        val engine = tts ?: return
+        if (!ready) return
+        try {
+            val locale = localeFor(lang)
+            val rc = engine.setLanguage(locale)
+            if (rc == TextToSpeech.LANG_MISSING_DATA || rc == TextToSpeech.LANG_NOT_SUPPORTED) {
+                /* Tamil is not installed on every phone, and an engine asked for a language
+                 * it does not have keeps the previous one rather than failing — so the
+                 * shopkeeper would pick Tamil, hear English, and have nothing to tell him
+                 * why. Fall back out loud and let the page say so. */
+                Log.w(TAG, "tts has no data for $locale (rc=$rc) — staying on English")
+                engine.setLanguage(localeFor("en"))
+                voiceLang = "en"
+                languageMissing = lang
+            } else {
+                languageMissing = ""
+            }
+            if (name.isNotBlank()) {
+                engine.voices.orEmpty().firstOrNull { it.name == name }?.let { engine.voice = it }
+            }
+            Log.i(TAG, "voice: lang=$voiceLang name=${engine.voice?.name}")
+        } catch (e: Exception) {
+            Log.w(TAG, "could not set voice: ${e.message}")
+        }
+        // The acknowledgement was rendered in the old voice; it has to be made again.
+        val was = ackText
+        ackText = ""
+        ackReady = false
+        if (was.isNotBlank()) prepareAck(was)
+    }
+
+    /** Non-empty when the last applyVoice asked for a language the engine does not have. */
+    @Volatile var languageMissing = ""
+        private set
+
+    /* The installable voices for a language, offline ones only.
+     *
+     * Network voices are excluded on principle rather than preference: the cost ceiling is
+     * ₹10 a shop a month with ₹0 of it cloud inference, and offline billing is
+     * non-negotiable. A voice that goes quiet when the connection does would take the
+     * acknowledgement with it — and the acknowledgement is what opens the microphone. */
+    fun voicesFor(lang: String): List<String> {
+        val engine = tts ?: return emptyList()
+        val want = if (lang == "ta") "ta" else "en"
+        return try {
+            engine.voices.orEmpty()
+                .filter { it.locale.language == want }
+                .filter { !it.isNetworkConnectionRequired }
+                .filter { Voice.QUALITY_VERY_LOW != it.quality }
+                .sortedWith(compareByDescending<Voice> { it.locale.country == "IN" }
+                    .thenByDescending { it.quality }
+                    .thenBy { it.name })
+                .map { it.name }
+        } catch (e: Exception) { emptyList() }
     }
 
     /* ---- the pre-rendered acknowledgement ---- */

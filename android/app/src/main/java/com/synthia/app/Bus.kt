@@ -34,6 +34,17 @@ object Bus {
      *  own is fine — better than answering to a name that is not his. */
     @Volatile var ownerName: String = ""
 
+    /* The two lines the SERVICE says, supplied by the page rather than by strings.xml.
+     *
+     * Everything else spoken comes from i18n.js, which already carries six languages and is
+     * where a translation gets fixed. These two could not: they are said from the audio loop,
+     * one of them before the microphone opens. Rather than keep a second, smaller translation
+     * table in Android resources and have Tamil live in two places that drift, the page hands
+     * the finished sentence over. The resources remain as the fallback for the moments before
+     * any page has loaded. */
+    @Volatile var ackLine: String = ""
+    @Volatile var notHeardLine: String = ""
+
     /** Whether the page has asked for hands-free. Survives a permission prompt. */
     @Volatile var handsFreeWanted: Boolean = false
 

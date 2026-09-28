@@ -81,6 +81,78 @@ function named(msg) {
   return n ? `${msg} ${n}` : msg;
 }
 
+/* ---------- what the phone sounds like ----------
+
+   Two settings, and they are separate for a reason that only shows up in a shop: the screen
+   belongs to the shopkeeper and the voice belongs to the counter. A Chennai shop may want a
+   Tamil voice over an English screen, or an English voice because that is what his customers
+   hear all day on the radio. Tying them together means changing one to get the other.
+
+   The voice list is read off the handset rather than written here, because what is installed
+   varies by phone, by engine and by whatever the owner has downloaded. Android does not
+   report which voices are female, so they are numbered and given a Test button — labelling
+   one wrongly is worse than not labelling it, and he can hear the difference in two taps. */
+const VOICE_LANG_PREF = "boloVoiceLang";
+const VOICE_NAME_PREF = "boloVoiceName";
+
+function loadVoicePrefs() {
+  try {
+    setVoiceLang(localStorage.getItem(VOICE_LANG_PREF) || "");
+  } catch (e) { /* private mode: the screen language stands in */ }
+}
+
+function nativeVoices(lang) {
+  if (!window.Bolo || !window.Bolo.voices) return [];
+  try { return JSON.parse(window.Bolo.voices(lang) || "[]"); } catch (e) { return []; }
+}
+
+function renderVoiceSettings() {
+  const langSel = $("setVoiceLang");
+  const voiceSel = $("setVoice");
+  if (!langSel || !voiceSel) return;
+
+  const cur = VOICE_LANG || state.shop.lang || "en";
+  langSel.innerHTML = Object.entries(LANGS)
+    .map(([c, l]) => `<option value="${c}"${c === cur ? " selected" : ""}>${l.native} — ${l.label}</option>`)
+    .join("");
+
+  const names = nativeVoices(cur);
+  let saved = "";
+  try { saved = localStorage.getItem(VOICE_NAME_PREF) || ""; } catch (e) { /* ignore */ }
+  voiceSel.innerHTML = names.length
+    ? names.map((n, i) =>
+        `<option value="${n}"${n === saved ? " selected" : ""}>${t("voiceNumbered")} ${i + 1}</option>`).join("")
+    : `<option value="">—</option>`;
+  voiceSel.disabled = !names.length;
+  // Said plainly rather than left as an empty list: a language with no voice installed is a
+  // thing he can fix on the phone, and an empty dropdown tells him nothing about how.
+  $("voiceHint").textContent = names.length ? "" : t("voiceNotInstalled");
+
+  langSel.onchange = () => {
+    setVoiceLang(langSel.value);
+    try { localStorage.setItem(VOICE_LANG_PREF, langSel.value); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem(VOICE_NAME_PREF); } catch (e) { /* ignore */ }
+    applyVoiceToPhone(langSel.value, "");
+    renderVoiceSettings();
+    speak(tv("voiceTestLine"));
+  };
+  voiceSel.onchange = () => {
+    try { localStorage.setItem(VOICE_NAME_PREF, voiceSel.value); } catch (e) { /* ignore */ }
+    applyVoiceToPhone(VOICE_LANG || state.shop.lang || "en", voiceSel.value);
+    speak(tv("voiceTestLine"));
+  };
+  const testBtn = $("voiceTestBtn");
+  if (testBtn) testBtn.onclick = () => speak(tv("voiceTestLine"));
+}
+
+function applyVoiceToPhone(lang, name) {
+  if (window.Bolo && window.Bolo.setVoice) {
+    try { window.Bolo.setVoice(lang, name || ""); } catch (e) { /* browser */ }
+  }
+  // The two lines the service says itself have to be re-sent in the new language.
+  if (window.pushNativeContext) window.pushNativeContext();
+}
+
 /* ---------- confirming a doubtful line, out loud ----------
 
    The confidence gate marks a line `pending` when the parser is not sure it heard the item
@@ -118,7 +190,7 @@ function askNextConfirmation() {
   if (!next) return false;
   awaitingConfirm = next;
   confirmTries = 0;
-  window.askThenListen(`${t("didYouSay")} ${next.name}?`);
+  window.askThenListen(`${tv("didYouSay")} ${next.name}?`);
   return true;
 }
 
@@ -145,7 +217,7 @@ function handleConfirmation(data) {
     if (i >= 0) state.items.splice(i, 1);
     awaitingConfirm = null;
     render();
-    speak(`${t("removedItem")} ${item.name}`);
+    speak(`${tv("removedItem")} ${item.name}`);
     setTimeout(() => { if (!askNextConfirmation()) speakItemCount(); }, 1200);
     return true;
   }
@@ -157,16 +229,16 @@ function handleConfirmation(data) {
   confirmTries++;
   if (confirmTries >= 2) {
     awaitingConfirm = null;
-    speak(t("notSure"));
+    speak(tv("notSure"));
     return true;
   }
-  window.askThenListen(`${t("notSure")}. ${t("didYouSay")} ${item.name}?`);
+  window.askThenListen(`${tv("notSure")}. ${tv("didYouSay")} ${item.name}?`);
   return true;
 }
 
 function speakItemCount() {
   const n = state.items.filter((i) => !i.pending).length;
-  if (n) speak(`${n} ${n === 1 ? t("itemWord") : t("itemsWord")}`);
+  if (n) speak(`${n} ${n === 1 ? tv("itemWord") : tv("itemsWord")}`);
 }
 
 /* Run an action with the button visibly doing it.
@@ -391,6 +463,10 @@ async function enter(session) {
   applyAsrAvailability();
   if (health.asr_configured) await openMic();
 }
+
+// Before any session is restored, so the very first thing the phone says is in the voice he
+// chose rather than in whatever the screen happens to be set to.
+loadVoicePrefs();
 
 // Resume a session so a reload mid-trade doesn't cost a sign-in.
 try {
@@ -799,7 +875,7 @@ function apply(data, roundTripMs) {
   if (data.command === "edit_bill") {
     show("main");
     render();
-    speak(state.items.length ? t("editingBill") : named(t("newBillReady")));
+    speak(state.items.length ? tv("editingBill") : named(tv("newBillReady")));
     return;
   }
   if (data.command === "place_order") { placeOrder(); return; }
@@ -1410,6 +1486,7 @@ async function loadSettings() {
   $("setWa").value = j.wa_number || "";
   $("setGstin").value = j.gstin || "";
   renderMicPicker();
+  renderVoiceSettings();
   $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   $("setLang").value = j.lang;
   $("setMobile").textContent = `${t("signedInAs")} ${j.mobile}`;
@@ -1524,6 +1601,7 @@ $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   state.shop.gstin = j.gstin;
   $("setGstin").value = j.gstin || "";
   renderMicPicker();
+  renderVoiceSettings();
   $("gstState").textContent = j.gst_state ? `${j.gst_state} · ${t("gstOnReceipt")}` : "";
   setLang(j.lang);
   applyStrings();
@@ -1720,7 +1798,7 @@ async function finalize() {
    * builds the QR — and it is the one moment a customer is standing there watching. With the
    * screen turned away from him, silence here reads as the app having missed the command,
    * and the thing a shopkeeper does then is say it again. */
-  speak(t("generatingBill"));
+  speak(tv("generatingBill"));
   showPaymentPending();
   try {
     const d = await api("/api/finalize", {
@@ -1739,7 +1817,7 @@ async function finalize() {
      * This is the one figure that matters and the only one he cannot get from anywhere else
      * with the screen facing away — the running count during dictation is deliberately just a
      * count, on the understanding that the money gets announced here. */
-    speak(`${t("billTotal")} ${rupees(d.total)}`);
+    speak(`${tv("billTotal")} ${rupees(d.total)}`);
   } catch (err) {
     // Back to the bill rather than stranded on a payment screen with no QR.
     $("qr").classList.remove("loading");
@@ -2862,7 +2940,7 @@ async function cashReceived() {
       method: "POST",
       body: { bill_id: state.bill.bill_id, shop_id: state.shop.id, method: "cash" },
     });
-    speak(named(`${t("cashClosed")} ${rupees(state.bill.total)}`));
+    speak(named(`${tv("cashClosed")} ${rupees(state.bill.total)}`));
   } catch (err) {
     speak(t("notSaved"));
     return;
@@ -2915,6 +2993,6 @@ function newBill() {
    * finished sale actually takes — the customer taps away, or the thanks screen times out,
    * and the counter is clear again without anybody having said anything. With the screen
    * turned away, this is how he knows the last sale closed and the phone is his again. */
-  speak(named(t("readyNext")));
+  speak(named(tv("readyNext")));
 }
 
