@@ -20,7 +20,16 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.synthia.app"
+        /* The install identity, which is NOT the code's package name (`namespace` above stays
+         * com.synthia.app, so no Kotlin moves). It is com.bolobill.admin because that is the
+         * app registered in the Firebase project the testers are invited from, and App
+         * Distribution rejects an upload whose package name does not match the app it is
+         * being uploaded to.
+         *
+         * Changing it makes this a different app to Android: a phone carrying the old one
+         * gets a second icon rather than an upgrade, and the old install keeps its own
+         * SharedPreferences — hands-free, microphone and voice all start fresh. */
+        applicationId = "com.bolobill.admin"
         minSdk = 29                 // Android 10, the floor in CLAUDE.md
         targetSdk = 35
         versionCode = 1
