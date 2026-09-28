@@ -69,6 +69,8 @@ class VoiceService : Service() {
     /** Whether the line now being spoken should be followed by a capture, or by standing down. */
     private var captureAfterSpeech = false
     private var speakingSince = 0L
+    /** The name the cached acknowledgement was rendered for. */
+    private var lastAckName: String? = null
 
     private var record: AudioRecord? = null
     private var worker: Thread? = null
@@ -164,6 +166,8 @@ class VoiceService : Service() {
             // for its lifetime, and the service is the shorter-lived of the two.
             speaker = Speaker(applicationContext)
             speakerRef = speaker
+            // Render whatever name we already have before the first wake can arrive.
+            refreshAck()
         } catch (e: Throwable) {
             Log.e(TAG, "model load failed", e)
             Bus.emit("voice_error", "reason" to "model_load", "detail" to (e.message ?: ""))
@@ -231,6 +235,8 @@ class VoiceService : Service() {
                 if (now - lastBeat > 2000) {
                     Log.i(TAG, "beat state=$state frames=$frames peak=$loudest chain=$chain")
                     lastBeat = now; frames = 0; loudest = 0
+                    // Cheap, and this is already the every-two-seconds tick.
+                    refreshAck()
                 }
             }
 
@@ -439,7 +445,34 @@ class VoiceService : Service() {
         feedback(880, 90)
         note(R.string.notif_recording)
         Bus.emit("capture", "state" to "ack")
-        speakAnd(line, thenCapture = true)
+        /* The pre-rendered one, not a fresh synthesis.
+         *
+         * This is the only line the shopkeeper waits through — the microphone is deaf until
+         * it finishes, by design, so that the answer never lands in the clip. Spoken live it
+         * cost 1.3 seconds every time and four seconds on the first wake after launch, which
+         * is long enough to swallow the order of anyone who says the name and the item in one
+         * breath. Played from a file it is a seek and a start. */
+        state = State.SPEAKING
+        speakingSince = System.currentTimeMillis()
+        speechDone = false
+        captureAfterSpeech = true
+        speaker.ack(line) { speechDone = true }
+    }
+
+    /* Keep the rendered acknowledgement in step with the name.
+     *
+     * The page pushes the shop's name over the bridge a couple of seconds after it loads, and
+     * again whenever it is edited in Settings. Rendering is done off the wake path entirely —
+     * the whole point is that nothing is synthesised while somebody is standing there waiting
+     * to talk. */
+    private fun refreshAck() {
+        val name = Bus.ownerName.trim()
+        if (name == lastAckName) return
+        lastAckName = name
+        val line = if (name.isEmpty()) getString(R.string.ack)
+                   else getString(R.string.ack_named, name)
+        Log.i(TAG, "pre-rendering acknowledgement: $line")
+        speaker.prepareAck(line)
     }
 
     /** Say something, hold the microphone shut until it is finished, then capture or stop. */

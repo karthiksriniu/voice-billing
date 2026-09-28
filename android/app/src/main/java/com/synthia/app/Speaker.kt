@@ -1,6 +1,7 @@
 package com.synthia.app
 
 import android.content.Context
+import android.media.MediaPlayer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -37,6 +38,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 class Speaker(ctx: Context) {
 
+    private val cacheDir = ctx.cacheDir
+
     private class Job(val text: String, val done: (() -> Unit)?)
 
     @Volatile private var tts: TextToSpeech? = null
@@ -50,9 +53,58 @@ class Speaker(ctx: Context) {
     private val callbacks = HashMap<String, () -> Unit>()
     private var seq = 0
 
-    /** True between the start of an utterance and its end. The microphone consults this. */
-    @Volatile var speaking = false
-        private set
+    @Volatile private var speakingFlag = false
+    @Volatile private var speakingSince = 0L
+
+    /* True between the start of an utterance and its end. The microphone consults this, and
+     * goes deaf for exactly as long as it is true — which is why it is read through a
+     * deadline rather than straight off the field.
+     *
+     * The first version of this was a plain boolean, and synthesising the acknowledgement to
+     * a file tripped onStart() without ever tripping onDone(), because the completion for a
+     * synthesis is handled on a different path. The flag stuck on, the guard swallowed every
+     * frame, and the phone sat there with good audio arriving — peak 13249, sixty-three frames
+     * every two seconds — and the keyword model simply never saw any of it.
+     *
+     * That is the second time a latched flag has made this phone permanently deaf, after
+     * AudioRecord's recordingState. So the rule now is the same one: nothing that silences the
+     * microphone is allowed to do it indefinitely. No utterance runs longer than this; if the
+     * flag is still set afterwards it is wrong, and a wrong flag must not cost the shopkeeper
+     * his wake word. */
+    val speaking: Boolean
+        get() {
+            if (!speakingFlag) return false
+            if (System.currentTimeMillis() - speakingSince > MAX_SPEAK_MS) {
+                Log.w(TAG, "speaking flag stuck for ${System.currentTimeMillis() - speakingSince}ms — clearing")
+                speakingFlag = false
+                return false
+            }
+            return true
+        }
+
+    private fun setSpeaking(on: Boolean) {
+        speakingFlag = on
+        if (on) speakingSince = System.currentTimeMillis()
+    }
+
+    /* The acknowledgement, rendered once and kept.
+     *
+     * Measured on the pilot phone: speaking "Yes Suresh" live cost 1290ms between the keyword
+     * firing and the clip opening, and the first one after launch cost 4043ms while the engine
+     * warmed up. That whole time the microphone is deliberately deaf — so a shopkeeper saying
+     * "Hey Synthia, two coffee" in one breath, which is the natural way to say it, lost "two
+     * coffee" entirely.
+     *
+     * Only ~350ms of it was the word "Suresh". The rest was synthesising a phrase that never
+     * changes and starting the speaker path from cold, on every single wake. So it is
+     * synthesised once — when the name is set, long before anybody says the wake word — and
+     * played from a prepared MediaPlayer, which is a seek and a start.
+     *
+     * Everything else the phone says is still spoken live: those lines are different every
+     * time, and none of them sits between him and the microphone. */
+    private var ackPlayer: MediaPlayer? = null
+    private var ackText: String = ""
+    @Volatile private var ackReady = false
 
     init {
         val engine = TextToSpeech(ctx) { status ->
@@ -61,6 +113,8 @@ class Speaker(ctx: Context) {
                 ready = true
                 Log.i(TAG, "tts ready")
                 while (true) (pending.poll() ?: break).let { say(it.text, it.done) }
+                // Whatever the name was when the engine was still starting, render it now.
+                if (ackText.isNotBlank()) prepareAck(ackText)
             } else {
                 /* No engine. Everything still has to run — the acknowledgement's callback is
                  * what opens the clip, so swallowing it here would leave the phone awake,
@@ -71,7 +125,11 @@ class Speaker(ctx: Context) {
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) { speaking = true }
+            override fun onStart(utteranceId: String?) {
+                // Rendering to a file makes no sound, so it must not shut the microphone.
+                if (utteranceId != null && utteranceId.startsWith(SYNTH)) return
+                setSpeaking(true)
+            }
             override fun onDone(utteranceId: String?) = finish(utteranceId)
             @Deprecated("required by the base class")
             override fun onError(utteranceId: String?) = finish(utteranceId)
@@ -81,9 +139,74 @@ class Speaker(ctx: Context) {
     }
 
     private fun finish(id: String?) {
-        speaking = false
+        if (id != null && id.startsWith(SYNTH)) { onSynthesised(id); return }
+        setSpeaking(false)
         val cb = synchronized(callbacks) { callbacks.remove(id) }
         cb?.invoke()
+    }
+
+    /* ---- the pre-rendered acknowledgement ---- */
+
+    /**
+     * Render [text] to a file so it can be played back instantly later.
+     *
+     * Safe to call repeatedly; it does nothing when the phrase has not changed. Called when
+     * the shop's name arrives and whenever it is edited, so the cost is paid while nobody is
+     * waiting rather than at the moment somebody is.
+     */
+    fun prepareAck(text: String) {
+        if (text == ackText && ackReady) return
+        ackText = text
+        ackReady = false
+        val engine = tts
+        if (text.isBlank() || dead || engine == null || !ready) return
+        val f = java.io.File(cacheDir, "ack.wav")
+        val rc = engine.synthesizeToFile(text, null, f, "$SYNTH${seq++}")
+        if (rc != TextToSpeech.SUCCESS) Log.w(TAG, "could not pre-render the acknowledgement")
+    }
+
+    private fun onSynthesised(id: String) {
+        val f = java.io.File(cacheDir, "ack.wav")
+        if (!f.exists() || f.length() == 0L) return
+        try {
+            ackPlayer?.release()
+            val mp = MediaPlayer()
+            mp.setDataSource(f.absolutePath)
+            mp.prepare()                       // the file is local and already written
+            mp.setOnCompletionListener {
+                setSpeaking(false)
+                val cb = synchronized(callbacks) { callbacks.remove(ACK) }
+                cb?.invoke()
+            }
+            ackPlayer = mp
+            ackReady = true
+            Log.i(TAG, "acknowledgement pre-rendered (${f.length()} bytes): $ackText")
+        } catch (e: Exception) {
+            Log.w(TAG, "could not prepare the acknowledgement player: ${e.message}")
+            ackReady = false
+        }
+    }
+
+    /**
+     * Play the pre-rendered acknowledgement, then run [done].
+     *
+     * Falls back to speaking [fallback] live when nothing has been rendered yet — the first
+     * wake after an install, or a phone with no TTS data. Slower, but never silent and never
+     * stuck: [done] fires either way.
+     */
+    fun ack(fallback: String, done: () -> Unit) {
+        val mp = ackPlayer
+        if (!ackReady || mp == null) { say(fallback, done); return }
+        try {
+            synchronized(callbacks) { callbacks[ACK] = done }
+            setSpeaking(true)
+            mp.seekTo(0)
+            mp.start()
+        } catch (e: Exception) {
+            Log.w(TAG, "acknowledgement playback failed: ${e.message}")
+            synchronized(callbacks) { callbacks.remove(ACK) }
+            say(fallback, done)
+        }
     }
 
     /**
@@ -100,7 +223,7 @@ class Speaker(ctx: Context) {
 
         val id = "u${seq++}"
         if (done != null) synchronized(callbacks) { callbacks[id] = done }
-        speaking = true
+        setSpeaking(true)
         /* QUEUE_FLUSH, not QUEUE_ADD. On a fast counter the announcements arrive faster than
          * they can be read out, and a queue means he is hearing the bill from thirty seconds
          * ago while adding to the one in front of him. The newest line is the true one; the
@@ -115,14 +238,25 @@ class Speaker(ctx: Context) {
     /** Stop mid-sentence — the shopkeeper has moved on and does not need the rest. */
     fun stop() {
         try { tts?.stop() } catch (_: Exception) {}
-        speaking = false
+        setSpeaking(false)
     }
 
     fun release() {
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
+        try { ackPlayer?.release() } catch (_: Exception) {}
+        ackPlayer = null
+        ackReady = false
         tts = null
-        speaking = false
+        setSpeaking(false)
     }
 
-    companion object { private const val TAG = "Speaker" }
+    companion object {
+        private const val TAG = "Speaker"
+        /** Prefix marking a synthesise-to-file completion rather than a spoken one. */
+        private const val SYNTH = "synth-"
+        /** The one callback key the pre-rendered acknowledgement uses. */
+        private const val ACK = "ack"
+        /** Longest any single utterance may hold the microphone shut. */
+        private const val MAX_SPEAK_MS = 8000L
+    }
 }
