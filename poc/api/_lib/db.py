@@ -589,6 +589,10 @@ async def probe() -> dict:
         "stock_movements": {"select": "id", "limit": "1"},
         "orders": {"select": "id", "limit": "1"},
         "shops.order_key_hash": {"select": "order_key_hash", "limit": "1"},
+        # Added for the spoken acknowledgement. Without the column the settings save fails
+        # with a bare supabase 400, which looks like a bug in the form rather than a
+        # migration nobody has run — so it is checked here like every other one.
+        "shops.owner_name": {"select": "owner_name", "limit": "1"},
     }
     # Functions are the half of a migration that fails silently. A missing column shows up
     # as a rejected write the shopkeeper sees; a missing function is caught, fallen back
