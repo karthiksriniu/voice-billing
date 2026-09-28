@@ -37,6 +37,24 @@
 
   const safe = (fn) => { try { return fn(); } catch (e) { console.warn("native:", e); } };
 
+  /* Everything the page says goes out through the phone's voice, not the WebView's.
+   *
+   * SpeechSynthesis works and sounds identical — both end up at the same Android engine — but
+   * the page cannot shut the microphone, and the service can. Spoken through the bridge, the
+   * capture loop knows the phone is talking and goes deaf for exactly that long, so an
+   * announcement can never be recorded as an item or wake the phone on a name it said itself.
+   *
+   * The toast is kept: a shop at 70-80 dB(A) swallows a phone speaker, and the screen is
+   * still there for the customer even when the shopkeeper cannot see it. */
+  const pageSpeak = window.speak;
+  window.speak = function speakNative(msg) {
+    safe(() => typeof toast === "function" && toast(msg, 3600, true));
+    try {
+      if (bridge.say) { bridge.say(String(msg)); return; }
+    } catch (e) { /* fall through to the page's own voice */ }
+    if (typeof pageSpeak === "function") pageSpeak(msg);
+  };
+
   /* ---- choosing the microphone ----
    *
    * The page's own picker lists getUserMedia devices, and in the APK the page never opens a
@@ -148,9 +166,16 @@
       if (Math.abs(amount - Number(bill.total)) >= 1) {
         // Deliberately loud and deliberately not actionable: money arrived that is not
         // this bill, and the only safe thing the app can do is say so.
-        safe(() => toast(`${t("creditNotMatched")}: ₹${amount} ≠ ₹${bill.total}`, 5000, true));
+        // Spoken, not just shown. Money arriving that is not for this bill is precisely the
+        // thing he must not miss while looking at a customer instead of the screen.
+        safe(() => speak(`${t("creditNotMatched")}: ${amount} not ${bill.total}`));
         return;
       }
+      /* The prompt still needs a tap, and that does not change: an SMS is text written by
+       * somebody else, and a bill that closes itself on one is the silent error the product
+       * says it will not make. What changes is that he is told out loud that it is waiting —
+       * otherwise a payment sits unconfirmed behind him while the customer walks away. */
+      safe(() => speak(`${t("confirmReceived")} ${amount}`));
       safe(() => showPrompt({
         kind: "confirm",
         main: `₹${amount}`,
@@ -179,7 +204,9 @@
     const ctx = JSON.stringify({
       shop_id: state.shop.id || "",
       mode: state.mode || "billing",
-      lang: state.shop.lang || "ta",
+      lang: state.shop.lang || "en",
+      // The phone answers to his name, and the name lives on the shop record.
+      owner_name: state.shop.owner_name || "",
     });
     if (ctx !== last) { last = ctx; bridge.setContext(ctx); }
   }, 2000);

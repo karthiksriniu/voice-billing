@@ -44,7 +44,7 @@ import kotlin.concurrent.thread
  */
 class VoiceService : Service() {
 
-    private enum class State { IDLE, LISTENING, CAPTURING, HOLDING }
+    private enum class State { IDLE, LISTENING, CAPTURING, HOLDING, SPEAKING }
 
     @Volatile private var alive = true
     @Volatile private var handsFree = false
@@ -58,9 +58,25 @@ class VoiceService : Service() {
     private lateinit var kws: Kws
     private lateinit var vad: Vad
     private lateinit var transcriber: Transcriber
+    private lateinit var speaker: Speaker
+
+    /* Set from TextToSpeech's binder thread, consumed by the audio loop.
+     *
+     * A flag rather than a direct call: the callback arrives on somebody else's thread, and
+     * beginCapture() clears the clip and resets three models. Doing that underneath a loop
+     * that is mid-read is how you get a clip with the last order's tail on the front of it. */
+    @Volatile private var speechDone = false
+    /** Whether the line now being spoken should be followed by a capture, or by standing down. */
+    private var captureAfterSpeech = false
+    private var speakingSince = 0L
 
     private var record: AudioRecord? = null
     private var worker: Thread? = null
+
+    /** The rate the microphone actually runs at. 16 kHz for the handset, 48 kHz for USB. */
+    private var micRate = SAMPLE_RATE
+    /** Null when the device already gives us SAMPLE_RATE and nothing needs converting. */
+    private var resampler: Resampler? = null
 
     // Single thread on purpose: two chained clips must reach the bill in the order they
     // were spoken, and a pool would race them.
@@ -144,6 +160,10 @@ class VoiceService : Service() {
         try {
             kws = Kws(assets)
             vad = Vad(assetManager = assets, config = vadConfig())
+            // The application context, not this service: TextToSpeech holds what it is given
+            // for its lifetime, and the service is the shorter-lived of the two.
+            speaker = Speaker(applicationContext)
+            speakerRef = speaker
         } catch (e: Throwable) {
             Log.e(TAG, "model load failed", e)
             Bus.emit("voice_error", "reason" to "model_load", "detail" to (e.message ?: ""))
@@ -151,7 +171,9 @@ class VoiceService : Service() {
         }
         Bus.emit("voice_ready")
 
-        val window = ShortArray(WINDOW)
+        // Sized for the worst case: a device running at MAX_RATE feeding WINDOW samples out.
+        val window = ShortArray(WINDOW * (MAX_RATE / SAMPLE_RATE))
+        val native = FloatArray(window.size)
         val floats = FloatArray(WINDOW)
 
         while (alive) {
@@ -166,7 +188,8 @@ class VoiceService : Service() {
             if (reopenMic) { reopenMic = false; closeMic() }
             if (!openMic()) { Thread.sleep(250); continue }
 
-            val n = record?.read(window, 0, WINDOW) ?: 0
+            val factor = resampler?.factor ?: 1
+            val n = record?.read(window, 0, WINDOW * factor) ?: 0
             /* Negative is an error code, not a short read. ERROR_DEAD_OBJECT (-6) is the
              * one that matters: the record session is gone and every subsequent read
              * returns it too. Lumped in with "no data yet" it span this loop at 5ms with
@@ -179,20 +202,65 @@ class VoiceService : Service() {
                 continue
             }
             if (n == 0) { Thread.sleep(5); continue }
-            for (i in 0 until n) floats[i] = window[i] / 32768f
+
+            /* One conversion, here, before the state machine sees anything.
+             *
+             * Everything below this line — the keyword model, Silero, the clip that becomes
+             * a WAV — assumes SAMPLE_RATE and always has. Rather than teach each of them
+             * about a microphone that runs at 48 kHz, the rate is made true again at the
+             * point the audio enters the program. `m` is the sample count in 16 kHz terms,
+             * and nothing after this cares which microphone produced it. */
+            val m: Int
+            val rs = resampler
+            if (rs == null) {
+                for (i in 0 until n) floats[i] = window[i] / 32768f
+                m = n
+            } else {
+                for (i in 0 until n) native[i] = window[i] / 32768f
+                m = rs.process(native, n, floats)
+            }
+            if (m == 0) continue
 
             val now = System.currentTimeMillis()
 
             if (DEBUG_AUDIO) {
                 frames++
                 var peak = 0
-                for (i in 0 until n) { val a = kotlin.math.abs(window[i].toInt()); if (a > peak) peak = a }
+                for (i in 0 until m) { val a = kotlin.math.abs((floats[i] * 32768f).toInt()); if (a > peak) peak = a }
                 if (peak > loudest) loudest = peak
                 if (now - lastBeat > 2000) {
                     Log.i(TAG, "beat state=$state frames=$frames peak=$loudest chain=$chain")
                     lastBeat = now; frames = 0; loudest = 0
                 }
             }
+
+            /* The phone is talking, and the microphone can hear it.
+             *
+             * The frame was read — it has to be, or the buffer overruns and the next second
+             * of audio is somebody else's — and then thrown away. Nothing reaches the keyword
+             * model, so the phone cannot wake itself on a name it just said, and nothing
+             * reaches the clip, so "Yes Suresh" is never an item on the bill.
+             *
+             * The timeout is not decoration. The whole acknowledgement design makes speech
+             * load-bearing: the clip opens when the phone stops talking. An engine that never
+             * reports finishing would leave him looking at a phone that answered him once and
+             * then listened to nothing for the rest of the day. */
+            if (state == State.SPEAKING) {
+                if (speechDone || now - speakingSince > SPEAK_TIMEOUT_MS) {
+                    if (!speechDone) Log.w(TAG, "tts never reported done — moving on")
+                    speechDone = false
+                    if (captureAfterSpeech) { captureAfterSpeech = false; beginCapture(fromWake = true) }
+                    else standDown()
+                }
+                continue
+            }
+
+            /* The page asked for something to be read out — an item count, a total, a
+             * confirmation. Same rule as the acknowledgement, but it can arrive in any state
+             * rather than being one, so it is a guard and not a branch. Without it, everything
+             * the page says goes into the microphone: announcing "three items" while a clip is
+             * open bills the words, and announcing it while listening can wake the phone. */
+            if (speaker.speaking) continue
 
             // Push-to-talk overrides whatever the doorbell was doing.
             if (ptt && state != State.CAPTURING) beginCapture(fromWake = false)
@@ -215,8 +283,14 @@ class VoiceService : Service() {
             }
 
             when (state) {
+                // Handled above and skipped with a `continue`, because a talking phone must
+                // not reach the keyword model at all. Named here only to keep the `when`
+                // exhaustive, so that adding a state later is a compile error rather than a
+                // frame quietly falling through.
+                State.SPEAKING -> {}
+
                 State.IDLE, State.LISTENING -> {
-                    if (kws.accept(floats.copyOf(n)) != null) beginCapture(fromWake = true)
+                    if (kws.accept(floats.copyOf(m)) != null) acknowledge()
                 }
 
                 State.CAPTURING -> {
@@ -246,7 +320,7 @@ class VoiceService : Service() {
                      * finished and sent, and a fresh capture opens. If a word inside an
                      * order ever misfires as the name, the cost is an order split across
                      * two clips, and both halves bill to the same bill anyway. */
-                    if (kws.accept(floats.copyOf(n)) != null) {
+                    if (kws.accept(floats.copyOf(m)) != null) {
                         if (heardSpeech && now - clipStartedAt >= MIN_CLIP_MS) {
                             endCapture(final = true)
                             beginCapture(fromWake = true)
@@ -256,8 +330,8 @@ class VoiceService : Service() {
                         continue
                     }
 
-                    for (i in 0 until n) clip.add(window[i])
-                    vad.acceptWaveform(floats.copyOf(n))
+                    for (i in 0 until m) clip.add(toPcm(floats[i]))
+                    vad.acceptWaveform(floats.copyOf(m))
                     if (vad.isSpeechDetected()) { lastSpeechAt = now; heardSpeech = true }
                     else if (heardSpeech && now - lastSpeechAt > GAP_MS) sawGap = true
 
@@ -303,16 +377,16 @@ class VoiceService : Service() {
                      *
                      * Checking the name first makes it unambiguous: hearing it means a new
                      * utterance, not more of the last one. */
-                    if (kws.accept(floats.copyOf(n)) != null) {
+                    if (kws.accept(floats.copyOf(m)) != null) {
                         beginCapture(fromWake = true)
                         continue
                     }
 
-                    vad.acceptWaveform(floats.copyOf(n))
+                    vad.acceptWaveform(floats.copyOf(m))
                     if (vad.isSpeechDetected() && chain < MAX_CHAIN) {
                         resumeCapture()
                         // The first window of the continuation is speech; keep it.
-                        for (i in 0 until n) clip.add(window[i])
+                        for (i in 0 until m) clip.add(toPcm(floats[i]))
                     } else if (now - holdStartedAt > CONTINUE_MS) {
                         standDown()
                     }
@@ -347,6 +421,34 @@ class VoiceService : Service() {
         feedback(880, 90)
         note(R.string.notif_recording)
         Bus.emit("capture", "state" to "start", "wake" to fromWake)
+    }
+
+    /* Answer to his name, and only then start listening.
+     *
+     * The order is the point. A shopkeeper starts talking the moment he hears that the phone
+     * is awake, so a clip opened at the same instant as the reply loses the first word of
+     * every order to a sentence the phone was saying itself. The beep still lands
+     * immediately — that is the fast, reliable signal — and the words follow it. */
+    private fun acknowledge() {
+        val name = Bus.ownerName.trim()
+        val line = if (name.isEmpty()) getString(R.string.ack)
+                   else getString(R.string.ack_named, name)
+        Log.i(TAG, "wake acknowledged: $line")
+        kws.reset()
+        vad.reset()
+        feedback(880, 90)
+        note(R.string.notif_recording)
+        Bus.emit("capture", "state" to "ack")
+        speakAnd(line, thenCapture = true)
+    }
+
+    /** Say something, hold the microphone shut until it is finished, then capture or stop. */
+    private fun speakAnd(line: String, thenCapture: Boolean) {
+        state = State.SPEAKING
+        speakingSince = System.currentTimeMillis()
+        speechDone = false
+        captureAfterSpeech = thenCapture
+        speaker.say(line) { speechDone = true }
     }
 
     /* He said the name again before saying anything else. Start the clip over rather than
@@ -402,10 +504,17 @@ class VoiceService : Service() {
         }
     }
 
+    /* He said the name and then nothing arrived.
+     *
+     * Silence used to be the entire response: the clip was dropped and the phone went back to
+     * listening without a word. With the screen behind him that is indistinguishable from the
+     * app being broken, which is the failure this whole feedback layer exists to stop — and
+     * it is the one he is most likely to hit, because it happens precisely when the
+     * microphone did not pick him up. */
     private fun abandonCapture() {
         clip.clear()
         Bus.emit("capture", "state" to "empty")
-        standDown()
+        speakAnd(getString(R.string.didnt_catch), thenCapture = false)
     }
 
     private fun standDown() {
@@ -454,27 +563,39 @@ class VoiceService : Service() {
             closeMic()
         }
         return try {
-            val min = AudioRecord.getMinBufferSize(SAMPLE_RATE,
+            /* Let the microphone name its own rate.
+             *
+             * The USB receiver reports 48 kHz / 24-bit and cannot do 16 kHz. Asking for
+             * 16 kHz anyway while pinning the route to it produced
+             * "setDevice failed to set preferred config" from the policy manager, a stream
+             * that worked exactly once, and a keyword model that went deaf the moment the
+             * route was rebuilt. Opening at the rate it actually has removes the argument. */
+            val target = preferredDevice()
+            micRate = chooseRate(target)
+            resampler = if (micRate == SAMPLE_RATE) null else Resampler(micRate, SAMPLE_RATE)
+            val factor = resampler?.factor ?: 1
+            val min = AudioRecord.getMinBufferSize(micRate,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             val r = AudioRecord(
                 // VOICE_RECOGNITION, not MIC: it is the one source whose vendor processing
                 // is tuned for speech rather than for a video's soundtrack, and on a cheap
                 // handset in a loud room that difference is not subtle.
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(min, WINDOW * 8))
+                micRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                maxOf(min, WINDOW * factor * 8))
             if (r.state != AudioRecord.STATE_INITIALIZED) { r.release(); return false }
             /* Ask for a specific input before starting. Plugging a USB receiver in usually
              * makes Android route to it on its own, but "usually" is not a thing a
              * measurement can rest on: an A/B between three microphones has to be able to
              * say which one was actually recording, and to pin it deliberately rather than
              * hope the platform picked the same one twice. */
-            preferredDevice()?.let { r.preferredDevice = it }
+            target?.let { r.preferredDevice = it }
             r.startRecording()
             record = r
             // What the platform actually gave us, which is not always what was asked for.
             Bus.micLabel = routedLabel(r)
-            Log.i(TAG, "mic open pref=$micPref routed=${Bus.micLabel}")
+            Log.i(TAG, "mic open pref=$micPref routed=${Bus.micLabel} " +
+                       "rate=$micRate->${SAMPLE_RATE} factor=$factor")
             // Tell the page, so a mic that quietly went missing is visible on the screen
             // he is already looking at rather than only in a log nobody reads in a shop.
             Bus.emit("mic", "pref" to micPref, "routed" to Bus.micLabel,
@@ -486,12 +607,40 @@ class VoiceService : Service() {
              * resume that would otherwise pay for it. */
             if (this::kws.isInitialized) kws.reset()
             if (this::vad.isInitialized) vad.reset()
+            resampler?.reset()
             if (state == State.IDLE) state = State.LISTENING
             true
         } catch (e: SecurityException) {
             Bus.emit("voice_error", "reason" to "no_permission"); false
         }
     }
+
+    /* What rate to open at.
+     *
+     * SAMPLE_RATE whenever the device can do it, because converting nothing is free and the
+     * handset's own microphone has always obliged. Otherwise the lowest rate it offers that
+     * is a whole multiple of ours — 48 kHz being three times 16 kHz is what keeps Resampler
+     * to a filter and a stride. A device offering only, say, 44.1 kHz would need fractional
+     * resampling and does not get it: we open at SAMPLE_RATE and let the platform do
+     * whatever it was going to do, which is no worse than before this existed.
+     *
+     * An empty sampleRates array means the device did not say, which is common and means
+     * "anything reasonable" — so it is treated as obliging, not as broken. */
+    private fun chooseRate(dev: AudioDeviceInfo?): Int {
+        val rates = try { dev?.sampleRates } catch (e: Exception) { null }
+        if (rates == null || rates.isEmpty()) return SAMPLE_RATE
+        if (rates.contains(SAMPLE_RATE)) return SAMPLE_RATE
+        val usable = rates.filter { it > SAMPLE_RATE && it % SAMPLE_RATE == 0 && it <= MAX_RATE }
+        val picked = usable.minOrNull()
+        if (picked == null) {
+            Log.w(TAG, "device offers ${rates.toList()} — none an integer multiple of $SAMPLE_RATE")
+            return SAMPLE_RATE
+        }
+        return picked
+    }
+
+    private fun toPcm(f: Float): Short =
+        (f * 32768f).toInt().coerceIn(-32768, 32767).toShort()
 
     /** Coarse on purpose: a category is what an A/B compares, and it is all the page is told. */
     private fun deviceKind(type: Int): String = when (type) {
@@ -614,6 +763,8 @@ class VoiceService : Service() {
         closeMic()
         uploads.shutdown()
         tones?.release()
+        speakerRef = null
+        if (this::speaker.isInitialized) speaker.release()
         if (this::kws.isInitialized) kws.release()
         if (this::vad.isInitialized) vad.release()
         super.onDestroy()
@@ -637,6 +788,9 @@ class VoiceService : Service() {
         private const val MIN_CLIP_MS = 400L
         private const val NO_SPEECH_MS = 3000L
 
+        /** How long to wait for TextToSpeech to say it has finished before assuming it has. */
+        private const val SPEAK_TIMEOUT_MS = 6000L
+
         /** A lull inside a clip long enough to call it a pause. Well under SILENCE_MS, so
          *  noticing one never competes with the endpointer — it only records that this clip
          *  has the shape of speech rather than the shape of a room. */
@@ -645,9 +799,23 @@ class VoiceService : Service() {
         /** Ceiling on everything one wake may hold: clip, hold and every continuation. */
         private const val WAKE_BUDGET_MS = 30000L
 
-        /** Heartbeat into logcat. The wake word cannot be tuned from a device you cannot
-         *  see into, and "nothing happened" has too many causes to guess between. */
-        private val DEBUG_AUDIO = BuildConfig.DEBUG
+        /** The highest input rate we will open. 48 kHz covers every USB and Bluetooth
+         *  microphone worth supporting, and bounds the read buffers above. */
+        private const val MAX_RATE = 48000
+
+        /* Heartbeat into logcat. The wake word cannot be tuned from a device you cannot see
+         * into, and "nothing happened" has too many causes to guess between.
+         *
+         * On in release too, and that is deliberate for the pilot. This was BuildConfig.DEBUG,
+         * so the build actually in a shop was the one that said nothing — and when a USB
+         * microphone streamed hundreds of frames while the keyword model sat silent, the one
+         * number that would have separated "no audio" from "wrong audio" was the peak level,
+         * which nobody could see. One line every two seconds is a cheap price for that. */
+        private const val DEBUG_AUDIO = true
+
+        /** The live voice, for the page to borrow through WebBridge. Null when not running. */
+        @Volatile var speakerRef: Speaker? = null
+            private set
 
         /** Set while the service instance exists, so the Activity does not re-start it. */
         @Volatile var running = false

@@ -664,7 +664,8 @@ async def find_shops(name_like: str) -> list[dict]:
 
 
 async def update_shop(shop_id: str, name: str, vpa: str, lang: str,
-                      wa_number: str | None = None, gstin: str | None = None) -> str:
+                      wa_number: str | None = None, gstin: str | None = None,
+                      owner_name: str | None = None) -> str:
     """Change the business name, UPI ID, language, WhatsApp line or GST number. Passcode is
     deliberately not touched here — changing it needs the old one, which is a separate flow.
 
@@ -675,6 +676,8 @@ async def update_shop(shop_id: str, name: str, vpa: str, lang: str,
         fields["wa_number"] = wa_number
     if gstin is not None:
         fields["gstin"] = gstin
+    if owner_name is not None:
+        fields["owner_name"] = owner_name
     if not configured():
         row = _local_shops.setdefault(shop_id, {"id": shop_id})
         row.update(fields)

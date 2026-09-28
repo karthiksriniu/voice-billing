@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/style.css?v=7221eea-1608">
+<link rel="stylesheet" href="/style.css?v=e3923a5-1919">
 </head>
 <body>
 
@@ -376,6 +376,11 @@
   <div class="pad">
     <label class="field"><span data-t="shopName">Shop name</span>
       <input id="setName" type="text" autocomplete="organization"></label>
+    <!-- The person, not the business. Spoken back on every wake, so the phone behind the
+         counter answers to somebody rather than beeping into the room. -->
+    <label class="field"><span data-t="ownerName">Your name</span>
+      <input id="setOwner" type="text" autocomplete="given-name" maxlength="40">
+      <small class="fineprint dim" data-t="ownerNameHint">Synthia says this back when it wakes — “Yes Suresh”.</small></label>
     <label class="field"><span data-t="language">Language</span>
       <select id="setLang"></select></label>
     <label class="field"><span data-t="upiId">UPI ID</span>
@@ -473,12 +478,12 @@
      section with display:none — the button appeared dead. -->
 <div id="prompt" class="prompt" hidden></div>
 <div id="toast" class="toast"></div>
-<script>window.BOLO_BUILD="7221eea-1608"</script>
-<script src="/i18n.js?v=7221eea-1608"></script>
-<script src="/app.js?v=7221eea-1608"></script>
-<script src="/print.js?v=7221eea-1608"></script>
-<script src="/vad.js?v=7221eea-1608"></script>
-<script src="/wake.js?v=7221eea-1608"></script>
-<script src="/native.js?v=7221eea-1608"></script>
+<script>window.BOLO_BUILD="e3923a5-1919"</script>
+<script src="/i18n.js?v=e3923a5-1919"></script>
+<script src="/app.js?v=e3923a5-1919"></script>
+<script src="/print.js?v=e3923a5-1919"></script>
+<script src="/vad.js?v=e3923a5-1919"></script>
+<script src="/wake.js?v=e3923a5-1919"></script>
+<script src="/native.js?v=e3923a5-1919"></script>
 </body>
 </html>

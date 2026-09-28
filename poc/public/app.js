@@ -233,7 +233,8 @@ async function enter(session) {
   // reads as an app asking for something it has not earned yet.
   setTimeout(() => window.handsFreeRestore && window.handsFreeRestore(), 400);
   state.shop = { id: session.shop_id, name: session.shop_name || "Shop",
-                 vpa: session.vpa || "", lang: session.lang || "en" };
+                 vpa: session.vpa || "", lang: session.lang || "en",
+                 owner_name: session.owner_name || "" };
   setLang(state.shop.lang);
   applyStrings();
   // Storage key deliberately unchanged by the rename — changing it would sign out every
@@ -663,6 +664,22 @@ function apply(data, roundTripMs) {
     if (it.needs_price) { askPrice(it); asked++; continue; }
     addOrUpdate({ ...it, pending: it.verdict === "confirm" });
     it.verdict === "confirm" ? asked++ : added++;
+  }
+
+  /* The running count, out loud.
+   *
+   * The phone sits behind him and he cannot see the bill, so this is the only confirmation
+   * he gets that what he said landed. Deliberately the count and not the money: the total is
+   * announced when the bill is generated, and until then the customer is reading it off the
+   * screen anyway — which is the other reason the screen stays awake.
+   *
+   * Pending lines are excluded. An item still waiting to be confirmed is not on the bill yet,
+   * and counting it would tell him three when two are real — the one number he is trusting
+   * because he cannot check it. Said before the price and name prompts below, so that the
+   * question needing an answer is the last thing he hears rather than the first. */
+  if (added) {
+    const n = state.items.filter((i) => !i.pending).length;
+    speak(`${n} ${n === 1 ? t("itemWord") : t("itemsWord")}`);
   }
 
   // Understood, but not in this shop's catalog. Ask the price once, create the SKU and put
@@ -1234,6 +1251,7 @@ async function loadSettings() {
   const j = await api("/api/settings");
   if (!j.ok) { toast(j.error || t("signInRequired"), 3500); return; }
   $("setName").value = j.name || "";
+  $("setOwner").value = j.owner_name || "";
   $("setVpa").value = j.vpa || "";
   $("setWa").value = j.wa_number || "";
   $("setGstin").value = j.gstin || "";
@@ -1334,6 +1352,7 @@ $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   const j = await api("/api/settings", {
     method: "POST",
     body: { name: $("setName").value.trim(), lang: $("setLang").value,
+            owner_name: $("setOwner").value.trim(),
             vpa: $("setVpa").value.trim(),
             wa_number: digits($("setWa").value),
             gstin: $("setGstin").value.trim().toUpperCase() },
@@ -1344,6 +1363,9 @@ $("setSave").onclick = (e) => withBusy($("setSave"), async () => {
   // Apply immediately: language drives the interface, the parser pack and the ASR locale,
   // so it must take effect on the very next utterance rather than at the next sign-in.
   state.shop.name = j.name;
+  // Straight onto the shop object: native.js watches it and pushes the name to the service,
+  // so the next wake answers correctly without a reload.
+  state.shop.owner_name = j.owner_name || "";
   state.shop.lang = j.lang;
   state.shop.vpa = j.vpa;
   state.shop.wa_number = j.wa_number;

@@ -20,12 +20,19 @@ class WebBridge(private val ctx: Context) {
         Bus.shopId = o.optString("shop_id", Bus.shopId)
         Bus.mode = o.optString("mode", Bus.mode)
         Bus.lang = o.optString("lang", Bus.lang)
+        Bus.ownerName = o.optString("owner_name", Bus.ownerName)
     }
 
     @JavascriptInterface
     fun handsFree(on: Boolean) {
         Bus.handsFreeWanted = on
         VoiceService.send(ctx, if (on) VoiceService.ACTION_START else VoiceService.ACTION_STOP)
+        /* The screen has to follow the switch, not the next time the Activity happens to
+         * resume. Turning hands-free on and watching the display sleep a minute later — taking
+         * the microphone with it, because onPause closes it — is the exact failure the
+         * keep-awake flag exists to prevent, and it would have survived the whole trial as
+         * "it stops after a while". Window flags are main-thread only. */
+        (ctx as? MainActivity)?.let { a -> a.runOnUiThread { a.applyScreenPolicy() } }
     }
 
     /** The authoritative switch state — the service's, not the browser's. */
@@ -58,6 +65,21 @@ class WebBridge(private val ctx: Context) {
 
     @JavascriptInterface
     fun micPref(): String = VoiceService.micPreference(ctx)
+
+    /* Say something out loud, through the phone's voice rather than the WebView's.
+     *
+     * The page has always had SpeechSynthesis and it works — but it speaks into a microphone
+     * that is listening, and the page has no way to shut that microphone. Routed here, the
+     * service knows it is talking and goes deaf for the duration, so the bill cannot acquire
+     * a line item because the phone read the last one out.
+     *
+     * Silently does nothing when the service is not running, which is the correct behaviour:
+     * if nothing is listening, nothing needs to be talked over, and the page's own fallback
+     * is one line away. */
+    @JavascriptInterface
+    fun say(text: String) {
+        VoiceService.speakerRef?.say(text)
+    }
 
     @JavascriptInterface
     fun version(): String = BuildConfig.VERSION_NAME

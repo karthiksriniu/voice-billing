@@ -168,6 +168,7 @@ class LoginRequest(BaseModel):
 
 class SettingsRequest(BaseModel):
     name: str = ""
+    owner_name: str = ""
     lang: str = ""
     vpa: str = ""
     wa_number: str = ""
@@ -444,7 +445,8 @@ async def auth_login(req: LoginRequest):
     if shop and shop.get("passcode_hash") and auth.verify_passcode(code, shop["passcode_hash"]):
         return {"ok": True, "token": auth.issue_token(mobile, mobile, "owner", req.remember),
                 "shop_id": mobile, "role": "owner", "shop_name": shop.get("name", ""),
-                "vpa": shop.get("upi_vpa", ""), "lang": norm_lang(shop.get("lang"))}
+                "vpa": shop.get("upi_vpa", ""), "lang": norm_lang(shop.get("lang")),
+                "owner_name": shop.get("owner_name", "")}
     staff = await db.get_staff(mobile)
     if staff and auth.verify_passcode(code, staff.get("passcode_hash", "")):
         shop = await db.get_shop(staff["shop_id"]) or {}
@@ -453,7 +455,11 @@ async def auth_login(req: LoginRequest):
                                           req.remember),
                 "shop_id": staff["shop_id"], "role": staff.get("role", "user"),
                 "shop_name": shop.get("name", ""), "vpa": shop.get("upi_vpa", ""),
-                "lang": shop.get("lang") or "ta"}
+                # Staff hear the shop's configured name too — the phone is the counter's,
+                # not one person's, and answering to nobody is worse than answering to the
+                # name the shop set.
+                "owner_name": shop.get("owner_name", ""),
+                "lang": norm_lang(shop.get("lang"))}
     # One message for both causes, so this can't be used to enumerate numbers.
     return deny("Wrong number or passcode", 401)
 
@@ -517,6 +523,7 @@ async def settings_get(request: Request):
     gstin = shop.get("gstin", "")
     return {"ok": True, "mobile": c["shop"], "name": shop.get("name", ""),
             "lang": norm_lang(shop.get("lang")), "vpa": shop.get("upi_vpa", ""),
+            "owner_name": shop.get("owner_name", ""),
             "wa_number": shop.get("wa_number", ""), "gstin": gstin,
             "gst_state": gst.state_of(gstin),
             # Whether one exists, never any part of it — the digest is all that is stored,
@@ -536,6 +543,9 @@ async def settings_set(req: SettingsRequest, request: Request):
     name = req.name.strip() or shop.get("name", "")
     lang = norm_lang(req.lang or shop.get("lang"))
     vpa = req.vpa.strip() or shop.get("upi_vpa", "")
+    # Blankable on purpose, unlike the shop name: clearing it is how he goes back to a plain
+    # "Yes" instead of being addressed by a name that is not his.
+    owner = req.owner_name.strip()[:40]
 
     # The WhatsApp line is the shop's, not the owner's sign-in number, so it is stored
     # separately and may be cleared. A blank is a deliberate answer here, not an omission.
@@ -549,10 +559,11 @@ async def settings_set(req: SettingsRequest, request: Request):
     if bad:
         return deny(bad, 400)
 
-    error = await db.update_shop(c["shop"], name, vpa, lang, wa_number=wa, gstin=gstin)
+    error = await db.update_shop(c["shop"], name, vpa, lang, wa_number=wa, gstin=gstin,
+                                 owner_name=owner)
     return JSONResponse({"ok": not error, "error": error, "name": name, "lang": lang,
                          "vpa": vpa, "wa_number": wa, "gstin": gstin,
-                         "gst_state": gst.state_of(gstin)},
+                         "owner_name": owner, "gst_state": gst.state_of(gstin)},
                         status_code=200 if not error else 502)
 
 

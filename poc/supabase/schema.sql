@@ -33,6 +33,10 @@ alter table shops add column if not exists passcode_hash text not null default '
 -- `gstin` is optional and stays optional: most tier-1 paper-billing shops are under the
 -- registration threshold, and a receipt that invents a GST number is a worse document than
 -- one that has none.
+-- The shopkeeper's own name, not the business's. Spoken back on every wake, because the
+-- phone sits behind him and a beep does not tell him it heard the right person.
+alter table shops add column if not exists owner_name text not null default '';
+
 alter table shops add column if not exists wa_number text not null default '';
 alter table shops add column if not exists gstin     text not null default '';
 

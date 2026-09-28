@@ -30,6 +30,10 @@ object Bus {
      *  clip so the measurement log can tell three microphones apart. */
     @Volatile var micLabel: String = "builtin"
 
+    /** What to call him. Empty until the page has loaded a shop, and answering "Yes" on its
+     *  own is fine — better than answering to a name that is not his. */
+    @Volatile var ownerName: String = ""
+
     /** Whether the page has asked for hands-free. Survives a permission prompt. */
     @Volatile var handsFreeWanted: Boolean = false
 

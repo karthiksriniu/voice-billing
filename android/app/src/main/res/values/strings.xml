@@ -4,4 +4,11 @@
     <string name="notif_listening">Say “Synthia” to start a bill</string>
     <string name="notif_recording">Listening to your order…</string>
     <string name="stop">Stop</string>
+
+    <!-- Spoken, not shown. The phone sits behind the shopkeeper and he never sees the
+         screen while billing, so these are the only acknowledgement he gets. Kept to a
+         breath each: every one of them is time he is standing still waiting to talk. -->
+    <string name="ack">Yes</string>
+    <string name="ack_named">Yes %1$s</string>
+    <string name="didnt_catch">Sorry, I didn\'t catch that</string>
 </resources>

@@ -184,12 +184,36 @@ class MainActivity : AppCompatActivity() {
         // the first time the shopkeeper switched away and came back.
         Bus.handsFreeWanted = VoiceService.handsFreeEnabled(this)
         Bus.appInForeground = true
+        applyScreenPolicy()
         // Starting a foreground service is only legal from the foreground, which is
         // exactly where we are. Resuming needs no message at all — the loop reads the flag.
         if (Bus.handsFreeWanted && !VoiceService.running &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED) {
             VoiceService.send(this, VoiceService.ACTION_START)
+        }
+    }
+
+    /* Hands-free keeps the screen awake, and that is a deployment decision rather than a
+     * convenience.
+     *
+     * The microphone stops when this Activity pauses — the permission says "while using the
+     * app" and onPause is the literal reading of it (see README). But the phone is meant to
+     * sit on the counter dictating a bill, and a screen that sleeps after thirty seconds
+     * pauses the Activity and takes the microphone with it, mid-order.
+     *
+     * The alternative was to drop the foreground gate and listen while locked. This is the
+     * smaller change and it keeps that promise intact: the screen stays lit only while
+     * hands-free is explicitly on, and the customer can read the bill off it while he pays,
+     * which is the other half of why the screen wants to be awake anyway.
+     *
+     * The cost is battery, and it is real on the phone this is aimed at. Accepted for the
+     * pilot, deliberately, and it is the first thing to revisit when the trial is over. */
+    fun applyScreenPolicy() {
+        if (VoiceService.handsFreeEnabled(this)) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
