@@ -248,7 +248,13 @@ function rememberOwnerName(name) {
  * name arrives on the login response instead. */
 async function refreshOwnerName(session) {
   if (state.role !== "owner") return;
-  if (typeof session.owner_name === "string") return;      // already known
+  /* A name, not merely a field.
+   *
+   * This read `typeof session.owner_name === "string"`, which is true of "" — and "" is
+   * exactly what every stored session holds, because the login response has always carried
+   * the key and the column it reads did not exist until today. So the one case this function
+   * was written for was the one case it skipped. */
+  if (session.owner_name) return;
   try {
     const j = await api("/api/settings");
     if (j && j.ok) rememberOwnerName(j.owner_name || "");
