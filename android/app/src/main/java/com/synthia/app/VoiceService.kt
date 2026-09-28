@@ -64,6 +64,9 @@ class VoiceService : Service() {
      * except that the doorbell stops answering — the keyword model and the recogniser are the
      * same three files and cannot both own the stream. Toggled over adb rather than from the
      * UI: it is a tuning instrument, not a feature, and the shopkeeper must never find it. */
+    /* Cannot become true in a release build: nothing registers the switch that sets it. Kept
+     * as a field rather than a compile-time constant so the harvest path still type-checks
+     * and cannot rot between the pilots that use it. */
     @Volatile private var harvesting = false
     private var harvester: Harvester? = null
 
@@ -109,15 +112,25 @@ class VoiceService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /* How the harvest is switched on, and why it is a receiver rather than the service's own
-     * action: the service is not exported, so `am startservice` is refused, and exporting it
-     * to reach a tuning instrument would be a poor trade. A receiver registered at runtime
-     * takes the broadcast without widening anything in the manifest.
+    /* How the harvest is switched on — in debug builds, and only there.
      *
-     * It IS reachable by other apps on the phone, and that is a real if small surface: the
-     * worst it can do is stop the doorbell answering until the app is restarted. It reads
-     * nothing and writes nothing. Worth it while the wake word is being tuned on a phone in
-     * somebody's hand; take it out before this goes anywhere wider than the pilot. */
+     * The service is not exported, so `am startservice` is refused, and exporting it to reach
+     * a tuning instrument would be a poor trade. A receiver registered at runtime takes the
+     * broadcast without widening anything in the manifest — but a runtime receiver registered
+     * as EXPORTED is still reachable by every other app on the phone, and what it does is
+     * stop the doorbell answering until the app is restarted.
+     *
+     * On a phone in somebody's hand that is a tuning instrument. On a shopkeeper's phone it
+     * is a way for an unrelated app to silently switch off his billing, with no error, no
+     * notification, and no way for him to know why saying the name stopped working. Nothing
+     * has to be malicious for that to happen: a broadcast is a string, and strings collide.
+     *
+     * So it compiles out of the release build entirely. The harvest itself still exists and
+     * still works — it is how the wake word gets re-tuned when the phrase, the model or the
+     * speakers change, and the README's method depends on it — but reaching it now needs a
+     * debug build, which is a deliberate step somebody takes rather than a surface that
+     * ships. Note the consequence: the debug build points at localhost, so harvesting in a
+     * real shop means either a dev server on the same network or a build made for it. */
     private val harvestSwitch = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
             harvesting = !harvesting
@@ -132,8 +145,10 @@ class VoiceService : Service() {
     override fun onCreate() {
         super.onCreate()
         running = true
-        ContextCompat.registerReceiver(this, harvestSwitch,
-            android.content.IntentFilter(ACTION_HARVEST), ContextCompat.RECEIVER_EXPORTED)
+        if (BuildConfig.DEBUG) {
+            ContextCompat.registerReceiver(this, harvestSwitch,
+                android.content.IntentFilter(ACTION_HARVEST), ContextCompat.RECEIVER_EXPORTED)
+        }
         micPref = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_MIC, "auto") ?: "auto"
         transcriber = Transcriber(BuildConfig.WEB_BASE)
         /* Never fatal. The platform can refuse this for reasons that are about WHEN it was
@@ -887,7 +902,7 @@ class VoiceService : Service() {
         uploads.shutdown()
         tones?.release()
         speakerRef = null
-        try { unregisterReceiver(harvestSwitch) } catch (_: Exception) {}
+        if (BuildConfig.DEBUG) try { unregisterReceiver(harvestSwitch) } catch (_: Exception) {}
         harvester?.release()
         if (this::speaker.isInitialized) speaker.release()
         if (this::kws.isInitialized) kws.release()
